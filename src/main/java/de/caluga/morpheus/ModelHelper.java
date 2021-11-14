@@ -28,7 +28,7 @@ public class ModelHelper {
         }
 
         if (mc.isConnected()) {
-            if (collections==null || System.currentTimeMillis()-collectionsReadAt>30000){
+            if (collections==null || System.currentTimeMillis()-collectionsReadAt>3000){
                 collections=mc.getMorphiumConnection().listCollections();
                 collectionsReadAt=System.currentTimeMillis();
             }
