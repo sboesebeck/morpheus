@@ -40,19 +40,26 @@
                     </div>
                 </div>
                 <div class="row">
-                    <!-- Topbar Search -->
-                    <form
-                            class="d-sm-inline-block border-1 form-inline mr-auto ml-md-3 my-2 my-md-0 mw-100">
-                        <div class="input-group">
-                        <textarea type="text" class="form-control bg-light border-2 small" placeholder="Query..."
-                                  aria-label="Search" aria-describedby="basic-addon2"></textarea>
-                            <div class="input-group-append">
-                                <button class="btn btn-primary" type="button">
-                                    <i class="fas fa-search fa-sm"></i>
-                                </button>
-                            </div>
-                        </div>
-                    </form>
+                    <!-- Query builder-->
+                    <input type="text" class="form-control" style="width:120px; max-width: 200px;" name="fieldname1">
+                    <select class="form-control" style="width:80px; max-width: 100px;" name="operator">
+                        <option value="$eq">$eq</option>
+                        <option value="$ne">$ne</option>
+                    </select> <input class="form-control" style="width:120px; max-width: 200px;" type="text"
+                                     name="value"><br>
+                </div>
+                <div class="row">
+                    <select class="form-control" style="width:80px; max-width: 100px;" name="bool">
+                        <option value="and">and</option>
+                        <option value="or">or</option>
+                    </select>
+                    <input type="text" class="form-control" style="width:120px; max-width: 200px;" name="fieldname1">
+                    <select class="form-control" style="width:80px; max-width: 100px;" name="operator">
+                        <option value="$eq">$eq</option>
+                        <option value="$ne">$ne</option>
+                    </select> <input class="form-control" style="width:120px; max-width: 200px;" type="text"
+                                     name="value"><br>
+
                 </div>
                 <div class="row">
                     <#if resultList??>

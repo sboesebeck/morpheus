@@ -28,14 +28,18 @@ public class ModelHelper {
         }
 
         if (mc.isConnected()) {
-            if (collections==null || System.currentTimeMillis()-collectionsReadAt>3000){
-                collections=mc.getMorphiumConnection().listCollections();
-                collectionsReadAt=System.currentTimeMillis();
+            if (collections == null || System.currentTimeMillis() - collectionsReadAt > 3000) {
+                collections = mc.getMorphiumConnection().listCollections();
+                collectionsReadAt = System.currentTimeMillis();
             }
-            m.addAttribute("collections",collections);
-            m.addAttribute("connectionName",mc.getMorphiumConnectionName());
-            m.addAttribute("connectionDescription",mc.getMorphiumConnectionDescription());
-            m.addAttribute("connectionId",mc.getMorphiumConnectionId());
+            m.addAttribute("collections", collections);
+            m.addAttribute("connectionName", mc.getMorphiumConnectionName());
+            m.addAttribute("connectionDescription", mc.getMorphiumConnectionDescription());
+            m.addAttribute("connectionId", mc.getMorphiumConnectionId());
         }
+    }
+
+    public void addMessage(String msg) {
+        app.addError(msg);
     }
 }

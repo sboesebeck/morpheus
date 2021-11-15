@@ -93,8 +93,7 @@
                     "name": 'new ' + l,
                     "description": 'Description for config ' + l,
                     "hostSeed": "localhost:27017,localhost:27018",
-                    database: "Test" + l,
-                    collection: "coll" + l
+                    database: "Test" + l
                 });
             },
             remove(id) {
@@ -183,9 +182,6 @@
                                 <div>
                                      database: <input class="form-control bg-light border-1" v-model="config.database">
                                 </div><br>
-                                <div>
-                                     Message-Collection: <input class="form-control bg-light border-1" v-model="config.collection">
-                                </div>
                                 <br>
                                 <div>
                                      Auto connect: <input type="checkbox" class="custom-checkbox" v-model="config.autoConnect">
