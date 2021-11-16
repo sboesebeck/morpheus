@@ -9,9 +9,9 @@
     <version>1.0-SNAPSHOT</version>
     <description>Morphium Messaging Monitor Project "Morpheus"</description>
     <properties>
-        <java.version>16</java.version>
-        <maven.compiler.source>16</maven.compiler.source>
-        <maven.compiler.target>16</maven.compiler.target>
+        <java.version>17</java.version>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
         <mongodbDriver.version>[4.1.0,)</mongodbDriver.version>
     </properties>
 
