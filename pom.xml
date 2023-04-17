@@ -10,6 +10,8 @@
     <maven.compiler.source>19</maven.compiler.source>
     <maven.compiler.target>19</maven.compiler.target>
     <mongodbDriver.version>4.7.1</mongodbDriver.version>
+    <morphium.version>5.1.4</morphium.version>
+    <!-- <jline.version>RELEASE</jline.version> -->
   </properties>
   <dependencies>
     <!-- spring mvc, rest -->
@@ -26,7 +28,7 @@
     <dependency>
       <groupId>de.caluga</groupId>
       <artifactId>morphium</artifactId>
-      <version>5.1.4</version>
+      <version>${morphium.version}</version>
     </dependency>
     <!-- <dependency> -->
     <!--     <groupId>org.mongodb</groupId> -->
@@ -39,23 +41,28 @@
     <!--     <artifactId>mongodb-driver-core</artifactId> -->
     <!--     <version>${mongodbDriver.version}</version> -->
     <!-- </dependency> -->
+    <!-- <dependency> -->
+    <!--   <groupId>org.jline</groupId> -->
+    <!--   <artifactId>jline</artifactId> -->
+    <!--   <version>${jline.version}</version> -->
+    <!-- </dependency> -->
     <dependency>
       <groupId>org.junit.jupiter</groupId>
       <artifactId>junit-jupiter-params</artifactId>
       <version>5.9.0</version>
       <scope>test</scope>
     </dependency>
-    <dependency>
-      <groupId>org.graalvm.js</groupId>
-      <artifactId>js</artifactId>
-      <version>22.0.0</version>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.openjdk.nashorn</groupId>
-      <artifactId>nashorn-core</artifactId>
-      <version>15.3</version>
-    </dependency>
+    <!-- <dependency> -->
+    <!--   <groupId>org.graalvm.js</groupId> -->
+    <!--   <artifactId>js</artifactId> -->
+    <!--   <version>22.0.0</version> -->
+    <!--   <scope>test</scope> -->
+    <!-- </dependency> -->
+    <!-- <dependency> -->
+    <!--   <groupId>org.openjdk.nashorn</groupId> -->
+    <!--   <artifactId>nashorn-core</artifactId> -->
+    <!--   <version>15.3</version> -->
+    <!-- </dependency> -->
   </dependencies>
   <build>
     <plugins>
