@@ -36,15 +36,19 @@ public class HelloCommand implements ICommand {
             i++;
         }
             System.out.println(morpheus.ansiReset());
+        for(Gradient gr:Gradient.values()){
+            morpheus.pr("This is a little test of our coloring skills using the Gradient "+gr.name(),gr);
+        }
 
-        morpheus.pr("This is a little test of our project - a text print out with gradient grey!",Gradient.grey);
-        morpheus.pr("and now a text print out with gradient green!",Gradient.green);
-        morpheus.pr("and now a text print out with gradient in red!",Gradient.red);
-        morpheus.pr("and now a text print out with gradient in blue!",Gradient.blue);
-        morpheus.pr("and now a text print out with gradient in yellow!",Gradient.yellow);
-
-        morpheus.pr("Morphium config:");
+        morpheus.pr("[header1]Morphium config:[r]");
         morpheus.getMorphium().getConfig().asProperties().store(new OutputStreamWriter(System.out),"");
+        morpheus.pr("[header1]Theme settings:[r]");
+        morpheus.pr("[c1]color1[r] [c2]color2[r] [c3]color3[r] [warning]warning[r] [good]good[r] [error]error[r]");
+        morpheus.pr("[header2]  subheder: gradients[r]");
+        morpheus.pr("====> Theme gradient number 1 <========",1);
+        morpheus.pr("====> Theme gradient number 2 <========",2);
+        morpheus.pr("====> Theme gradient number 3 <========",3);
+
    }
 
 }
