@@ -1,6 +1,7 @@
 package de.caluga.morpheus;
 
 import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
@@ -9,64 +10,104 @@ import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Set;
 
 public class Morpheus {
     public final static String COMMANDS_PACKAGE = "de.caluga.morpheus.commands.";
-    String ANSI_RESET = "\u001B[0m";
-    String ANSI_BLACK="\u001B[30m";
-    String ANSI_RED = "\u001B[31m";
-    String ANSI_GREEN = "\u001B[32m";
-    String ANSI_BLUE = "\u001B[34m";
-    String ANSI_YELLOW="\u001B[33m";
-    String ANSI_MAGENTA="\u001B[35m";
-    String ANSI_CYAN="\u001B[36m";
-    String ANSI_WHITE="\u001B[37m";
+    private static String ANSI_RESET = "\u001B[0m";
+    private static String ANSI_BLACK = "\u001B[30m";
+    private static String ANSI_RED = "\u001B[31m";
+    private static String ANSI_GREEN = "\u001B[32m";
+    private static String ANSI_BLUE = "\u001B[34m";
+    private static String ANSI_YELLOW = "\u001B[33m";
+    private static String ANSI_MAGENTA = "\u001B[35m";
+    private static String ANSI_CYAN = "\u001B[36m";
+    private static String ANSI_WHITE = "\u001B[37m";
 
 
-    String ANSI_BG_BLACK="\u001B[40m";
-    String ANSI_BG_RED = "\u001B[41m";
-    String ANSI_BG_GREEN = "\u001B[42m";
-    String ANSI_BG_BLUE = "\u001B[44m";
-    String ANSI_BG_YELLOW="\u001B[43m";
-    String ANSI_BG_MAGENTA="\u001B[45m";
-    String ANSI_BG_CYAN="\u001B[46m";
-    String ANSI_BG_WHITE="\u001B[47m";
+    private static String ANSI_BG_BLACK = "\u001B[40m";
+    private static String ANSI_BG_RED = "\u001B[41m";
+    private static String ANSI_BG_GREEN = "\u001B[42m";
+    private static String ANSI_BG_BLUE = "\u001B[44m";
+    private static String ANSI_BG_YELLOW = "\u001B[43m";
+    private static String ANSI_BG_MAGENTA = "\u001B[45m";
+    private static String ANSI_BG_CYAN = "\u001B[46m";
+    private static String ANSI_BG_WHITE = "\u001B[47m";
 
-    String ANSI_BOLD = "\u001B[1m";
-    String ANSI_FAINT= "\u001B[2m";
-    String ANSI_ITALIC= "\u001B[3m";
-    String ANSI_UNDERLINE = "\u001B[4m";
-    String ANSI_SLOW_BLINK= "\u001B[5m";
-    String ANSI_FAST_BLINK= "\u001B[6m";
-    String ANSI_INVERT= "\u001B[7m";
-    String ANSI_HIDDEN= "\u001B[8m";
-    String ANSI_STRIKETHROUGH= "\u001B[9m";
+    private static String ANSI_BOLD = "\u001B[1m";
+    private static String ANSI_FAINT = "\u001B[2m";
+    private static String ANSI_ITALIC = "\u001B[3m";
+    private static String ANSI_UNDERLINE = "\u001B[4m";
+    private static String ANSI_SLOW_BLINK = "\u001B[5m";
+    private static String ANSI_FAST_BLINK = "\u001B[6m";
+    private static String ANSI_INVERT = "\u001B[7m";
+    private static String ANSI_HIDDEN = "\u001B[8m";
+    private static String ANSI_STRIKETHROUGH = "\u001B[9m";
 
+
+    private Map<String, String> ansiCodes = new HashMap<>();
 
     public static void main(String args[]) throws Exception {
         if (args.length < 1) {
             printUsage();
             return;
         }
-        var app=new Morpheus();
-        app.runApp(args);
 
+        var app = new Morpheus();
+        app.runApp(args);
     }
 
 
     private void runApp(String args[]) throws Exception {
-        String col1=getAnsiFGColor(67);
-        String col2=getAnsiFGColor(33);
-        String col3=getAnsiFGColor(75);
-        String bg=""; //getAnsiBGColor(253);
-        System.out.println(bg+col1+" __  __                  _                          "+ANSI_RESET);
-        System.out.println(bg+col2+"|  \\/  | ___  _ __ _ __ | |__   ___ _   _ ___      "+ANSI_RESET);
-        System.out.println(bg+col3+"| |\\/| |/ _ \\| '__| '_ \\| '_ \\ / _ \\ | | / __| "+ANSI_RESET);
-        System.out.println(bg+col3+"| |  | | (_) | |  | |_) | | | |  __/ |_| \\__ \\    "+ANSI_RESET);
-        System.out.println(bg+col2+"|_|  |_|\\___/|_|  | .__/|_| |_|\\___|\\__,_|___/   "+ANSI_RESET);
-        System.out.println(bg+col1+"                  |_|                               "+ANSI_RESET);
+        ansiCodes.put("r", ANSI_RESET);
+        ansiCodes.put("rd", ANSI_RED);
+        ansiCodes.put("gr", ANSI_GREEN);
+        ansiCodes.put("y", ANSI_YELLOW);
+        ansiCodes.put("b", ANSI_BLUE);
+        ansiCodes.put("bl", ANSI_BLACK);
+        ansiCodes.put("m", ANSI_MAGENTA);
+        ansiCodes.put("c", ANSI_CYAN);
+        ansiCodes.put("w", ANSI_WHITE);
+        ansiCodes.put("b_bl", ANSI_BG_BLACK);
+        ansiCodes.put("b_rd", ANSI_BG_RED);
+        ansiCodes.put("b_gr", ANSI_BG_GREEN);
+        ansiCodes.put("b_y", ANSI_BG_YELLOW);
+        ansiCodes.put("b_b", ANSI_BG_BLUE);
+        ansiCodes.put("b_m", ANSI_BG_MAGENTA);
+        ansiCodes.put("b_c", ANSI_BG_CYAN);
+        ansiCodes.put("b_w", ANSI_BG_WHITE);
+        ansiCodes.put("ital", ANSI_ITALIC);
+        ansiCodes.put("bld", ANSI_BOLD);
+        ansiCodes.put("fnt", ANSI_FAINT);
+        ansiCodes.put("sb", ANSI_SLOW_BLINK);
+        ansiCodes.put("fb", ANSI_FAST_BLINK);
+        ansiCodes.put("inv", ANSI_INVERT);
+        ansiCodes.put("hid", ANSI_HIDDEN);
+        ansiCodes.put("str", ANSI_STRIKETHROUGH);
+        ansiCodes.put("ul", ANSI_UNDERLINE);
+        String col1 = getAnsiFGColor(241);
+        String col2 = getAnsiFGColor(245);
+        String col3 = getAnsiFGColor(252);
+        String bg = getAnsiBGColor(236);
+        System.out.println(bg + col1 + " __  __                  _                          " + ANSI_RESET);
+        System.out.println(bg + col2 + "|  \\/  | ___  _ __ _ __ | |__   ___ _   _ ___       " + ANSI_RESET);
+        System.out.println(bg + col3 + "| |\\/| |/ _ \\| '__| '_ \\| '_ \\ / _ \\ | | / __|      " + ANSI_RESET);
+        System.out.println(bg + col3 + "| |  | | (_) | |  | |_) | | | |  __/ |_| \\__ \\      " + ANSI_RESET);
+        System.out.println(bg + col2 + "|_|  |_|\\___/|_|  | .__/|_| |_|\\___|\\__,_|___/      " + ANSI_RESET);
+        System.out.println(bg + col1 + "                  |_|                               " + ANSI_RESET);
 
+        Properties p=new Properties();
+        var f=new File("/Users/stephan/.config/morpheus.properties");
+
+        if (!f.exists()){
+            p.setProperty("theme.bg", "[b]");
+            p.setProperty("theme.c1", "[rd]");
+            p.setProperty("theme.c2", "[bld][c241]");
+            p.setProperty("theme.error",ANSI_RED);
+            p.setProperty("gradient1","grey");
+            p.store(new FileWriter(f),"Default theme");
+        }
 
         String commandName = args[0];
         Map<String, String> commandArgs = parseCommandArgs(args);
@@ -79,7 +120,7 @@ public class Morpheus {
 
                 if (name.equals(commandName)) {
                     ICommand command = commandClass.getDeclaredConstructor().newInstance();
-                    command.execute(this,commandArgs);
+                    command.execute(this, commandArgs);
                     return;
                 }
             }
@@ -149,24 +190,87 @@ public class Morpheus {
 
 
 
-    public String getAnsiFGColor(int colNum){
-        String col1="\u001B[38;5;"+colNum+"m";
+    public String getAnsiFGColor(int colNum) {
+        String col1 = "\u001B[38;5;" + colNum + "m";
         return col1;
     }
 
 
-    public String getAnsiBGColor(int colNum){
-        String col1="\u001B[48;5;"+colNum+"m";
+    public String getAnsiBGColor(int colNum) {
+        String col1 = "\u001B[48;5;" + colNum + "m";
         return col1;
     }
 
-
-    public String getAnsiString(String str){
-        return str.replaceAll("<b>",ANSI_BOLD)
-            .replaceAll("<c1>", ANSI_RED)
-            .replaceAll("<c2>",ANSI_CYAN)
-            .replaceAll("<c3>",ANSI_GREEN);
+    public String ansiReset() {
+        return ANSI_RESET;
     }
 
+
+    public String getAnsiString(String str) {
+        return str.replaceAll("<b>", ANSI_BOLD).replaceAll("<c1>", ANSI_RED).replaceAll("<c2>", ANSI_CYAN).replaceAll("<c3>", ANSI_GREEN);
+    }
+
+
+    public void pr(String str) {
+        System.out.println(getAnsiString(str));
+    }
+
+    public void pr(String str, Gradient gr) {
+        int l = str.length();
+        int gradient[];
+
+        switch (gr) {
+            case yellow:
+                gradient = new int[] { 184,220,226,227,228,229,230,231};
+                break;
+            case blue:
+                gradient = new int[] { 21, 69, 67,12, 153, 117,159};
+                break;
+            case green:
+                gradient = new int[] {22, 28, 34, 40, 46, 118, 119, 120};
+                break;
+            case red:
+                gradient = new int[] {89, 124, 160, 198};
+                break;
+            case grey:
+            default:
+                gradient = new int[] {241, 243, 245, 248, 249, 252, 254};
+        }
+
+        int chk = l / (gradient.length * 2);
+        int gridx = 0;
+        boolean flag = true;
+        int off = 1;
+
+        for (int idx = 0; idx < l; idx++) {
+            if (flag) {
+                System.out.print(getAnsiFGColor(gradient[gridx]));
+                gridx += off;
+
+                if (gridx >= gradient.length - 1) {
+                    off = -off;
+                    gridx = gradient.length - 1;
+                } else if (gridx <= 0) {
+                    gridx = 0;
+                }
+
+                flag = false;
+            }
+
+            if (idx != 0 && idx % chk == 0) {
+                flag = true;
+            }
+
+            System.out.print(str.charAt(idx));
+        }
+
+        System.out.println(ANSI_RESET);
+    }
+
+
+
+    public enum Gradient {
+        blue, grey, green, red,yellow,
+    }
 
 }
