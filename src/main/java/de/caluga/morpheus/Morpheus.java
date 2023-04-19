@@ -13,8 +13,10 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.util.UUID;
 import de.caluga.morphium.Morphium;
 import de.caluga.morphium.MorphiumConfig;
+import de.caluga.morphium.messaging.Messaging;
 
 public class Morpheus {
     public final static String COMMANDS_PACKAGE = "de.caluga.morpheus.commands.";
@@ -51,6 +53,7 @@ public class Morpheus {
 
     private Map<String, String> ansiCodes = new HashMap<>();
     private Morphium morphium;
+    private Messaging messaging;
 
     public static void main(String args[]) throws Exception {
         if (args.length < 1) {
@@ -116,6 +119,12 @@ public class Morpheus {
             cfg.addHostToSeed("localhost", 27017);
             cfg.setDatabase("test");
             p.putAll(cfg.asProperties("morphium.default_connection"));
+            p.put("morphium.default_connection.messaging.processMultiple","true");
+            p.put("morphium.default_connection.messaging.multithreadded","true");
+            p.put("morphium.default_connection.messaging.windowSize","10");
+            p.put("morphium.default_connection.messaging.pause","100");
+            p.put("morphium.default_connection.messaging.queueName","msg");
+            p.put("morphium.default_connection.messaging.senderId",UUID.randomUUID().toString());
             StringBuilder doc=new StringBuilder();
             doc.append("Default configuration for morpheus\n");
             doc.append("Define morphium connection / settings with prefixes morphium.CONNECTIONNAME\nyou can then refer to it via commandline");
@@ -174,6 +183,18 @@ public class Morpheus {
         MorphiumConfig cfg=MorphiumConfig.fromProperties("morphium."+connection, p);
         morphium=new Morphium(cfg);
 
+        boolean processMultiple=p.getProperty("morphium."+connection+".messaging.processMultiple", "true").equals("true");
+        boolean multithreadded=p.getProperty("morphium."+connection+".messaging.multiThreadded", "true").equals("true");
+        int pause=Integer.valueOf(p.getProperty("morphium."+connection+".messaging.pause", "100"));
+        int windowSize=Integer.valueOf(p.getProperty("morphium."+connection+".messaging.windowSize", "10"));
+        String queueName=p.getProperty("morphium."+connection+".messaging.queueName","msg");
+        String senderId=p.getProperty("morphium."+connection+".messaging.senderId",UUID.randomUUID().toString());
+
+        messaging = new Messaging(morphium,pause,processMultiple,multithreadded,100);
+        if (!queueName.equals("msg")) messaging.setQueueName(queueName);
+        messaging.setSenderId(senderId);
+        pr("[c1]Messaging configured - starting it[r] ");
+        messaging.start();
         try {
             Set<Class<? extends ICommand>> commandClasses = getCommandClasses();
 
