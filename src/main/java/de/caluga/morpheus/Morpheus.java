@@ -233,6 +233,10 @@ public class Morpheus {
 
         pr("Connecting to mongo [good] " + connection + "[r] ");
         MorphiumConfig cfg = MorphiumConfig.fromProperties("morphium." + connection, properties);
+        if (cfg.getHostSeed()==null || cfg.getHostSeed().isEmpty()){
+            pr("[error]--> connection not configured properly -no hosts set[r]");
+            System.exit(1);
+        }
         cfg.setMinConnections(2);
         cfg.setMaxConnections(4);
         cfg.setHousekeepingTimeout(1000);
@@ -370,7 +374,8 @@ public class Morpheus {
     }
 
     private static void printUsage() {
-        System.out.println("Usage: Morpheus <commandName> [arg1=value1 arg2=value2 ...]");
+        System.out.println("Usage: Morpheus [--theme=themename] [--morphiumcfg=connetionName] <commandName> [arg1=value1 arg2=value2 ...]");
+        System.out.println("    themes and connections are configured in morpheusconfig file (usually ~/.config/morpheus.properties");
     }
 
     public String getAnsiFGColor(int colNum) {
