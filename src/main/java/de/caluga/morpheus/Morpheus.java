@@ -26,6 +26,7 @@ import de.caluga.morphium.driver.ReadPreference;
 import de.caluga.morphium.driver.wire.MongoConnection;
 import de.caluga.morphium.driver.wire.PooledDriver;
 import de.caluga.morphium.messaging.Messaging;
+import de.caluga.morpheus.commands.*;
 
 public class Morpheus {
     public final static String COMMANDS_PACKAGE = "de.caluga.morpheus.commands.";
@@ -65,6 +66,8 @@ public class Morpheus {
     private String connection;
     private Properties properties;
 
+    public static Map<String,Class<? extends ICommand>> commands=new HashMap<>();
+
     public static void main(String args[]) throws Exception {
         if (args.length < 1) {
             printUsage();
@@ -82,6 +85,11 @@ public class Morpheus {
         // jc.setContext(context);
         // context.reset(); // override default configuration
         //color codes...
+
+        commands.put(HelloCommand.NAME,HelloCommand.class);
+        commands.put(ListCommands.NAME,ListCommands.class);
+        commands.put(GetStatus.NAME,GetStatus.class);
+        commands.put(MessageMonitor.NAME,MessageMonitor.class);
         ansiCodes.put("r", ANSI_RESET);
         ansiCodes.put("rd", ANSI_RED);
         ansiCodes.put("gr", ANSI_GREEN);
@@ -157,9 +165,10 @@ public class Morpheus {
         } else {
             properties.load(new FileReader(f));
         }
-        moveCursor(1, 25);
+        // moveCursor(1, 25);
         pr("  Terminal Size: [good]" + getTerminalSize().toString());
         String commandName = args[0];
+        pr("  CommandName: '"+commandName+"'");
         Map<String, String> commandArgs = parseCommandArgs(args);
         theme = "default";
 
@@ -187,6 +196,7 @@ public class Morpheus {
                 theme = commandArgs.get("--theme");
             }
         }
+
 
         //adding theme settings
         for (Object k : properties.keySet()) {
@@ -308,10 +318,12 @@ public class Morpheus {
                     ICommand command = commandClass.getDeclaredConstructor().newInstance();
                     command.execute(this, commandArgs);
                     return;
+                } else {
+                    pr(name+"!="+commandName);
                 }
             }
 
-            throw new ClassNotFoundException("name unknown");
+            throw new ClassNotFoundException("name "+commandName+" unknown");
         } catch (ClassNotFoundException | InstantiationException | IllegalAccessException | NoSuchMethodException | InvocationTargetException e) {
             System.err.println("Invalid command provided." + e.getClass().getName() + "/" + e.getMessage());
             printUsage();
@@ -320,6 +332,16 @@ public class Morpheus {
             morphium.close();
         }
     }
+
+    public Set<Class<? extends ICommand>> getCommandClasses(){
+        Set<Class<? extends ICommand>> ret=new HashSet<>();
+        for (Class<? extends ICommand> c:commands.values()){
+            ret.add(c);
+        }
+        return ret;
+    }
+
+
 
     private Map<String, String> parseCommandArgs(String[] args) {
         Map<String, String> commandArgs = new HashMap<>();
@@ -345,33 +367,6 @@ public class Morpheus {
         return (String) nameField.get(null);
     }
 
-    public Set<Class<? extends ICommand>> getCommandClasses() throws IOException, ClassNotFoundException {
-        ClassLoader classloader = Thread.currentThread().getContextClassLoader();
-        Set<Class<? extends ICommand>> classes = new HashSet<>();
-        String packagePath = COMMANDS_PACKAGE.replace('.', '/');
-        Enumeration<URL> resources = classloader.getResources(packagePath);
-
-        while (resources.hasMoreElements()) {
-            URL resource = resources.nextElement();
-            File file = new File(resource.getFile());
-
-            if (file.isDirectory()) {
-                String[] classNames = file.list();
-
-                for (String className : classNames) {
-                    className = COMMANDS_PACKAGE + className.substring(0, className.lastIndexOf('.'));
-                    Class<?> cls = Class.forName(className);
-
-                    if (ICommand.class.isAssignableFrom(cls)) {
-                        classes.add((Class<? extends ICommand>) cls);
-                    }
-                }
-            }
-        }
-
-        return classes;
-    }
-
     public String getDocumentationFromCommandClass(Class<? extends ICommand> commandClass) {
         try {
             Field description = commandClass.getDeclaredField("DESCRIPTION");
@@ -382,7 +377,7 @@ public class Morpheus {
     }
 
     private static void printUsage() {
-        System.out.println("Usage: Morpheus [--theme=themename] [--morphiumcfg=connetionName] <commandName> [arg1=value1 arg2=value2 ...]");
+        System.out.println("Usage: Morpheus <commandName> [--theme=themename] [--morphiumcfg=connetionName] [arg1=value1 arg2=value2 ...]");
         System.out.println("    themes and connections are configured in morpheusconfig file (usually ~/.config/morpheus.properties");
     }
 
