@@ -11,7 +11,7 @@ import de.caluga.morphium.messaging.Msg;
 
 public class GetStatus implements ICommand {
     public final static String NAME = "get_status";
-    public final static String DESCRIPTION = "getting status of all connected nodes";
+    public final static String DESCRIPTION = "getting status of all connected nodes, params wait=secs, verbose=true/false";
 
     @Override
     public void execute(Morpheus morpheus, Map<String, String> args) throws Exception {
