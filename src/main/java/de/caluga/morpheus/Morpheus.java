@@ -16,6 +16,7 @@ import de.caluga.morpheus.commands.GetStatus;
 import de.caluga.morpheus.commands.HelloCommand;
 import de.caluga.morpheus.commands.ListCommands;
 import de.caluga.morpheus.commands.MessageMonitor;
+import de.caluga.morpheus.commands.SendMessageCommand;
 import de.caluga.morphium.Morphium;
 import de.caluga.morphium.MorphiumConfig;
 import de.caluga.morphium.MorphiumConfig.CappedCheck;
@@ -342,6 +343,7 @@ public class Morpheus {
         commands.put(ListCommands.NAME, ListCommands.class);
         commands.put(GetStatus.NAME, GetStatus.class);
         commands.put(MessageMonitor.NAME, MessageMonitor.class);
+        commands.put(SendMessageCommand.NAME, SendMessageCommand.class);
         ansiCodes.put("r", ANSI_RESET);
         ansiCodes.put("rd", ANSI_RED);
         ansiCodes.put("gr", ANSI_GREEN);
