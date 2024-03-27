@@ -15,10 +15,10 @@
   </properties>
   <dependencies>
     <!-- spring mvc, rest -->
-<dependency>
-    <groupId>org.springframework</groupId>
-    <artifactId>spring-core</artifactId>
-    <version>6.1.5</version>
+    <dependency>
+      <groupId>org.springframework</groupId>
+      <artifactId>spring-core</artifactId>
+      <version>6.1.5</version>
     </dependency>
     <!-- <dependency> -->
     <!--   <groupId>org.springframework.boot</groupId> -->
@@ -88,8 +88,8 @@
               <archive>
                 <manifest>
                   <mainClass>
-                    de.caluga.morpheus.Morpheus
-                    </mainClass>
+                  de.caluga.morpheus.Morpheus
+                  </mainClass>
                 </manifest>
               </archive>
               <descriptorRefs>
@@ -98,8 +98,8 @@
             </configuration>
           </execution>
         </executions>
-        </plugin>
- <plugin>
+      </plugin>
+      <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-pmd-plugin</artifactId>
         <version>3.21.2</version>
@@ -134,8 +134,8 @@
       <!--   </configuration> -->
       <!-- </plugin> -->
     </plugins>
-    </build>
-<reporting>
+  </build>
+  <reporting>
     <plugins>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
@@ -147,22 +147,27 @@
             <ruleset>/category/java/bestpractices.xml</ruleset>
           </rulesets>
         </configuration>
-  <reportSets>
-          <reportSet><!-- by default, id = "default" -->
-            <reports><!-- select non-aggregate reports -->
+        <reportSets>
+          <reportSet>
+            <!-- by default, id = "default" -->
+            <reports>
+              <!-- select non-aggregate reports -->
               <report>pmd</report>
               <report>cpd</report>
             </reports>
           </reportSet>
-          <reportSet><!-- aggregate reportSet, to define in poms having modules -->
+          <reportSet>
+            <!-- aggregate reportSet, to define in poms having modules -->
             <id>aggregate</id>
-            <inherited>false</inherited> <!-- don't run aggregate in child modules -->
+            <inherited>false</inherited>
+            <!-- don't run aggregate in child modules -->
             <reports>
               <report>aggregate-pmd</report>
               <report>aggregate-cpd</report>
             </reports>
           </reportSet>
-        </reportSets>     </plugin>
+        </reportSets>
+      </plugin>
     </plugins>
   </reporting>
 </project>
