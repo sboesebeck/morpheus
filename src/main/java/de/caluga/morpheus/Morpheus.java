@@ -57,6 +57,7 @@ public class Morpheus {
 
 
     }
+
     public enum Gradient {
         blue, cyan, grey, green, red, yellow, purple,
     }
@@ -102,6 +103,7 @@ public class Morpheus {
 
         app.runApp(args);
     }
+
     public static Size getTerminalSize() {
         try {
             final String[] cmd = {"/bin/sh", "-c", "tput cols && tput lines"};
@@ -155,6 +157,7 @@ public class Morpheus {
 
         return null;
     }
+
     public static void moveCursor(final int row, final int col) {
         System.out.print("\u001B[" + row + ";" + col + "H");
     }
@@ -397,13 +400,19 @@ public class Morpheus {
         // moveCursor(1, 25);
         pr("  Terminal Size: [good]" + getTerminalSize().toString());
         final String commandName = args[0];
+
+        if (commandName.startsWith("-")) {
+            pr(" [rd]Commands do not start with - -- maybe try 'list'?[r]");
+            System.exit(1);
+        }
+
         pr("  CommandName: '" + commandName + "'");
         final Map<String, String> commandArgs = parseCommandArgs(args);
         theme = "default";
 
         if (commandArgs.containsKey("--theme")) {
             //choose theme
-            if (commandArgs.get("--theme").equals("?")) {
+            if (commandArgs.get("--theme").equals("?") || commandArgs.get("--theme").equals("list")) {
                 //show list of themes
                 final Set<String> themes = new HashSet<>();
 
@@ -437,7 +446,7 @@ public class Morpheus {
         connection = "default_connection";
 
         if (commandArgs.containsKey("--morphiumcfg")) {
-            if (commandArgs.get("--morphiumcfg").equals("?")) {
+            if (commandArgs.get("--morphiumcfg").equals("?") || commandArgs.get("--morphiumcfg").equals("list")) {
                 final Set<String> cfg = new HashSet<>();
 
                 for (final Object k : properties.keySet()) {
@@ -561,6 +570,7 @@ public class Morpheus {
             morphium.close();
         }
     }
+
     private void registerAnsiCodes() {
         commands.put(HelloCommand.NAME, HelloCommand.class);
         commands.put(ListCommands.NAME, ListCommands.class);
