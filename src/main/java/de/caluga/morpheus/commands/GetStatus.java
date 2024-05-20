@@ -15,12 +15,15 @@ import de.caluga.morphium.messaging.Msg;
 
 public class GetStatus implements ICommand {
     public final static String NAME = "get_status";
-    public final static String DESCRIPTION = "getting status of all connected nodes, params wait=secs, verbose=true/false, filter_host=PATTERN, filter_sender=PATTERN, keys=LIST_OF_KEYS";
+    public final static String DESCRIPTION =
+        "getting status of all connected nodes, params wait=secs, verbose=true/false, filter_host=PATTERN, filter_sender=PATTERN, keys=LIST_OF_KEYS, path_pattern=PATTERN";
+
 
     @Override
     public void execute(Morpheus morpheus, Map<String, String> args) throws Exception {
         int sl = 30;
         Pattern filterHost = null;
+        Pattern filterPath = null;
         Pattern filterSender = null;
         List<String> keys = new ArrayList<>();
 
@@ -38,6 +41,10 @@ public class GetStatus implements ICommand {
 
         if (args.containsKey("filter_host")) {
             filterHost = Pattern.compile(args.get("filter_host"));
+        }
+
+        if (args.containsKey("path_pattern")) {
+            filterPath = Pattern.compile(args.get("path_pattern"));
         }
 
         morpheus.pr("[c1]sending status ping[r]....(waiting " + sl + "s for answers)\n");
@@ -89,52 +96,58 @@ public class GetStatus implements ICommand {
                 morpheus.pr("Answer from: [c3]" + r.getSender() + "[r] on host [good]" + r.getSenderHost() + "[r] after [warning]" + (r.getTimestamp() - sendTS) + "ms[r]");
 
                 if (r.getMapValue() != null) {
-                    printMap(morpheus, r.getMapValue(), 1, keys);
+                    printMap(morpheus, r.getMapValue(), "", keys, filterPath);
                 }
             } else {
                 long after = (r.getTimestamp() - sendTS);
-                morpheus.pr(morpheus.getColumn(r.getSender(), 25) + " | " + morpheus.getColumn(r.getSenderHost(), 25) + " | " + morpheus.getColumn("" + after + "ms", 8));
+                morpheus.pr(r.getSender() + " | " + morpheus.getColumn(r.getSenderHost(), 25) + " | " + after + "ms");
                 // morpheus.pr("Answer from: [c3]" + r.getSender() + "[r] on host [good]" + r.getSenderHost() + "[r] after [warning]" + (r.getTimestamp() - sendTS) + "ms[r]");
             }
         }
     }
 
-    private void printMap(Morpheus morpheus, Map<String, Object> map, int indent, List<String> keys) {
-        int columnWidth = 35;
-
+    private void printMap(Morpheus morpheus, Map<String, Object> map, String path, List<String> keys, Pattern pathPattern) {
         for (Map.Entry<String, Object> k : map.entrySet()) {
             if (keys != null && !keys.isEmpty() && !keys.contains(k.getKey())) {
                 continue;
             }
 
-            String ind = " ";
-
-            for (int i = 0; i < indent; i++) ind += " ";
-
             if (k.getKey().equals("message_listeners_by_name")) {
-                morpheus.pr(ind + morpheus.getColumn("[c3]registered Listeners:[r]", columnWidth));
+                if (pathPattern != null && !pathPattern.matcher(path + ".registered Listeners:").matches()) {
+                    continue;
+                }
+
+                morpheus.pr("[c3]" + path + ".registered Listeners:[r]");
                 String[] lst = k.getValue().toString().replaceAll("[{}]+", "").split(",");
 
                 for (String l : lst) {
-                    morpheus.pr(morpheus.getColumn("", columnWidth) + "[good]" + l.substring(0, l.indexOf("=")) + "[r]");
+                    morpheus.pr("[good]" + l.substring(0, l.indexOf("=")) + "[r]");
                 }
             } else if (k.getValue() instanceof List) {
                 if (((List)k.getValue()).isEmpty()) continue;
 
-                morpheus.pr(morpheus.getColumn("[good]" + k.getKey() + "[r]", indent));
+                if (pathPattern != null && !pathPattern.matcher(path + "." + k.getKey()).matches()) {
+                    continue;
+                }
+
+                morpheus.pr("[good]" + path + "." + k.getKey() + "[r]");
 
                 for (Object l : (List)k.getValue()) {
                     if (l instanceof Map) {
-                        printMap(morpheus, (Map<String, Object>)l, columnWidth, keys);
+                        printMap(morpheus, (Map<String, Object>)l, path + "." + k.getKey(), keys, pathPattern);
                     } else {
-                        morpheus.pr(morpheus.getColumn("", columnWidth) + "[good]" + l.toString() + "[r]");
+                        morpheus.pr("[good]" + l.toString() + "[r]");
                     }
                 }
 
                 // morpheus.pr("      [c3]" + morpheus.getColumn(k.getKey(), 25) + "[r] List!");
             } else if (k.getValue() instanceof Map) {
-                morpheus.pr(ind + "[c3]" + morpheus.getColumn(k.getKey(), columnWidth) + "[r]");
-                printMap(morpheus, (Map<String, Object>)k.getValue(), indent + columnWidth, keys);
+                if (pathPattern != null && !pathPattern.matcher(path + "." + k.getKey()).matches()) {
+                    continue;
+                }
+
+                morpheus.pr("[good]" + path + "." + k.getKey() + "[r]");
+                printMap(morpheus, (Map<String, Object>)k.getValue(), path + "." + k.getKey(), keys, pathPattern);
                 //morpheus.pr("      [c3]" + morpheus.getColumn(k.getKey(), 35) + "[r]");
                 //Map<String, Object> m = (Map<String, Object>)k.getValue();
                 //
@@ -142,7 +155,11 @@ public class GetStatus implements ICommand {
                 //    morpheus.pr("      " + morpheus.getColumn("", 35) + " [good]" + morpheus.getColumn(e.getKey(), 35) + ":[r]  " + e.getValue());
                 //}
             } else {
-                morpheus.pr(ind + "[c3]" + morpheus.getColumn(k.getKey(), columnWidth) + "[r] | " + k.getValue());
+                if (pathPattern != null && !pathPattern.matcher(path + "." + k.getKey()).matches()) {
+                    continue;
+                }
+
+                morpheus.pr("[c3]" + path + "." + k.getKey() + "[r] | " + k.getValue());
             }
         }
     }
