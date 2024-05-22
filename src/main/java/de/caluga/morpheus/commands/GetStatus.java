@@ -5,6 +5,7 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
 
 import org.json.simple.parser.JSONParser;
@@ -16,7 +17,7 @@ import de.caluga.morphium.messaging.Msg;
 public class GetStatus implements ICommand {
     public final static String NAME = "get_status";
     public final static String DESCRIPTION =
-        "getting status of all connected nodes, params wait=secs, verbose=true/false, filter_host=PATTERN, filter_sender=PATTERN, keys=LIST_OF_KEYS, filter_path=PATTERN, not_filter_path=PATTERN";
+        "getting status of all connected nodes, params wait=secs, verbose=true/false, expect_answers=NUM, filter_host=PATTERN, level=[PING,MESSAGING_ONLY,MORPHIUM_ONLY|ALL], filter_sender=PATTERN, keys=LIST_OF_KEYS, filter_path=PATTERN, not_filter_path=PATTERN";
 
 
     @Override
@@ -26,7 +27,17 @@ public class GetStatus implements ICommand {
         Pattern filterPath = null;
         Pattern notFilterPath = null;
         Pattern filterSender = null;
+        String level = "ALL";
+        Integer expectAnswers = 10000;
         List<String> keys = new ArrayList<>();
+
+        if (args.containsKey("expect_answers")) {
+            expectAnswers = Integer.valueOf(args.get("expect_answers"));
+        }
+
+        if (args.containsKey("level")) {
+            level = args.get("level");
+        }
 
         if (args.containsKey("keys")) {
             keys.addAll(Arrays.asList(args.get("keys").replaceAll(" ", "").split(",")));
@@ -53,29 +64,48 @@ public class GetStatus implements ICommand {
         }
 
         morpheus.pr("[c1]sending status ping[r]....(waiting " + sl + "s for answers)\n");
-        long sendTS = System.currentTimeMillis();
+        var msg = new Msg(morpheus.getMessaging().getStatusInfoListenerName(), "ALL", level, sl * 1000);
+        msg.setMsgId(new MorphiumId());
         final int timeout = sl;
+        AtomicBoolean running = new AtomicBoolean(true);
         new Thread(()-> {
             for (int i = 0; i < timeout; i++) {
+                if (!running.get()) break;
+
                 try {
                     Thread.sleep(1000);
                 } catch (InterruptedException e) {
                 }
 
-                System.out.print("\u001B[1A\r");
-                morpheus.pr("" + i);
+                try {
+                    var message = morpheus.getMorphium().findById(Msg.class, msg.getMsgId(), morpheus.getMessaging().getCollectionName());
+                    int rec = 0;
+
+                    if (message != null && message.getProcessedBy() != null) rec = message.getProcessedBy().size();
+
+                    System.out.print("\u001B[1A\r");
+                    morpheus.pr("Time: " + i + " - Received by: " + rec);
+                } catch (Exception e) {}
             }
         }).start();
-        var msg = new Msg(morpheus.getMessaging().getStatusInfoListenerName(), "ALL", "ALL", sl * 1000);
-        msg.setMsgId(new MorphiumId());
-        var results = morpheus.getMessaging().sendAndAwaitAnswers(msg, 40, sl * 1000);
-        morpheus.pr("[header1]got messages:[r]" + results.size());
         boolean verbose = false;
 
         if (args.containsKey("verbose") && args.get("verbose").equalsIgnoreCase("true")) {
             verbose = true;
         }
 
+        if (!verbose) {
+            if (!level.equals("PING")) {
+                morpheus.pr("[rd]setting level to PING - no need to get more info[r]");
+                level = "PING";
+            }
+        }
+
+        long sendTS = System.currentTimeMillis();
+        var results = morpheus.getMessaging().sendAndAwaitAnswers(msg, expectAnswers, sl * 1000);
+        running.set(false);
+        Thread.sleep(1000);
+        morpheus.pr("[header1]got messages:[r]" + results.size());
         results.sort(new Comparator<Msg>() {
             @Override
             public int compare(Msg o1, Msg o2) {
@@ -105,7 +135,7 @@ public class GetStatus implements ICommand {
                 }
             } else {
                 long after = (r.getTimestamp() - sendTS);
-                morpheus.pr(r.getSender() + " | " + morpheus.getColumn(r.getSenderHost(), 25) + " | " + after + "ms");
+                morpheus.pr(morpheus.getColumn(r.getSender(), 25) + " | " + morpheus.getColumn(r.getSenderHost(), 25) + " | " + after + "ms");
                 // morpheus.pr("Answer from: [c3]" + r.getSender() + "[r] on host [good]" + r.getSenderHost() + "[r] after [warning]" + (r.getTimestamp() - sendTS) + "ms[r]");
             }
         }
