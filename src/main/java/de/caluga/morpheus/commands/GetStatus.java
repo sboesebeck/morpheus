@@ -101,8 +101,8 @@ public class GetStatus implements ICommand {
             }
         }
 
-        long sendTS = System.currentTimeMillis();
         var results = morpheus.getMessaging().sendAndAwaitAnswers(msg, expectAnswers, sl * 1000);
+        long sendTS = msg.getTimestamp();
         running.set(false);
         Thread.sleep(1000);
         morpheus.pr("[header1]got messages:[r]" + results.size());

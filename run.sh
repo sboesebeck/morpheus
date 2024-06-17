@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 csv=$(mktemp)
-mvn -U -o dependency:list | grep ":.*:.*:compile" | sed "s/\[INFO\]    \([^:]*\):\([^:]*\):jar:\([^:]*\):compile/\1;\2;\3/" | sed -e 's/--.*$//' | sort -u >$csv
+mvn -U dependency:list | grep ":.*:.*:compile" | sed "s/\[INFO\]    \([^:]*\):\([^:]*\):jar:\([^:]*\):compile/\1;\2;\3/" | sed -e 's/--.*$//' | sort -u >$csv
 cp="./target/classes"
 for l in $(<$csv); do
   # echo "Line: $l"
