@@ -566,8 +566,10 @@ public class Morpheus {
             System.err.println("Invalid command provided." + e.getClass().getName() + "/" + e.getMessage());
             printUsage();
         } finally {
-            messaging.terminate();
-            morphium.close();
+            try {
+                morphium.close();
+                messaging.terminate();
+            } catch (Exception e) {}
         }
     }
 
