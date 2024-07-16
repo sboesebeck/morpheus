@@ -570,6 +570,8 @@ public class Morpheus {
                 morphium.close();
                 messaging.terminate();
             } catch (Exception e) {}
+
+            System.exit(0);
         }
     }
 

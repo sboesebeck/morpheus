@@ -91,6 +91,8 @@ public class GetStatus implements ICommand, MessageListener {
         int counter = 0;
         morpheus.getMessaging().sendMessage(msg);
         long start = System.currentTimeMillis();
+        int filteredHosts = 0;
+        int filteredOutput = 0;
 
         while (true) {
             morpheus.pr("Waiting max. " + timeout + "s for " + expectAnswers + " answers - got " + answers.size() + " answers after " + counter + "s");
@@ -122,10 +124,12 @@ public class GetStatus implements ICommand, MessageListener {
 
         for (Msg r : answers) {
             if (filterHost != null && !filterHost.matcher(r.getSenderHost()).matches()) {
+                filteredHosts++;
                 continue;
             }
 
             if (filterSender != null && !filterSender.matcher(r.getSender()).matches()) {
+                filteredHosts++;
                 continue;
             }
 
@@ -134,7 +138,7 @@ public class GetStatus implements ICommand, MessageListener {
                 morpheus.pr("Answer from: [c3]" + r.getSender() + "[r] on host [good]" + r.getSenderHost() + "[r] after [warning]" + (r.getTimestamp() - sendTS) + "ms[r]");
 
                 if (r.getMapValue() != null) {
-                    printMap(morpheus, r.getMapValue(), "", keys, filterPath, notFilterPath);
+                    filteredOutput += printMap(morpheus, r.getMapValue(), "", keys, filterPath, notFilterPath);
                 }
             } else {
                 long after = (r.getTimestamp() - sendTS);
@@ -142,20 +146,30 @@ public class GetStatus implements ICommand, MessageListener {
                 // morpheus.pr("Answer from: [c3]" + r.getSender() + "[r] on host [good]" + r.getSenderHost() + "[r] after [warning]" + (r.getTimestamp() - sendTS) + "ms[r]");
             }
         }
+
+        morpheus.pr("\n");
+        morpheus.pr("processed messages: " + answers.size() + "  Filtered hosts: " + filteredHosts + "    filtered Output: " + filteredOutput, 2);
     }
 
-    private void printMap(Morpheus morpheus, Map<String, Object> map, String path, List<String> keys, Pattern pathPattern, Pattern notFilterPath) {
+    private int printMap(Morpheus morpheus, Map<String, Object> map, String path, List<String> keys, Pattern pathPattern, Pattern notFilterPath) {
+        int filtered = 0;
+
         for (Map.Entry<String, Object> k : map.entrySet()) {
+            // System.out.println("I am here! " + keys);
             if (keys != null && !keys.isEmpty() && !keys.contains(k.getKey())) {
+                // System.out.println("Key " + k.getKey() + "is not found");
+                filtered++;
                 continue;
             }
 
             if (k.getKey().equals("message_listeners_by_name")) {
                 if (pathPattern != null && !pathPattern.matcher(path + ".registered Listeners:").matches()) {
+                    filtered++;
                     continue;
                 }
 
                 if (notFilterPath != null && notFilterPath.matcher(path + ".registered Listeners:").matches()) {
+                    filtered++;
                     continue;
                 }
 
@@ -169,10 +183,12 @@ public class GetStatus implements ICommand, MessageListener {
                 if (((List)k.getValue()).isEmpty()) continue;
 
                 if (pathPattern != null && !pathPattern.matcher(path + "." + k.getKey()).matches()) {
+                    filtered++;
                     continue;
                 }
 
                 if (notFilterPath != null && notFilterPath.matcher(path + "." + k.getKey()).matches()) {
+                    filtered++;
                     continue;
                 }
 
@@ -180,7 +196,7 @@ public class GetStatus implements ICommand, MessageListener {
 
                 for (Object l : (List)k.getValue()) {
                     if (l instanceof Map) {
-                        printMap(morpheus, (Map<String, Object>)l, path + "." + k.getKey(), keys, pathPattern, notFilterPath);
+                        filtered += printMap(morpheus, (Map<String, Object>)l, path + "." + k.getKey(), keys, pathPattern, notFilterPath);
                     } else {
                         morpheus.pr("[good]" + l.toString() + "[r]");
                     }
@@ -189,15 +205,17 @@ public class GetStatus implements ICommand, MessageListener {
                 // morpheus.pr("      [c3]" + morpheus.getColumn(k.getKey(), 25) + "[r] List!");
             } else if (k.getValue() instanceof Map) {
                 if (pathPattern != null && !pathPattern.matcher(path + "." + k.getKey()).matches()) {
+                    filtered++;
                     continue;
                 }
 
                 if (notFilterPath != null && notFilterPath.matcher(path + "." + k.getKey()).matches()) {
+                    filtered++;
                     continue;
                 }
 
                 morpheus.pr("[good]" + path + "." + k.getKey() + "[r]");
-                printMap(morpheus, (Map<String, Object>)k.getValue(), path + "." + k.getKey(), keys, pathPattern, notFilterPath);
+                filtered += printMap(morpheus, (Map<String, Object>)k.getValue(), path + "." + k.getKey(), keys, pathPattern, notFilterPath);
                 //morpheus.pr("      [c3]" + morpheus.getColumn(k.getKey(), 35) + "[r]");
                 //Map<String, Object> m = (Map<String, Object>)k.getValue();
                 //
@@ -206,16 +224,20 @@ public class GetStatus implements ICommand, MessageListener {
                 //}
             } else {
                 if (pathPattern != null && !pathPattern.matcher(path + "." + k.getKey()).matches()) {
+                    filtered++;
                     continue;
                 }
 
                 if (notFilterPath != null && notFilterPath.matcher(path + "." + k.getKey()).matches()) {
+                    filtered++;
                     continue;
                 }
 
                 morpheus.pr("[c3]" + path + "." + k.getKey() + "[r] | " + k.getValue());
             }
         }
+
+        return filtered;
     }
 
     @Override
