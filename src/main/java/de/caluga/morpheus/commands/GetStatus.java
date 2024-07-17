@@ -1,5 +1,16 @@
 package de.caluga.morpheus.commands;
 
+import java.io.BufferedOutputStream;
+import java.io.BufferedWriter;
+import java.io.IOException;
+import java.io.OutputStreamWriter;
+import java.io.PrintWriter;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.Socket;
+import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -19,11 +30,16 @@ import de.caluga.morphium.messaging.Msg;
 public class GetStatus implements ICommand, MessageListener {
     public final static String NAME = "get_status";
     public final static String DESCRIPTION =
-        "getting status of all connected nodes, params wait=secs, verbose=true/false, expect_answers=NUM, filter_host=PATTERN, level=[PING,MESSAGING_ONLY,MORPHIUM_ONLY|ALL], filter_sender=PATTERN, keys=LIST_OF_KEYS, filter_path=PATTERN, not_filter_path=PATTERN";
+        "getting status of all connected nodes, params wait=secs, verbose=true/false, expect_answers=NUM, filter_host=PATTERN, level=[PING,MESSAGING_ONLY,MORPHIUM_ONLY|ALL], filter_sender=PATTERN, keys=LIST_OF_KEYS, filter_path=PATTERN, not_filter_path=PATTERN graphite=host:port";
 
     private MorphiumId sentMessageId;
     private List<Msg> answers = new ArrayList<>();
-
+    // private DatagramSocket graphiteSocket = null;
+    private Socket graphiteSocket = null;
+    private String graphite = null;
+    private String graphiteHost = null;
+    private int graphitePort = 0;
+    private PrintWriter graphiteOut = null;
     @Override
     public void execute(Morpheus morpheus, Map<String, String> args) throws Exception {
         int sl = 30;
@@ -65,6 +81,29 @@ public class GetStatus implements ICommand, MessageListener {
 
         if (args.containsKey("not_filter_path")) {
             notFilterPath = Pattern.compile(args.get("not_filter_path"));
+        }
+
+        if (args.containsKey("graphite")) {
+            graphite = args.get("graphite");
+            graphiteHost = graphite;
+            graphitePort = 8125;
+
+            if (graphite.contains(":")) {
+                graphitePort = Integer.parseInt(graphite.split(":")[1]);
+                graphiteHost = graphiteHost.split(":")[0];
+            }
+
+            morpheus.pr("Preparing Socket to graphite...");
+
+            try {
+                // graphiteSocket = new DatagramSocket();
+                graphiteSocket = new Socket(graphiteHost, graphitePort);
+                graphiteOut = new PrintWriter(new OutputStreamWriter(graphiteSocket.getOutputStream()));
+            } catch (Exception e) {
+                morpheus.pr("[rd]FAILED[r]");
+                e.printStackTrace();
+                System.exit(1);
+            }
         }
 
         boolean verbose = false;
@@ -136,22 +175,53 @@ public class GetStatus implements ICommand, MessageListener {
             if (verbose) {
                 morpheus.pr("\n\n[header1]Anwser:[r]");
                 morpheus.pr("Answer from: [c3]" + r.getSender() + "[r] on host [good]" + r.getSenderHost() + "[r] after [warning]" + (r.getTimestamp() - sendTS) + "ms[r]");
+                sendToGraphite("answer.sender." + r.getSender(), r.getTimestamp() - sendTS);
+                sendToGraphite("answer.host." + r.getSenderHost(), r.getTimestamp() - sendTS);
 
                 if (r.getMapValue() != null) {
-                    filteredOutput += printMap(morpheus, r.getMapValue(), "", keys, filterPath, notFilterPath);
+                    filteredOutput += printMap(morpheus, r.getMapValue(), "", keys, filterPath, notFilterPath, r.getSender());
                 }
             } else {
                 long after = (r.getTimestamp() - sendTS);
                 morpheus.pr(morpheus.getColumn(r.getSender(), 25) + " | " + morpheus.getColumn(r.getSenderHost(), 25) + " | " + after + "ms");
+                sendToGraphite("answer.sender." + r.getSender(), after);
+                sendToGraphite("answer.host." + r.getSenderHost(), after);
                 // morpheus.pr("Answer from: [c3]" + r.getSender() + "[r] on host [good]" + r.getSenderHost() + "[r] after [warning]" + (r.getTimestamp() - sendTS) + "ms[r]");
             }
         }
 
         morpheus.pr("\n");
         morpheus.pr("processed messages: " + answers.size() + "  Filtered hosts: " + filteredHosts + "    filtered Output: " + filteredOutput, 2);
+
+        if (graphiteSocket != null) {
+            graphiteOut.flush();
+            graphiteSocket.close();
+        }
     }
 
-    private int printMap(Morpheus morpheus, Map<String, Object> map, String path, List<String> keys, Pattern pathPattern, Pattern notFilterPath) {
+    private void sendToGraphite(String key, Object value) {
+        if (graphiteSocket != null) {
+            key = key.replaceAll(":", ".");
+
+            if (key.startsWith(".")) {
+                key = key.substring(1);
+            }
+
+            System.out.println("sending to graphite: '" + key + ":" + value + "|g'");
+
+            try {
+                // byte[] buf = (key + ":" + value.toString() + "|g\n").getBytes();
+                // DatagramPacket pak = new DatagramPacket(buf, buf.length, InetAddress.getByName(graphiteHost), graphitePort);
+                // graphiteSocket.send(pak);
+                graphiteOut.println(key + " " + value + " " + (System.currentTimeMillis() / 1000));
+            } catch (Exception e) {
+                // TODO Auto-generated catch block
+                e.printStackTrace();
+            }
+        }
+    }
+
+    private int printMap(Morpheus morpheus, Map<String, Object> map, String path, List<String> keys, Pattern pathPattern, Pattern notFilterPath, String sender) {
         int filtered = 0;
 
         for (Map.Entry<String, Object> k : map.entrySet()) {
@@ -179,6 +249,9 @@ public class GetStatus implements ICommand, MessageListener {
                 for (String l : lst) {
                     morpheus.pr("[good]" + l.substring(0, l.indexOf("=")) + "[r]");
                 }
+
+                if (graphiteSocket != null) {
+                }
             } else if (k.getValue() instanceof List) {
                 if (((List)k.getValue()).isEmpty()) continue;
 
@@ -196,9 +269,10 @@ public class GetStatus implements ICommand, MessageListener {
 
                 for (Object l : (List)k.getValue()) {
                     if (l instanceof Map) {
-                        filtered += printMap(morpheus, (Map<String, Object>)l, path + "." + k.getKey(), keys, pathPattern, notFilterPath);
+                        filtered += printMap(morpheus, (Map<String, Object>)l, path + "." + k.getKey(), keys, pathPattern, notFilterPath, sender);
                     } else {
                         morpheus.pr("[good]" + l.toString() + "[r]");
+                        sendToGraphite(sender + path + "." + k.getKey(), l.toString());
                     }
                 }
 
@@ -215,7 +289,7 @@ public class GetStatus implements ICommand, MessageListener {
                 }
 
                 morpheus.pr("[good]" + path + "." + k.getKey() + "[r]");
-                filtered += printMap(morpheus, (Map<String, Object>)k.getValue(), path + "." + k.getKey(), keys, pathPattern, notFilterPath);
+                filtered += printMap(morpheus, (Map<String, Object>)k.getValue(), path + "." + k.getKey(), keys, pathPattern, notFilterPath, sender);
                 //morpheus.pr("      [c3]" + morpheus.getColumn(k.getKey(), 35) + "[r]");
                 //Map<String, Object> m = (Map<String, Object>)k.getValue();
                 //
@@ -234,6 +308,7 @@ public class GetStatus implements ICommand, MessageListener {
                 }
 
                 morpheus.pr("[c3]" + path + "." + k.getKey() + "[r] | " + k.getValue());
+                sendToGraphite(sender + path + "." + k.getKey(), k.getValue());
             }
         }
 
