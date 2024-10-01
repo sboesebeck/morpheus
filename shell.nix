@@ -3,11 +3,10 @@ pkgs.mkShell {
   packages = [
     pkgs.hello
     pkgs.gradle
-    pkgs.temurin-bin-20
     pkgs.mongodb-tools
-    pkgs.python310Full
-    pkgs.python310Packages.pip
-    pkgs.python310Packages.python-lsp-server
+    # pkgs.python310Full
+    # pkgs.python310Packages.pip
+    # pkgs.python310Packages.python-lsp-server
   ];
 
   shellHook = ''
