@@ -91,7 +91,7 @@ public class Morpheus {
 
     private static String ANSI_HIDDEN = "\u001B[8m";
     private static String ANSI_STRIKETHROUGH = "\u001B[9m";
-    public static Map<String, Class<? extends ICommand>> commands = new HashMap<>();
+    public static Map<String, Class<? extends ICommand >> commands = new HashMap<>();
     public static void main(final String args[]) throws Exception {
         final var app = new Morpheus();
         app.registerAnsiCodes();
@@ -194,13 +194,12 @@ public class Morpheus {
 
     private Properties properties;
 
-    public Set<Class<? extends ICommand>> getCommandClasses() {
-        final Set<Class<? extends ICommand>> ret = new HashSet<>();
+    public Set<Class<? extends ICommand >> getCommandClasses() {
+        final Set<Class<? extends ICommand >> ret = new HashSet<>();
 
         for (final Class<? extends ICommand> c : commands.values()) {
             ret.add(c);
         }
-
         return ret;
     }
 
@@ -545,8 +544,7 @@ public class Morpheus {
         messaging.start();
 
         try {
-            final Set<Class<? extends ICommand>> commandClasses = getCommandClasses();
-
+            final Set<Class<? extends ICommand >> commandClasses = getCommandClasses();
             for (final Class<? extends ICommand> commandClass : commandClasses) {
                 final String name = getNameFromCommandClass(commandClass);
 
