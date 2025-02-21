@@ -27,7 +27,7 @@ import de.caluga.morphium.messaging.MessageListener;
 import de.caluga.morphium.messaging.Messaging;
 import de.caluga.morphium.messaging.Msg;
 
-public class GetStatus implements ICommand, MessageListener {
+public class GetStatus implements ICommand  {
     public final static String NAME = "get_status";
     public final static String DESCRIPTION =
         "getting status of all connected nodes, params wait=secs, verbose=true/false, expect_answers=NUM, filter_host=PATTERN, level=[PING,MESSAGING_ONLY,MORPHIUM_ONLY|ALL], filter_sender=PATTERN, keys=LIST_OF_KEYS, filter_path=PATTERN, not_filter_path=PATTERN graphite=host:port";
@@ -123,29 +123,37 @@ public class GetStatus implements ICommand, MessageListener {
         var msg = new Msg(morpheus.getMessaging().getStatusInfoListenerName(), "ALL", level, sl * 1000);
         msg.setMsgId(new MorphiumId());
         final int timeout = sl;
-        // var results = morpheus.getMessaging().sendAndAwaitAnswers(msg, expectAnswers, sl * 1000);
-        morpheus.getMessaging().addListenerForMessageNamed(morpheus.getMessaging().getStatusInfoListenerName(), this);
-        Thread.sleep(1000);
         sentMessageId = msg.getMsgId();
+        final var exp = expectAnswers;
+        AtomicBoolean gotResults = new AtomicBoolean(false);
+        new Thread(()-> {
+            morpheus.pr("[c1]sending...[r]");
+            var results = morpheus.getMessaging().sendAndAwaitAnswers(msg, exp, timeout * 1000);
+
+            for (var m : results) {
+                answers.add(m);
+            }
+            gotResults.set(true);
+            morpheus.pr("[c2]got results...[r]: " + answers.size());
+
+        }).start();
         int counter = 0;
-        morpheus.getMessaging().sendMessage(msg);
         long start = System.currentTimeMillis();
         int filteredHosts = 0;
         int filteredOutput = 0;
+        morpheus.pr("Waiting max. " + timeout + "s for " + expectAnswers);
 
-        while (true) {
-            morpheus.pr("Waiting max. " + timeout + "s for " + expectAnswers + " answers - got " + answers.size() + " answers after " + counter + "s");
-
-            if (expectAnswers > 0 && answers.size() >= expectAnswers) {
-                break;
-            }
-
-            if (timeout > 0 && System.currentTimeMillis() - start > timeout * 1000) {
-                break;
-            }
-
+        while (!gotResults.get()) {
             counter++;
             Thread.sleep(1000);
+
+            if (gotResults.get()) break;
+
+            if (timeout > 0 && System.currentTimeMillis() - start > (timeout + 2) * 1000) {
+                break;
+            }
+
+            morpheus.pr("Waiting... " + counter + "s");
         }
 
         long sendTS = start;
@@ -315,13 +323,4 @@ public class GetStatus implements ICommand, MessageListener {
         return filtered;
     }
 
-    @Override
-    public Msg onMessage(Messaging msg, Msg m) {
-        if (sentMessageId != null && m.getInAnswerTo() != null && m.getInAnswerTo().equals(sentMessageId)) {
-            m.setTimestamp(System.currentTimeMillis()); //avoid problems with different clocks
-            answers.add(m);
-        }
-
-        return null;
-    }
 }
