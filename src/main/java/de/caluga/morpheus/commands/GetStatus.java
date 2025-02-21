@@ -124,7 +124,7 @@ public class GetStatus implements ICommand, MessageListener {
         msg.setMsgId(new MorphiumId());
         final int timeout = sl;
         // var results = morpheus.getMessaging().sendAndAwaitAnswers(msg, expectAnswers, sl * 1000);
-        morpheus.getMessaging().addMessageListener(this);
+        morpheus.getMessaging().addListenerForMessageNamed(morpheus.getMessaging().getStatusInfoListenerName(), this);
         Thread.sleep(1000);
         sentMessageId = msg.getMsgId();
         int counter = 0;
