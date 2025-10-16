@@ -37,10 +37,10 @@ public class MessageMonitor implements ICommand {
                     }
                     morpheus.pr(color+morpheus.getColumn(""+count,5)+"|"+morpheus.getColumn(m.getSender(),25)+"|"
                         +morpheus.getColumn(m.getRecipients()!=null && !m.getRecipients().isEmpty()?m.getRecipients().get(0):"", 25)+"|"
-                        +morpheus.getColumn(m.getName(), 35)+"|"
+                        +morpheus.getColumn(m.getTopic(), 35)+"|"
                         +morpheus.getColumn(m.isAnswer()?"[c2]YES":"[c3]", 10)+"[r]"
                     );
-                    // morpheus.pr("Evt: " + evt.getOperationType() +"Sender: "+m.getSender()+ "    " + m.getName()+"    "+m.isAnswer());
+                    // morpheus.pr("Evt: " + evt.getOperationType() +"Sender: "+m.getSender()+ "    " + m.getTopic()+"    "+m.isAnswer());
                 } else {
                     return true;
                 }
