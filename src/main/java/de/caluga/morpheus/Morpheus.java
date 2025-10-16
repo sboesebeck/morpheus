@@ -134,13 +134,66 @@ public class Morpheus {
         printBanner();
         theme.print("[rd]Usage:[r] [bld]Morpheus[r] [b]<commandName>[r] [options] [arguments]");
         theme.print("");
-        theme.print("Options:");
+
+        // List all available commands
+        theme.print("[header1]Available Commands:[r]");
+        theme.print("");
+
+        // Collect and sort commands
+        java.util.List<CommandInfo> commandInfos = new java.util.ArrayList<>();
+        for (Class<? extends ICommand> commandClass : getCommandClasses()) {
+            try {
+                String name = getNameFromCommandClass(commandClass);
+                String description = getDocumentationFromCommandClass(commandClass);
+                if (description == null) {
+                    description = "No description available";
+                }
+                commandInfos.add(new CommandInfo(name, description));
+            } catch (Exception e) {
+                // Skip commands that can't be introspected
+            }
+        }
+
+        // Sort commands alphabetically
+        commandInfos.sort((a, b) -> a.name.compareTo(b.name));
+
+        // Print commands with aligned descriptions
+        int maxNameLength = commandInfos.stream()
+            .mapToInt(c -> c.name.length())
+            .max()
+            .orElse(15);
+
+        for (CommandInfo cmd : commandInfos) {
+            String padding = " ".repeat(Math.max(0, maxNameLength - cmd.name.length()));
+            theme.print("  [c2]" + cmd.name + "[r]" + padding + "  " + cmd.description);
+        }
+
+        theme.print("");
+        theme.print("[header1]Global Options:[r]");
         theme.print("  [c2]--theme=<name>[r]        Select theme (use --theme=? to list)");
         theme.print("  [c2]--morphiumcfg=<name>[r]  Select connection (use --morphiumcfg=? to list)");
         theme.print("  [c2]--messaging=<type>[r]    Messaging implementation: single|multi");
         theme.print("  [c2]--verbose[r]             Show detailed startup information");
         theme.print("");
+        theme.print("[header1]Examples:[r]");
+        theme.print("  [c3]./run.sh list[r]                           # List all commands");
+        theme.print("  [c3]./run.sh config connection add mydb[r]     # Add a new connection");
+        theme.print("  [c3]./run.sh get_status --morphiumcfg=mydb[r]  # Query status from mydb");
+        theme.print("  [c3]./run.sh monitor --theme=darkmode[r]       # Monitor messages with theme");
+        theme.print("");
         theme.print("Configuration file: [ul]~/.config/morpheus.properties[r]");
+        theme.print("For detailed help on a command, run: [c2]./run.sh <command> --help[r]");
+    }
+
+    // Helper class for command info
+    private static class CommandInfo {
+        final String name;
+        final String description;
+
+        CommandInfo(String name, String description) {
+            this.name = name;
+            this.description = description;
+        }
     }
 
     public void run(String[] args) {
@@ -170,7 +223,7 @@ public class Morpheus {
                 theme.print("Configuration:");
                 theme.print("  Theme: [c2]" + config.getTheme() + "[r]");
                 theme.print("  Connection: [c2]" + config.getConnection() + "[r]");
-                theme.print("  Terminal: [c2]" + TerminalUtils.getTerminalSize() + "[r]");
+                theme.print("  Terminal: [c2]" + TerminalUtils.getTerminalSize(true) + "[r]");
             }
 
             // Connect to Morphium

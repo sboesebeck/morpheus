@@ -61,9 +61,10 @@ public class MorphiumConnectionFactory {
         msgSettings.setMessagingWindowSize(msgConfig.windowSize);
 
         // Only set queue name if explicitly configured (null means use Morphium default)
-        if (msgConfig.queueName != null) {
-            msgSettings.setMessageQueueName(msgConfig.queueName);
-        }
+        // if (msgConfig.queueName != null) {
+
+        msgSettings.setMessageQueueName(msgConfig.queueName);
+        // }
 
         msgSettings.setSenderId(msgConfig.senderId);
 
@@ -121,6 +122,7 @@ public class MorphiumConnectionFactory {
 
         if (verbose) {
             theme.print("[good]Messaging system started[r]");
+            theme.print("=> Using queuename [good]" + messaging.getQueueName() + "[r] and Collection [good]" + messaging.getCollectionName() + "[r]");
         }
 
         return messaging;

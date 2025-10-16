@@ -34,4 +34,27 @@ if [ "$rerun" != 1 ]; then
   }
 fi
 
+# Export terminal size for Java to detect
+# Method 1: Try stty size (most reliable when stdin is a terminal)
+TERM_SIZE=$(stty size 2>/dev/null)
+if [ -n "$TERM_SIZE" ]; then
+  export LINES=$(echo $TERM_SIZE | cut -d' ' -f1)
+  export COLUMNS=$(echo $TERM_SIZE | cut -d' ' -f2)
+else
+  # Method 2: Try tput (needs TERM to be set)
+  COLS=$(tput cols 2>/dev/null)
+  ROWS=$(tput lines 2>/dev/null)
+  if [ -n "$COLS" ] && [ -n "$ROWS" ]; then
+    export COLUMNS=$COLS
+    export LINES=$ROWS
+  else
+    # Fallback: Use default or existing values
+    export COLUMNS=${COLUMNS:-80}
+    export LINES=${LINES:-24}
+  fi
+fi
+
+# Debug output (can be disabled by commenting out)
+echo "DEBUG: Terminal size set to ${COLUMNS}x${LINES}" >&2
+
 java -cp $cp de.caluga.morpheus.Morpheus "$@"
