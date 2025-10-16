@@ -140,25 +140,32 @@ public class ConfigCommand implements ICommand {
         morpheus.pr("[c3]Messaging Implementation[r] (single/multi, default: single):");
         String messagingImpl = readLine("single");
 
-        morpheus.pr("[c3]Queue Name[r] (default: msg):");
-        String queueName = readLine("msg");
+        morpheus.pr("[c3]Queue Name[r] (press ENTER for default 'msg'):");
+        String queueName = readLine("");
 
         // Create MorphiumConfig to get properties
         MorphiumConfig cfg = new MorphiumConfig();
         cfg.addHostToSeed(host, Integer.parseInt(port));
         cfg.setDatabase(database);
         cfg.setMongoAuthDb(authDb);
+
+        // Only set authentication if username is provided
         if (!username.isEmpty()) {
             cfg.setMongoLogin(username);
-        }
-        if (!password.isEmpty()) {
-            cfg.setMongoPassword(password);
+            if (!password.isEmpty()) {
+                cfg.setMongoPassword(password);
+            }
         }
 
         // Save connection properties
         java.util.Properties props = cfg.asProperties("morphium." + name);
         for (Object key : props.keySet()) {
-            configMgr.setProperty(key.toString(), props.getProperty(key.toString()));
+            String keyStr = key.toString();
+            // Skip authentication properties if username was empty
+            if (username.isEmpty() && (keyStr.contains(".login") || keyStr.contains(".password"))) {
+                continue;
+            }
+            configMgr.setProperty(keyStr, props.getProperty(keyStr));
         }
 
         // Add messaging settings
@@ -167,7 +174,12 @@ public class ConfigCommand implements ICommand {
         configMgr.setProperty("morphium." + name + ".messaging.multithreadded", "true");
         configMgr.setProperty("morphium." + name + ".messaging.windowSize", "10");
         configMgr.setProperty("morphium." + name + ".messaging.pause", "100");
-        configMgr.setProperty("morphium." + name + ".messaging.queueName", queueName);
+
+        // Only set queue name if provided (null/empty means use default)
+        if (!queueName.isEmpty()) {
+            configMgr.setProperty("morphium." + name + ".messaging.queueName", queueName);
+        }
+
         configMgr.setProperty("morphium." + name + ".messaging.senderId", UUID.randomUUID().toString());
 
         configMgr.save();

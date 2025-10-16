@@ -285,15 +285,35 @@ public class Morpheus {
 
     private static Map<String, String> parseCommandArgs(String[] args) {
         Map<String, String> commandArgs = new HashMap<>();
-        for (int i = 1; i < args.length; i++) {
-            if (args[i].contains("=")) {
-                String[] splitArg = args[i].split("=", 2);
-                commandArgs.put(splitArg[0], splitArg[1]);
-            } else {
-                // Handle flags without values
-                commandArgs.put(args[i], "true");
+
+        // Special handling for config command with positional arguments
+        if (args.length > 0 && args[0].equals("config")) {
+            if (args.length > 1) commandArgs.put("subcommand", args[1]);
+            if (args.length > 2) commandArgs.put("action", args[2]);
+            if (args.length > 3) commandArgs.put("name", args[3]);
+
+            // Also parse any remaining key=value args
+            for (int i = 4; i < args.length; i++) {
+                if (args[i].contains("=")) {
+                    String[] splitArg = args[i].split("=", 2);
+                    commandArgs.put(splitArg[0], splitArg[1]);
+                } else {
+                    commandArgs.put(args[i], "true");
+                }
+            }
+        } else {
+            // Standard parsing for other commands
+            for (int i = 1; i < args.length; i++) {
+                if (args[i].contains("=")) {
+                    String[] splitArg = args[i].split("=", 2);
+                    commandArgs.put(splitArg[0], splitArg[1]);
+                } else {
+                    // Handle flags without values
+                    commandArgs.put(args[i], "true");
+                }
             }
         }
+
         return commandArgs;
     }
 }
