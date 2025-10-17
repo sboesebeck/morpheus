@@ -5,11 +5,12 @@ import java.util.List;
 import java.util.Map;
 
 import de.caluga.morpheus.ICommand;
+import de.caluga.morpheus.IRequiresMorphium;
 import de.caluga.morpheus.Morpheus;
 import de.caluga.morphium.driver.MorphiumId;
 import de.caluga.morphium.messaging.Msg;
 
-public class SendMessageCommand implements ICommand {
+public class SendMessageCommand implements IRequiresMorphium {
     public final static String NAME = "send_message";
     public final static String DESCRIPTION = "send a message and wait for answer";
 

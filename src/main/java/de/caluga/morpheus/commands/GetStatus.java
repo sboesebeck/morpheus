@@ -21,13 +21,14 @@ import java.util.regex.Pattern;
 
 import org.json.simple.parser.JSONParser;
 import de.caluga.morpheus.ICommand;
+import de.caluga.morpheus.IRequiresMorphium;
 import de.caluga.morpheus.Morpheus;
 import de.caluga.morphium.driver.MorphiumId;
 import de.caluga.morphium.messaging.MessageListener;
 import de.caluga.morphium.messaging.MorphiumMessaging;
 import de.caluga.morphium.messaging.Msg;
 
-public class GetStatus implements ICommand  {
+public class GetStatus implements IRequiresMorphium  {
     public final static String NAME = "get_status";
     public final static String DESCRIPTION =
                     "getting status of all connected nodes, params wait=secs, verbose=true/false, expect_answers=NUM, filter_host=PATTERN, level=[PING,MESSAGING_ONLY,MORPHIUM_ONLY|ALL], filter_sender=PATTERN, keys=LIST_OF_KEYS, filter_path=PATTERN, not_filter_path=PATTERN graphite=host:port";

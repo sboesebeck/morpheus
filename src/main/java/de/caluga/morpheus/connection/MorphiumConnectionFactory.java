@@ -55,6 +55,7 @@ public class MorphiumConnectionFactory {
         // Configure messaging
         ConfigurationManager.MessagingConfig msgConfig = config.getMessagingConfig();
         var msgSettings = cfg.messagingSettings();
+        msgSettings.setSenderId("Morpheus@" + System.currentTimeMillis());
         msgSettings.setProcessMultiple(msgConfig.processMultiple);
         msgSettings.setMessagingMultithreadded(msgConfig.multithreadded);
         msgSettings.setMessagingPollPause(msgConfig.pause);
@@ -63,7 +64,11 @@ public class MorphiumConnectionFactory {
         // Only set queue name if explicitly configured (null means use Morphium default)
         // if (msgConfig.queueName != null) {
 
+
         msgSettings.setMessageQueueName(msgConfig.queueName);
+        if (msgConfig.queueName != null && msgConfig.queueName.equals("msg")) {
+            msgSettings.setMessageQueueName(null);
+        }
         // }
 
         msgSettings.setSenderId(msgConfig.senderId);
