@@ -43,7 +43,35 @@ public class TerminalUtils {
     }
 
     public static Size getTerminalSize(boolean verbose) {
-        // Method 1: Try environment variables (set by many terminals)
+        // Method 1: Use stty directly with the controlling terminal
+        // This reads the actual kernel terminal size, not cached values
+        try {
+            // Open a new bash shell that queries the terminal size from its controlling terminal
+            ProcessBuilder pb = new ProcessBuilder("bash", "-c", "stty size");
+            // Important: inherit the environment so the terminal settings are available
+            pb.inheritIO();
+            pb.redirectOutput(ProcessBuilder.Redirect.PIPE);
+            pb.redirectError(ProcessBuilder.Redirect.PIPE);
+
+            Process process = pb.start();
+            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+            String line = reader.readLine();
+            int exitCode = process.waitFor();
+
+            if (exitCode == 0 && line != null && !line.isEmpty()) {
+                String[] parts = line.trim().split("\\s+");
+                if (parts.length >= 2) {
+                    int rows = Integer.parseInt(parts[0]);
+                    int cols = Integer.parseInt(parts[1]);
+                    if (verbose) System.err.println("[TerminalUtils] Using stty: " + cols + "x" + rows);
+                    return new Size(cols, rows);
+                }
+            }
+        } catch (Exception e) {
+            if (verbose) System.err.println("[TerminalUtils] stty failed: " + e.getMessage());
+        }
+
+        // Method 2: Try environment variables (set by many terminals)
         try {
             String cols = System.getenv("COLUMNS");
             String rows = System.getenv("LINES");
@@ -57,11 +85,9 @@ public class TerminalUtils {
             if (verbose) System.err.println("[TerminalUtils] Env vars failed: " + e.getMessage());
         }
 
-        // Method 2: Try stty size (works better with redirected streams)
+        // Method 3: Try stty size
         try {
-            ProcessBuilder pb = new ProcessBuilder("stty", "size");
-            pb.redirectInput(ProcessBuilder.Redirect.INHERIT);
-            Process process = pb.start();
+            Process process = new ProcessBuilder("sh", "-c", "stty size 2>/dev/null").start();
             BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
             String line = reader.readLine();
             process.waitFor();
@@ -77,27 +103,6 @@ public class TerminalUtils {
             }
         } catch (Exception e) {
             if (verbose) System.err.println("[TerminalUtils] stty failed: " + e.getMessage());
-        }
-
-        // Method 3: Try tput (fallback)
-        try {
-            ProcessBuilder pb = new ProcessBuilder("sh", "-c", "tput cols 2>/dev/null && tput lines 2>/dev/null");
-            pb.redirectInput(ProcessBuilder.Redirect.INHERIT);
-            Process process = pb.start();
-            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-
-            String colsLine = reader.readLine();
-            String rowsLine = reader.readLine();
-            process.waitFor();
-
-            if (colsLine != null && rowsLine != null) {
-                int cols = Integer.parseInt(colsLine.trim());
-                int rows = Integer.parseInt(rowsLine.trim());
-                if (verbose) System.err.println("[TerminalUtils] Using tput: " + cols + "x" + rows);
-                return new Size(cols, rows);
-            }
-        } catch (Exception e) {
-            if (verbose) System.err.println("[TerminalUtils] tput failed: " + e.getMessage());
         }
 
         // Fallback: Use default size
