@@ -23,9 +23,26 @@ This creates `target/morpheus-1.0-SNAPSHOT-jar-with-dependencies.jar`
 
 ### Run with the helper script
 ```bash
-./run.sh <commandName> [args...]
+./run.sh [options] <commandName> [args...]
 ```
-The `run.sh` script compiles the project and runs it with a SOCKS proxy configuration.
+The `run.sh` script intelligently compiles the project only when needed and runs it with optimal performance.
+
+**Smart Compilation:**
+- Automatically detects changes to source files or `pom.xml`
+- Only recompiles when necessary (checks file modification timestamps)
+- Caches dependency classpath in `cp.csv` for fast startup
+- Typical cached startup time: ~0.3 seconds
+
+**Options:**
+- `--recompile` - Force recompilation even if no changes detected
+- `--rerun` - Skip all compilation checks (fastest, use when you know nothing changed)
+
+**Examples:**
+```bash
+./run.sh list                    # Smart compilation (auto-detects changes)
+./run.sh --recompile config      # Force rebuild
+./run.sh --rerun monitor         # Skip compilation entirely
+```
 
 ### Run directly with Maven
 ```bash
@@ -92,10 +109,21 @@ All commands must define:
 - `public static final String NAME` - command name for CLI invocation
 - `public static final String DESCRIPTION` - help text
 
+**Commands that require MongoDB connection:**
+Commands that need Morphium/Messaging should implement `IRequiresMorphium` instead of just `ICommand`:
+
+```java
+public interface IRequiresMorphium extends ICommand {
+    // Marker interface
+}
+```
+
+This ensures Morphium is initialized before the command executes. Commands that only manage configuration or display information (like `config`, `list`) should implement just `ICommand` - they can run without MongoDB connectivity.
+
 ### Command Registration
 New commands must be:
 1. Created in `src/main/java/de/caluga/morpheus/commands/`
-2. Implement `ICommand` interface
+2. Implement `ICommand` interface (or `IRequiresMorphium` if MongoDB is needed)
 3. Define `NAME` and `DESCRIPTION` static fields
 4. Registered in `Morpheus` static initializer block
 
@@ -109,6 +137,20 @@ Configuration is stored in `~/.config/morpheus.properties` and includes:
 - **Themes**: Color schemes for terminal output (e.g., `theme.default.*`)
 - **Morphium Connections**: MongoDB connection configs with prefix `morphium.<name>.*`
 - **Messaging Settings**: Queue configuration, sender ID, threading options
+
+**Managing Connections:**
+Use the `config` command to manage MongoDB connections interactively:
+- `./run.sh config connection add <name>` - Add new connection with multi-host support
+- `./run.sh config connection edit <name>` - Edit existing connection (all fields including messaging)
+- `./run.sh config connection list` - List all configured connections
+- `./run.sh config connection show <name>` - Show detailed connection info
+- `./run.sh config connection remove <name>` - Remove a connection
+
+**Multi-Host Support:**
+Connections support MongoDB replica sets with multiple hosts:
+- Format: `host1:port1,host2:port2,host3:port3`
+- Example: `mongo1.example.com:27017,mongo2.example.com:27017`
+- Stored as `hostSeed` property
 
 Command-line arguments:
 - `--theme=<name>` or `--theme=?` to list themes
@@ -166,9 +208,39 @@ Messaging configuration keys (per connection):
 - Collects and displays hierarchical status data with pattern filtering
 
 **MessageMonitor Command** (src/main/java/de/caluga/morpheus/commands/MessageMonitor.java):
-- Uses MongoDB Change Streams to watch Msg collection in real-time
-- Displays sender, recipient, message name, and answer status
-- Formatted table output with periodic headers
+- TOP-like real-time message monitoring with in-place updates
+- Uses MongoDB Change Streams to watch Msg collection
+- **V5/V6 Compatibility**: Reads both `name` (V5) and `topic` (V6) fields from documents
+- Fixed screen buffer showing last N **request messages** (answers update requests in-place)
+- Messages update in place when:
+  - Answer arrives (RTT displayed, timeout cleared)
+  - ProcessedBy is added
+- Live statistics: uptime, message rate, answers, updates, timeouts, buffer usage
+- **Topic RTT Statistics**: Shows average response time per topic (top 5 slowest)
+- **SLA Monitoring**: Highlights unanswered requests after threshold in RED
+- Display Philosophy:
+  - **Only shows request messages**, not answers (saves buffer space)
+  - Answers update the original request in-place with RTT
+  - Focus on what matters: request status and response time
+  - More requests visible = better monitoring
+- Features:
+  - Throttled redraws (500ms) to prevent flickering
+  - **Red highlighting** for requests without answer after timeout (default: 2000ms)
+  - Yellow highlighting for updated messages (processedBy added)
+  - Green "YES" indicator when request is answered
+  - Shows RTT (Round Trip Time) for answered requests
+  - Tracks and displays average RTT per message topic
+  - Timeout counter in statistics line (red)
+  - Alternating row colors for readability
+  - Handles insert/update/replace change stream events
+- Configuration:
+  - `--timeout=<ms>` - Set timeout threshold (default: 2000ms)
+  - `--verbose` - Show debug information and RTT details
+- **Dynamic Terminal Resize**: Automatically adapts to terminal size changes
+  - Registers SIGWINCH signal handler
+  - Recalculates column widths on resize
+  - Adjusts message buffer size based on terminal height
+- Similar UX to `top` or `vmstat` but for Morphium messages
 
 ### Dependencies
 - Java 21
