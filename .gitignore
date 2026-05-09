@@ -2,3 +2,6 @@
 .idea
 target/ 
 out/*
+.settings
+.DS_Store
+.classpath
