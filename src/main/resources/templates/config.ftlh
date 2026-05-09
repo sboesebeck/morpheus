@@ -184,7 +184,7 @@
                                      database: <input class="form-control bg-light border-1" v-model="config.database">
                                 </div><br>
                                 <div>
-                                     Collection: <input class="form-control bg-light border-1" v-model="config.collection">
+                                     Message-Collection: <input class="form-control bg-light border-1" v-model="config.collection">
                                 </div>
                                 <br>
                                 <div>

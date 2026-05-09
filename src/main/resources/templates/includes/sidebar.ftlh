@@ -35,11 +35,15 @@
     </div>
     <!-- Nav Item - Dashboard -->
     <li class="nav-item">
-        <a class="nav-link" href="index.html">
+        <a class="nav-link" href="/">
             <i class="fas fa-fw fa-tachometer-alt"></i>
             <span>Mongo Dashboard</span></a>
     </li>
-
+    <li class="nav-item">
+        <a class="nav-link" href="/cli">
+            <i class="fas fa-fw fa-exclamation-circle "></i>
+            <span>Mongo CLI</span></a>
+    </li>
     <!-- Nav Item - Pages Collapse Menu -->
     <li class="nav-item">
         <a class="nav-link collapsed" href="#" data-toggle="collapse" data-target="#collapseTwo"
