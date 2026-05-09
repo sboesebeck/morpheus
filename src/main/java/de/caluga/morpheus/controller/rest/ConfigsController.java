@@ -75,7 +75,6 @@ public class ConfigsController {
             p.putAll(cfg.asProperties("morpheus." + count));
             p.setProperty("morpheus." + count + ".name", localP.getProperty("name", "name"));
             p.setProperty("morpheus." + count + ".description", localP.getProperty("description", ""));
-            p.setProperty("morpheus." + count + ".collection", localP.getProperty("collection", "collection"));
             p.setProperty("morpheus." + count + ".autoConnect", localP.getProperty("autoConnect", "false"));
             p.setProperty("morpheus." + count + ".id", "" + count);
             count++;
