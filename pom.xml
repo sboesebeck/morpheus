@@ -1,58 +1,66 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
-    <modelVersion>4.0.0</modelVersion>
-
-    <groupId>de.caluga</groupId>
-    <artifactId>morpheus</artifactId>
-    <version>1.0-SNAPSHOT</version>
-    <description>Morphium Messaging Monitor Project "Morpheus"</description>
-    <properties>
-        <java.version>17</java.version>
-        <maven.compiler.source>17</maven.compiler.source>
-        <maven.compiler.target>17</maven.compiler.target>
-        <mongodbDriver.version>[4.1.0,)</mongodbDriver.version>
-    </properties>
-
-    <dependencies>
-        <!-- spring mvc, rest -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-web</artifactId>
-            <version>RELEASE</version>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-freemarker</artifactId>
-            <version>RELEASE</version>
-        </dependency>
-        <dependency>
-            <groupId>de.caluga</groupId>
-            <artifactId>morphium</artifactId>
-            <version>4.2.13</version>
-        </dependency>
-        <dependency>
-            <groupId>org.mongodb</groupId>
-            <artifactId>bson</artifactId>
-            <version>${mongodbDriver.version}</version>
-            <scope>provided</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.mongodb</groupId>
-            <artifactId>mongodb-driver-sync</artifactId>
-            <version>${mongodbDriver.version}</version>
-            <scope>provided</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.mongodb</groupId>
-            <artifactId>mongodb-driver-core</artifactId>
-            <version>${mongodbDriver.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.openjdk.nashorn</groupId>
-            <artifactId>nashorn-core</artifactId>
-            <version>15.3</version>
-        </dependency>
-    </dependencies>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>de.caluga</groupId>
+  <artifactId>morpheus</artifactId>
+  <version>1.0-SNAPSHOT</version>
+  <description>Morphium Messaging Monitor Project "Morpheus"</description>
+  <properties>
+    <java.version>19</java.version>
+    <maven.compiler.source>19</maven.compiler.source>
+    <maven.compiler.target>19</maven.compiler.target>
+    <mongodbDriver.version>4.7.1</mongodbDriver.version>
+  </properties>
+  <dependencies>
+    <!-- spring mvc, rest -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-web</artifactId>
+      <version>RELEASE</version>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-freemarker</artifactId>
+      <version>RELEASE</version>
+    </dependency>
+    <dependency>
+      <groupId>de.caluga</groupId>
+      <artifactId>morphium</artifactId>
+      <version>5.0.0</version>
+    </dependency>
+    <dependency>
+      <groupId>org.mongodb</groupId>
+      <artifactId>bson</artifactId>
+      <version>${mongodbDriver.version}</version>
+      <scope>provided</scope>
+    </dependency>
+    <!-- <dependency> -->
+    <!--     <groupId>org.mongodb</groupId> -->
+    <!--     <artifactId>mongodb-driver-sync</artifactId> -->
+    <!--     <version>${mongodbDriver.version}</version> -->
+    <!--     <scope>provided</scope> -->
+    <!-- </dependency> -->
+    <!-- <dependency> -->
+    <!--     <groupId>org.mongodb</groupId> -->
+    <!--     <artifactId>mongodb-driver-core</artifactId> -->
+    <!--     <version>${mongodbDriver.version}</version> -->
+    <!-- </dependency> -->
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-params</artifactId>
+      <version>5.9.0</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.graalvm.js</groupId>
+      <artifactId>js</artifactId>
+      <version>22.0.0</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.openjdk.nashorn</groupId>
+      <artifactId>nashorn-core</artifactId>
+      <version>15.3</version>
+    </dependency>
+  </dependencies>
 </project>
