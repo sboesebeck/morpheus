@@ -155,7 +155,8 @@ public class Morpheus {
         } else {
             properties.load(new FileReader(f));
         }
-
+        moveCursor(1, 25);
+        pr("  Terminal Size: [good]" + getTerminalSize().toString());
         String commandName = args[0];
         Map<String, String> commandArgs = parseCommandArgs(args);
         theme = "default";
@@ -207,25 +208,26 @@ public class Morpheus {
                 }
 
                 pr("=========== Configured connections: ===========", Gradient.green);
+                int i = 1;
+                Map<String, String> map = new HashMap<>();
 
-                int i=1;
-                Map<String,String> map=new HashMap<>();
                 for (String t : cfg) {
-
-                    pr("[good]"+i+"[r]. Connection name: [header1]" + t+"[r]");
-                    map.put(""+i,t);
+                    pr("[good]" + i + "[r]. Connection name: [header1]" + t + "[r]");
+                    map.put("" + i, t);
                     i++;
                 }
 
                 pr("[c1]Choose connection or x to quit....[r]");
-                int input=System.in.read();
-                char c=(char)input;
-                if (!map.containsKey(""+c)){
+                int input = System.in.read();
+                char c = (char) input;
+
+                if (!map.containsKey("" + c)) {
                     pr("[c2] aborting[r]");
                     System.exit(0);
                 }
-                pr("[good]you chose: "+c+"[c2]"+map.get(""+c));
-                connection=map.get(""+c);
+
+                pr("[good]you chose: " + c + "[c2]" + map.get("" + c));
+                connection = map.get("" + c);
             } else {
                 connection = commandArgs.get("--morphiumcfg");
             }
@@ -233,10 +235,12 @@ public class Morpheus {
 
         pr("Connecting to mongo [good] " + connection + "[r] ");
         MorphiumConfig cfg = MorphiumConfig.fromProperties("morphium." + connection, properties);
-        if (cfg.getHostSeed()==null || cfg.getHostSeed().isEmpty()){
+
+        if (cfg.getHostSeed() == null || cfg.getHostSeed().isEmpty()) {
             pr("[error]--> connection not configured properly -no hosts set[r]");
             System.exit(1);
         }
+
         cfg.setMinConnections(2);
         cfg.setMaxConnections(4);
         cfg.setHousekeepingTimeout(1000);
@@ -252,14 +256,13 @@ public class Morpheus {
         Thread.sleep(2000);
 
         while (!morphium.getDriver().isConnected()) {
-            pr("[warning]not connected yet...[r]"+pd.getMaxConnections()+"/"+pd.getMaxConnectionsPerHost());
+            pr("[warning]not connected yet...[r]" + pd.getMaxConnections() + "/" + pd.getMaxConnectionsPerHost());
             // var con = pd.getPrimaryConnection(null);
             // var cons = new ArrayList<MongoConnection>();
             //
             // for (int i = 0; i < 2; i++) {
             //     cons.add(pd.getReadConnection(null));
             // }
-
             // var con=morphium.getDriver().getPrimaryConnection(null);
             // pr("got connection?!?!? minConnections: "+morphium.getDriver().getMinConnectionsPerHost());
             // morphium.getDriver().releaseConnection(con);
@@ -411,19 +414,23 @@ public class Morpheus {
         System.out.println(getAnsiString(str));
     }
 
-    public String getColumn(String str, int len){
-        if (str.length()>=len){
+    public String getColumn(String str, int len) {
+        if (str.length() >= len) {
             return str.substring(0, len);
         }
-        int ctr=(len-str.length())/2;
-        for (int i=0;i<ctr;i++){
-            str=" "+str+" ";
+
+        int ctr = (len - str.length()) / 2;
+
+        for (int i = 0; i < ctr; i++) {
+            str = " " + str + " ";
         }
-        while(str.length()>len){
-            str=str.substring(0,str.length()-1);
+
+        while (str.length() > len) {
+            str = str.substring(0, str.length() - 1);
         }
-        while (str.length()<len){
-            str=str+" ";
+
+        while (str.length() < len) {
+            str = str + " ";
         }
 
         return str;
@@ -439,27 +446,27 @@ public class Morpheus {
         int gradient[];
 
         switch (gr) {
-        case yellow:
-            gradient = new int[] {184, 220, 226, 227, 228, 229, 230, 231};
-            break;
-        case cyan:
-            gradient = new int[] {29, 41, 42, 43, 48, 49, 50, 51};
-            break;
-        case blue:
-            gradient = new int[] {25, 26, 27, 32, 33, 38, 39};
-            break;
-        case green:
-            gradient = new int[] {22, 28, 34, 40, 46, 118, 119, 120};
-            break;
-        case red:
-            gradient = new int[] {88, 124, 125, 160, 196};
-            break;
-        case purple:
-            gradient = new int[] {53, 91, 127, 163, 199};
-            break;
-        case grey:
-        default:
-            gradient = new int[] {241, 243, 245, 248, 249, 252, 254, 231};
+            case yellow:
+                gradient = new int[] {184, 220, 226, 227, 228, 229, 230, 231};
+                break;
+            case cyan:
+                gradient = new int[] {29, 41, 42, 43, 48, 49, 50, 51};
+                break;
+            case blue:
+                gradient = new int[] {25, 26, 27, 32, 33, 38, 39};
+                break;
+            case green:
+                gradient = new int[] {22, 28, 34, 40, 46, 118, 119, 120};
+                break;
+            case red:
+                gradient = new int[] {88, 124, 125, 160, 196};
+                break;
+            case purple:
+                gradient = new int[] {53, 91, 127, 163, 199};
+                break;
+            case grey:
+            default:
+                gradient = new int[] {241, 243, 245, 248, 249, 252, 254, 231};
         }
 
         int chk = l / (gradient.length * 2);
@@ -495,6 +502,98 @@ public class Morpheus {
         }
 
         System.out.println(ANSI_RESET);
+    }
+
+    public static Size getTerminalSize() {
+        try {
+            String[] cmd = {"/bin/sh", "-c", "tput cols && tput lines"};
+            Process process = Runtime.getRuntime().exec(cmd);
+            process.waitFor();
+            // Read the terminal response
+            byte[] input = new byte[32];
+            int size = process.getInputStream().read(input);
+            String[] output = new String(input, 0, size).split("\\s+");
+            int cols = Integer.parseInt(output[0]);
+            int rows = Integer.parseInt(output[1]);
+            // // Request the terminal size
+            // System.out.print("\u001B[7;9999H\u001B[6n");
+            // System.out.flush();
+            // // Read the terminal response
+            // byte[] input = new byte[32];
+            // int size = System.in.read(input);
+            // // Extract the row and column size from the response
+            // int row = 0;
+            // int col = 0;
+            // int i = 0;
+            //
+            // while (input[i] != 'R') {
+            //     if (input[i] == '[') {
+            //         i++;
+            //         int j = i;
+            //
+            //         while (input[j] != ';') {
+            //             j++;
+            //         }
+            //
+            //         row = Integer.parseInt(new String(input, i, j - i));
+            //         i = j + 1;
+            //     } else {
+            //         i++;
+            //     }
+            // }
+            //
+            // i++;
+            // int j = i;
+            //
+            // while (input[j] != ';') {
+            //     j++;
+            // }
+            //
+            // col = Integer.parseInt(new String(input, i, j - i));
+            return new Size(cols, rows);
+        } catch (Exception e) {
+            e.printStackTrace();
+
+        }
+
+        return null;
+    }
+
+
+    public static void moveCursor(int row,int col){
+        System.out.print("\u001B["+row+";"+col+"H");
+    }
+
+    public static class Size {
+        private int col, row;
+
+        public Size(int col, int row) {
+            this.col = col;
+            this.row = row;
+        }
+
+        public int getCol() {
+            return col;
+        }
+
+        public void setCol(int col) {
+            this.col = col;
+        }
+
+        public int getRow() {
+            return row;
+        }
+
+        public void setRow(int row) {
+            this.row = row;
+        }
+
+        @Override
+        public String toString() {
+            return "col=" + col + ", row=" + row;
+        }
+
+
     }
 
     public enum Gradient {
