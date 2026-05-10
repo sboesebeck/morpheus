@@ -13,7 +13,7 @@ public class GetStatus implements ICommand{
     public void execute(Morpheus morpheus, Map<String, String> args) throws Exception {
         morpheus.pr("[c1]sending status ping[r]....");
         long sendTS=System.currentTimeMillis();
-        var results=morpheus.getMessaging().sendAndAwaitAnswers(new Msg(morpheus.getMessaging().getStatusInfoListenerName(),"ALL","VAL",30000), 40, 15000);
+        var results=morpheus.getMessaging().sendAndAwaitAnswers(new Msg(morpheus.getMessaging().getStatusInfoListenerName(),"ALL","ALL",30000), 40, 15000);
 
         morpheus.pr("[header1]got messages:[r]"+results.size());
         results.sort(new Comparator<Msg>() {
@@ -27,6 +27,11 @@ public class GetStatus implements ICommand{
         });
         for (Msg r:results){
             morpheus.pr("Answer from: [c3]"+r.getSender()+"[r] on host [good]"+r.getSenderHost()+"[r] after [warning]"+(r.getTimestamp()-sendTS)+"ms[r]");
+            if (r.getMapValue()!=null){
+                for (Map.Entry<String,Object> k:r.getMapValue().entrySet()){
+                    morpheus.pr("      [c3]"+morpheus.getColumn(k.getKey(), 15)+"[r] | "+k.getValue());
+                }
+            }
         }
 
     }

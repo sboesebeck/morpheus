@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.net.URL;
+import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -19,6 +20,9 @@ import ch.qos.logback.classic.LoggerContext;
 import ch.qos.logback.classic.joran.JoranConfigurator;
 import de.caluga.morphium.Morphium;
 import de.caluga.morphium.MorphiumConfig;
+import de.caluga.morphium.driver.ReadPreference;
+import de.caluga.morphium.driver.wire.MongoConnection;
+import de.caluga.morphium.driver.wire.PooledDriver;
 import de.caluga.morphium.messaging.Messaging;
 
 public class Morpheus {
@@ -71,10 +75,10 @@ public class Morpheus {
 
     private void runApp(String args[]) throws Exception {
         //disabling logback
-        LoggerContext context = (LoggerContext) LoggerFactory.getILoggerFactory();
-        JoranConfigurator jc = new JoranConfigurator();
-        jc.setContext(context);
-        context.reset(); // override default configuration
+        // LoggerContext context = (LoggerContext) LoggerFactory.getILoggerFactory();
+        // JoranConfigurator jc = new JoranConfigurator();
+        // jc.setContext(context);
+        // context.reset(); // override default configuration
         //color codes...
         ansiCodes.put("r", ANSI_RESET);
         ansiCodes.put("rd", ANSI_RED);
@@ -204,18 +208,35 @@ public class Morpheus {
 
                 pr("=========== Configured connections: ===========", Gradient.green);
 
+                int i=1;
+                Map<String,String> map=new HashMap<>();
                 for (String t : cfg) {
-                    System.out.println("Connection name: " + t);
+
+                    pr("[good]"+i+"[r]. Connection name: [header1]" + t+"[r]");
+                    map.put(""+i,t);
+                    i++;
                 }
 
-                System.exit(0);
+                pr("[c1]Choose connection or x to quit....[r]");
+                int input=System.in.read();
+                char c=(char)input;
+                if (!map.containsKey(""+c)){
+                    pr("[c2] aborting[r]");
+                    System.exit(0);
+                }
+                pr("[good]you chose: "+c+"[c2]"+map.get(""+c));
+                connection=map.get(""+c);
             } else {
                 connection = commandArgs.get("--morphiumcfg");
             }
         }
 
-        pr("[c1]Connecting to mongo [c2] " + connection + "[r] ");
+        pr("Connecting to mongo [good] " + connection + "[r] ");
         MorphiumConfig cfg = MorphiumConfig.fromProperties("morphium." + connection, properties);
+        cfg.setMinConnections(2);
+        cfg.setMaxConnections(4);
+        cfg.setHousekeepingTimeout(1000);
+        cfg.setDefaultReadPreference(ReadPreference.secondaryPreferred());
         morphium = new Morphium(cfg);
         boolean processMultiple = properties.getProperty("morphium." + connection + ".messaging.processMultiple", "true").equals("true");
         boolean multithreadded = properties.getProperty("morphium." + connection + ".messaging.multiThreadded", "true").equals("true");
@@ -223,7 +244,39 @@ public class Morpheus {
         int windowSize = Integer.valueOf(properties.getProperty("morphium." + connection + ".messaging.windowSize", "10"));
         String queueName = properties.getProperty("morphium." + connection + ".messaging.queueName", "msg");
         String senderId = properties.getProperty("morphium." + connection + ".messaging.senderId", UUID.randomUUID().toString());
-        messaging = new Messaging(morphium, pause, processMultiple, multithreadded, 100);
+        var pd = ((PooledDriver) morphium.getDriver());
+        Thread.sleep(2000);
+
+        while (!morphium.getDriver().isConnected()) {
+            pr("[warning]not connected yet...[r]"+pd.getMaxConnections()+"/"+pd.getMaxConnectionsPerHost());
+            // var con = pd.getPrimaryConnection(null);
+            // var cons = new ArrayList<MongoConnection>();
+            //
+            // for (int i = 0; i < 2; i++) {
+            //     cons.add(pd.getReadConnection(null));
+            // }
+
+            // var con=morphium.getDriver().getPrimaryConnection(null);
+            // pr("got connection?!?!? minConnections: "+morphium.getDriver().getMinConnectionsPerHost());
+            // morphium.getDriver().releaseConnection(con);
+            Thread.sleep(1000);
+            // pd.releaseConnection(con);
+            //
+            // for (MongoConnection con2 : cons) {
+            //     pd.releaseConnection(con2);
+            // }
+        }
+
+        pr("[good]connection established[r]: Hosts: [c1]" + morphium.getDriver().getHostSeed().get(0) + "[r]");
+        var con = pd.getReadConnection(null);
+        pd.releaseConnection(con);
+        var cons = pd.getNumConnectionsByHost();
+
+        for (var k : cons.keySet()) {
+            pr("Connections to " + k + ": " + cons.get(k));
+        }
+
+        messaging = new Messaging(morphium, pause, processMultiple, multithreadded, windowSize);
 
         if (!queueName.equals("msg")) {
             messaging.setQueueName(queueName);
@@ -270,7 +323,8 @@ public class Morpheus {
     public Morphium getMorphium() {
         return morphium;
     }
-    public Messaging getMessaging(){
+
+    public Messaging getMessaging() {
         return messaging;
     }
 
@@ -316,7 +370,7 @@ public class Morpheus {
     }
 
     private static void printUsage() {
-        System.out.println("Usage: CommandLineParser <commandName> [arg1=value1 arg2=value2 ...]");
+        System.out.println("Usage: Morpheus <commandName> [arg1=value1 arg2=value2 ...]");
     }
 
     public String getAnsiFGColor(int colNum) {
@@ -352,6 +406,24 @@ public class Morpheus {
         System.out.println(getAnsiString(str));
     }
 
+    public String getColumn(String str, int len){
+        if (str.length()>=len){
+            return str.substring(0, len);
+        }
+        int ctr=(len-str.length())/2;
+        for (int i=0;i<ctr;i++){
+            str=" "+str+" ";
+        }
+        while(str.length()>len){
+            str=str.substring(0,str.length()-1);
+        }
+        while (str.length()<len){
+            str=str+" ";
+        }
+
+        return str;
+    }
+
     public void pr(String str, int themeGradientNr) {
         String gradient = properties.getProperty("theme." + theme + ".gradient" + themeGradientNr, "grey");
         pr(str, Gradient.valueOf(gradient));
@@ -366,7 +438,7 @@ public class Morpheus {
             gradient = new int[] {184, 220, 226, 227, 228, 229, 230, 231};
             break;
         case cyan:
-            gradient = new int[] {29,41,42,43,48,49,50,51};
+            gradient = new int[] {29, 41, 42, 43, 48, 49, 50, 51};
             break;
         case blue:
             gradient = new int[] {25, 26, 27, 32, 33, 38, 39};
@@ -375,14 +447,14 @@ public class Morpheus {
             gradient = new int[] {22, 28, 34, 40, 46, 118, 119, 120};
             break;
         case red:
-            gradient = new int[] {88, 124,125, 160, 196};
+            gradient = new int[] {88, 124, 125, 160, 196};
             break;
         case purple:
             gradient = new int[] {53, 91, 127, 163, 199};
             break;
         case grey:
         default:
-            gradient = new int[] {241, 243, 245, 248, 249, 252, 254,231};
+            gradient = new int[] {241, 243, 245, 248, 249, 252, 254, 231};
         }
 
         int chk = l / (gradient.length * 2);
@@ -421,7 +493,7 @@ public class Morpheus {
     }
 
     public enum Gradient {
-        blue,cyan, grey, green, red, yellow, purple,
+        blue, cyan, grey, green, red, yellow, purple,
     }
 
 }
