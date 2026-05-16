@@ -128,7 +128,8 @@ public class Morpheus {
         System.out.println(bg + col1 + "                    |_|                               " + ANSI_RESET);
         System.out.println(col1 + "  Version: " + Version.VERSION + ANSI_RESET);
         properties = new Properties();
-        var f = new File("/Users/stephan/.config/morpheus.properties");
+        String userHomeDir = System.getProperty("user.home");
+        var f = new File(userHomeDir+"/.config/morpheus.properties");
 
         if (!f.exists()) {
             // properties.setProperty("theme.default.bg","");
@@ -318,8 +319,8 @@ public class Morpheus {
                     ICommand command = commandClass.getDeclaredConstructor().newInstance();
                     command.execute(this, commandArgs);
                     return;
-                } else {
-                    pr(name+"!="+commandName);
+                // } else {
+                //     pr(name+"!="+commandName);
                 }
             }
 

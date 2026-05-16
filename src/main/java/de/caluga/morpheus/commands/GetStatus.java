@@ -19,7 +19,7 @@ public class GetStatus implements ICommand {
         if (args.containsKey("wait")){
             sl=Integer.parseInt(args.get("wait"));
         }
-        morpheus.pr("[c1]sending status ping[r]....(waiting "+sl+"s for answers)");
+        morpheus.pr("[c1]sending status ping[r]....(waiting "+sl+"s for answers)\n");
         long sendTS = System.currentTimeMillis();
         final int timeout=sl;
         new Thread(()->{
