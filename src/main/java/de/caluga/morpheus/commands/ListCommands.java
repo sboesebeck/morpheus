@@ -14,12 +14,9 @@ public class ListCommands implements ICommand {
         for (var cls : morpheus.getCommandClasses()) {
             String name = morpheus.getNameFromCommandClass(cls);
             String desc = morpheus.getDocumentationFromCommandClass(cls);
-
             //generating table
-            morpheus.pr("[header1]Command "+name+"[r]\n   ===> "+desc+"\n");
-
+            morpheus.pr("[header1]Command " + name + "[r]\n   ===> " + desc + "\n");
         }
-
     }
 
 }
