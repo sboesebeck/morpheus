@@ -20,6 +20,8 @@ import ch.qos.logback.classic.LoggerContext;
 import ch.qos.logback.classic.joran.JoranConfigurator;
 import de.caluga.morphium.Morphium;
 import de.caluga.morphium.MorphiumConfig;
+import de.caluga.morphium.MorphiumConfig.CappedCheck;
+import de.caluga.morphium.MorphiumConfig.IndexCheck;
 import de.caluga.morphium.driver.ReadPreference;
 import de.caluga.morphium.driver.wire.MongoConnection;
 import de.caluga.morphium.driver.wire.PooledDriver;
@@ -242,9 +244,12 @@ public class Morpheus {
         }
 
         cfg.setMinConnections(2);
-        cfg.setMaxConnections(4);
+        cfg.setMaxConnections(8);
         cfg.setHousekeepingTimeout(1000);
         cfg.setDefaultReadPreference(ReadPreference.secondaryPreferred());
+        cfg.setMaxWaitTime(10000);
+        cfg.setIndexCheck(IndexCheck.NO_CHECK);
+        cfg.setCappedCheck(CappedCheck.NO_CHECK);
         morphium = new Morphium(cfg);
         boolean processMultiple = properties.getProperty("morphium." + connection + ".messaging.processMultiple", "true").equals("true");
         boolean multithreadded = properties.getProperty("morphium." + connection + ".messaging.multiThreadded", "true").equals("true");
