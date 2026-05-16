@@ -10,3 +10,7 @@ out/*
 .gradle
 build
 gradle/wrapper
+build.gradle.kts
+gradlew
+gradlew.bat
+settings.gradle.kts
