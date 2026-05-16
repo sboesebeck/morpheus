@@ -248,6 +248,7 @@ public class Morpheus {
 
         pr("Connecting to mongo [good] " + connection + "[r] ");
         MorphiumConfig cfg = MorphiumConfig.fromProperties("morphium." + connection, properties);
+        pr("[error] IndexCheck: "+cfg.getIndexCheck().name());
 
         if (cfg.getHostSeed() == null || cfg.getHostSeed().isEmpty()) {
             pr("[error]--> connection not configured properly -no hosts set[r]");

@@ -2,6 +2,7 @@
 pkgs.mkShell {
   packages = [
     pkgs.hello
+    pkgs.gradle
     pkgs.temurin-bin-20
     pkgs.mongodb-tools
     pkgs.python310Full
