@@ -3,32 +3,62 @@ package de.caluga.morpheus;
 import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
-import java.io.IOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
-import java.net.URL;
-import java.util.ArrayList;
-import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.UUID;
-import org.slf4j.LoggerFactory;
-import ch.qos.logback.classic.LoggerContext;
-import ch.qos.logback.classic.joran.JoranConfigurator;
+
+import de.caluga.morpheus.commands.GetStatus;
+import de.caluga.morpheus.commands.HelloCommand;
+import de.caluga.morpheus.commands.ListCommands;
+import de.caluga.morpheus.commands.MessageMonitor;
 import de.caluga.morphium.Morphium;
 import de.caluga.morphium.MorphiumConfig;
 import de.caluga.morphium.MorphiumConfig.CappedCheck;
 import de.caluga.morphium.MorphiumConfig.IndexCheck;
 import de.caluga.morphium.driver.ReadPreference;
-import de.caluga.morphium.driver.wire.MongoConnection;
 import de.caluga.morphium.driver.wire.PooledDriver;
 import de.caluga.morphium.messaging.Messaging;
-import de.caluga.morpheus.commands.*;
 
 public class Morpheus {
+    public static class Size {
+        private int col, row;
+
+        public Size(final int col, final int row) {
+            this.col = col;
+            this.row = row;
+        }
+
+        public int getCol() {
+            return col;
+        }
+
+        public void setCol(final int col) {
+            this.col = col;
+        }
+
+        public int getRow() {
+            return row;
+        }
+
+        public void setRow(final int row) {
+            this.row = row;
+        }
+
+        @Override
+        public String toString() {
+            return "col=" + col + ", row=" + row;
+        }
+
+
+    }
+    public enum Gradient {
+        blue, cyan, grey, green, red, yellow, purple,
+    }
     public final static String COMMANDS_PACKAGE = "de.caluga.morpheus.commands.";
     private static String ANSI_RESET = "\u001B[0m";
     private static String ANSI_BLACK = "\u001B[30m";
@@ -37,18 +67,18 @@ public class Morpheus {
     private static String ANSI_BLUE = "\u001B[34m";
     private static String ANSI_YELLOW = "\u001B[33m";
     private static String ANSI_MAGENTA = "\u001B[35m";
+
     private static String ANSI_CYAN = "\u001B[36m";
     private static String ANSI_WHITE = "\u001B[37m";
-
     private static String ANSI_BG_BLACK = "\u001B[40m";
     private static String ANSI_BG_RED = "\u001B[41m";
     private static String ANSI_BG_GREEN = "\u001B[42m";
     private static String ANSI_BG_BLUE = "\u001B[44m";
     private static String ANSI_BG_YELLOW = "\u001B[43m";
     private static String ANSI_BG_MAGENTA = "\u001B[45m";
+
     private static String ANSI_BG_CYAN = "\u001B[46m";
     private static String ANSI_BG_WHITE = "\u001B[47m";
-
     private static String ANSI_BOLD = "\u001B[1m";
     private static String ANSI_FAINT = "\u001B[2m";
     private static String ANSI_ITALIC = "\u001B[3m";
@@ -56,304 +86,103 @@ public class Morpheus {
     private static String ANSI_SLOW_BLINK = "\u001B[5m";
     private static String ANSI_FAST_BLINK = "\u001B[6m";
     private static String ANSI_INVERT = "\u001B[7m";
+
     private static String ANSI_HIDDEN = "\u001B[8m";
     private static String ANSI_STRIKETHROUGH = "\u001B[9m";
-
-    private Map<String, String> ansiCodes = new HashMap<>();
-    private Morphium morphium;
-    private Messaging messaging;
-    private String theme;
-    private String connection;
-    private Properties properties;
-
-    public static Map<String,Class<? extends ICommand>> commands=new HashMap<>();
-
-    public static void main(String args[]) throws Exception {
+    public static Map<String, Class<? extends ICommand>> commands = new HashMap<>();
+    public static void main(final String args[]) throws Exception {
         if (args.length < 1) {
             printUsage();
             return;
         }
 
-        var app = new Morpheus();
+        final var app = new Morpheus();
         app.runApp(args);
     }
-
-    private void runApp(String args[]) throws Exception {
-        //disabling logback
-        // LoggerContext context = (LoggerContext) LoggerFactory.getILoggerFactory();
-        // JoranConfigurator jc = new JoranConfigurator();
-        // jc.setContext(context);
-        // context.reset(); // override default configuration
-        //color codes...
-
-        commands.put(HelloCommand.NAME,HelloCommand.class);
-        commands.put(ListCommands.NAME,ListCommands.class);
-        commands.put(GetStatus.NAME,GetStatus.class);
-        commands.put(MessageMonitor.NAME,MessageMonitor.class);
-        ansiCodes.put("r", ANSI_RESET);
-        ansiCodes.put("rd", ANSI_RED);
-        ansiCodes.put("gr", ANSI_GREEN);
-        ansiCodes.put("y", ANSI_YELLOW);
-        ansiCodes.put("b", ANSI_BLUE);
-        ansiCodes.put("bl", ANSI_BLACK);
-        ansiCodes.put("m", ANSI_MAGENTA);
-        ansiCodes.put("c", ANSI_CYAN);
-        ansiCodes.put("w", ANSI_WHITE);
-        ansiCodes.put("b_bl", ANSI_BG_BLACK);
-        ansiCodes.put("b_rd", ANSI_BG_RED);
-        ansiCodes.put("b_gr", ANSI_BG_GREEN);
-        ansiCodes.put("b_y", ANSI_BG_YELLOW);
-        ansiCodes.put("b_b", ANSI_BG_BLUE);
-        ansiCodes.put("b_m", ANSI_BG_MAGENTA);
-        ansiCodes.put("b_c", ANSI_BG_CYAN);
-        ansiCodes.put("b_w", ANSI_BG_WHITE);
-        ansiCodes.put("ital", ANSI_ITALIC);
-        ansiCodes.put("bld", ANSI_BOLD);
-        ansiCodes.put("fnt", ANSI_FAINT);
-        ansiCodes.put("sb", ANSI_SLOW_BLINK);
-        ansiCodes.put("fb", ANSI_FAST_BLINK);
-        ansiCodes.put("inv", ANSI_INVERT);
-        ansiCodes.put("hid", ANSI_HIDDEN);
-        ansiCodes.put("str", ANSI_STRIKETHROUGH);
-        ansiCodes.put("ul", ANSI_UNDERLINE);
-        String col1 = getAnsiFGColor(241);
-        String col2 = getAnsiFGColor(245);
-        String col3 = getAnsiFGColor(252);
-        String bg = getAnsiBGColor(236);
-        System.out.println(bg + col1 + "   __  __                  _                          " + ANSI_RESET);
-        System.out.println(bg + col2 + "  |  \\/  | ___  _ __ _ __ | |__   ___ _   _ ___       " + ANSI_RESET);
-        System.out.println(bg + col3 + "  | |\\/| |/ _ \\| '__| '_ \\| '_ \\ / _ \\ | | / __|      " + ANSI_RESET);
-        System.out.println(bg + col3 + "  | |  | | (_) | |  | |_) | | | |  __/ |_| \\__ \\      " + ANSI_RESET);
-        System.out.println(bg + col2 + "  |_|  |_|\\___/|_|  | .__/|_| |_|\\___|\\__,_|___/      " + ANSI_RESET);
-        System.out.println(bg + col1 + "                    |_|                               " + ANSI_RESET);
-        System.out.println(col1 + "  Version: " + Version.VERSION + ANSI_RESET);
-        properties = new Properties();
-        String userHomeDir = System.getProperty("user.home");
-        var f = new File(userHomeDir+"/.config/morpheus.properties");
-
-        if (!f.exists()) {
-            // properties.setProperty("theme.default.bg","");
-            properties.setProperty("theme.default.c1", "[rd]");
-            properties.setProperty("theme.default.c2", "[bg1][bld][fg230]");
-            properties.setProperty("theme.default.c3", "[fg33]");
-            properties.setProperty("theme.default.header1", "[bld]");
-            properties.setProperty("theme.default.header2", "[ital]");
-            properties.setProperty("theme.default.error", "[rd]");
-            properties.setProperty("theme.default.warning", "[y]");
-            properties.setProperty("theme.default.good", "[gr]");
-            properties.setProperty("theme.default.gradient1", "grey");
-            properties.setProperty("theme.default.gradient2", "green");
-            properties.setProperty("theme.default.gradient3", "yellow");
-            MorphiumConfig cfg = new MorphiumConfig();
-            cfg.addHostToSeed("localhost", 27017);
-            cfg.setDatabase("test");
-            cfg.setMongoAuthDb("admin");
-            cfg.setMongoLogin("test");
-            cfg.setMongoPassword("test");
-            properties.putAll(cfg.asProperties("morphium.default_connection"));
-            properties.put("morphium.default_connection.messaging.processMultiple", "true");
-            properties.put("morphium.default_connection.messaging.multithreadded", "true");
-            properties.put("morphium.default_connection.messaging.windowSize", "10");
-            properties.put("morphium.default_connection.messaging.pause", "100");
-            properties.put("morphium.default_connection.messaging.queueName", "msg");
-            properties.put("morphium.default_connection.messaging.senderId", UUID.randomUUID().toString());
-            StringBuilder doc = new StringBuilder();
-            doc.append("Default configuration for morpheus\n");
-            doc.append("Define morphium connection / settings with prefixes morphium.CONNECTIONNAME\nyou can then refer to it via commandline");
-            doc.append("Theme definition:\n");
-            doc.append("define the color-settings mentioned below, settings refer to keys");
-            properties.store(new FileWriter(f), doc.toString());
-        } else {
-            properties.load(new FileReader(f));
-        }
-        // moveCursor(1, 25);
-        pr("  Terminal Size: [good]" + getTerminalSize().toString());
-        String commandName = args[0];
-        pr("  CommandName: '"+commandName+"'");
-        Map<String, String> commandArgs = parseCommandArgs(args);
-        theme = "default";
-
-        if (commandArgs.containsKey("--theme")) {
-            //choose theme
-            if (commandArgs.get("--theme").equals("?")) {
-                //show list of themes
-                Set<String> themes = new HashSet<>();
-
-                for (Object k : properties.keySet()) {
-                    if (k.toString().startsWith("theme")) {
-                        String t = k.toString().split("\\.")[1];
-                        themes.add(t);
-                    }
-                }
-
-                pr("=========== Configured themes: ===========", Gradient.green);
-
-                for (String t : themes) {
-                    System.out.println("Theme: " + t);
-                }
-
-                System.exit(0);
-            } else {
-                theme = commandArgs.get("--theme");
-            }
-        }
-
-
-        //adding theme settings
-        for (Object k : properties.keySet()) {
-            if (k.toString().startsWith("theme." + theme)) {
-                String themeKey = k.toString().split("\\.")[2]; //should be the key
-                ansiCodes.put(themeKey, getAnsiString(properties.getProperty(k.toString())));
-            }
-        }
-
-        connection = "default_connection";
-
-        if (commandArgs.containsKey("--morphiumcfg")) {
-            if (commandArgs.get("--morphiumcfg").equals("?")) {
-                Set<String> cfg = new HashSet<>();
-
-                for (Object k : properties.keySet()) {
-                    if (k.toString().startsWith("morphium.")) {
-                        String t = k.toString().split("\\.")[1];
-                        cfg.add(t);
-                    }
-                }
-
-                pr("=========== Configured connections: ===========", Gradient.green);
-                int i = 1;
-                Map<String, String> map = new HashMap<>();
-
-                for (String t : cfg) {
-                    pr("[good]" + i + "[r]. Connection name: [header1]" + t + "[r]");
-                    map.put("" + i, t);
-                    i++;
-                }
-
-                pr("[c1]Choose connection or x to quit....[r]");
-                int input = System.in.read();
-                char c = (char) input;
-
-                if (!map.containsKey("" + c)) {
-                    pr("[c2] aborting[r]");
-                    System.exit(0);
-                }
-
-                pr("[good]you chose: " + c + "[c2]" + map.get("" + c));
-                connection = map.get("" + c);
-            } else {
-                connection = commandArgs.get("--morphiumcfg");
-            }
-        }
-
-        pr("Connecting to mongo [good] " + connection + "[r] ");
-        MorphiumConfig cfg = MorphiumConfig.fromProperties("morphium." + connection, properties);
-        pr("[error] IndexCheck: "+cfg.getIndexCheck().name());
-
-        if (cfg.getHostSeed() == null || cfg.getHostSeed().isEmpty()) {
-            pr("[error]--> connection not configured properly -no hosts set[r]");
-            System.exit(1);
-        }
-
-        cfg.setMinConnections(2);
-        cfg.setMaxConnections(8);
-        cfg.setHousekeepingTimeout(1000);
-        cfg.setDefaultReadPreference(ReadPreference.secondaryPreferred());
-        cfg.setMaxWaitTime(10000);
-        cfg.setIndexCheck(IndexCheck.NO_CHECK);
-        cfg.setCappedCheck(CappedCheck.NO_CHECK);
-        morphium = new Morphium(cfg);
-        boolean processMultiple = properties.getProperty("morphium." + connection + ".messaging.processMultiple", "true").equals("true");
-        boolean multithreadded = properties.getProperty("morphium." + connection + ".messaging.multiThreadded", "true").equals("true");
-        int pause = Integer.valueOf(properties.getProperty("morphium." + connection + ".messaging.pause", "100"));
-        int windowSize = Integer.valueOf(properties.getProperty("morphium." + connection + ".messaging.windowSize", "10"));
-        String queueName = properties.getProperty("morphium." + connection + ".messaging.queueName", "msg");
-        String senderId = properties.getProperty("morphium." + connection + ".messaging.senderId", UUID.randomUUID().toString());
-        var pd = ((PooledDriver) morphium.getDriver());
-        Thread.sleep(2000);
-
-        while (!morphium.getDriver().isConnected()) {
-            pr("[warning]not connected yet...[r]" + pd.getMaxConnections() + "/" + pd.getMaxConnectionsPerHost());
-            // var con = pd.getPrimaryConnection(null);
-            // var cons = new ArrayList<MongoConnection>();
-            //
-            // for (int i = 0; i < 2; i++) {
-            //     cons.add(pd.getReadConnection(null));
-            // }
-            // var con=morphium.getDriver().getPrimaryConnection(null);
-            // pr("got connection?!?!? minConnections: "+morphium.getDriver().getMinConnectionsPerHost());
-            // morphium.getDriver().releaseConnection(con);
-            Thread.sleep(1000);
-            // pd.releaseConnection(con);
-            //
-            // for (MongoConnection con2 : cons) {
-            //     pd.releaseConnection(con2);
-            // }
-        }
-
-        pr("[good]connection established[r]: Hosts: [c1]" + morphium.getDriver().getHostSeed().get(0) + "[r]");
-        var con = pd.getReadConnection(null);
-        pd.releaseConnection(con);
-        var cons = pd.getNumConnectionsByHost();
-
-        for (var k : cons.keySet()) {
-            pr("Connections to " + k + ": " + cons.get(k));
-        }
-
-        messaging = new Messaging(morphium, pause, processMultiple, multithreadded, windowSize);
-
-        if (!queueName.equals("msg")) {
-            messaging.setQueueName(queueName);
-        }
-
-        messaging.setSenderId(senderId);
-        pr("[c1]Messaging configured - starting it[r] ");
-        messaging.start();
-
+    public static Size getTerminalSize() {
         try {
-            Set<Class<? extends ICommand>> commandClasses = getCommandClasses();
-
-            for (Class<? extends ICommand> commandClass : commandClasses) {
-                String name = getNameFromCommandClass(commandClass);
-
-                if (name.equals(commandName)) {
-                    ICommand command = commandClass.getDeclaredConstructor().newInstance();
-                    command.execute(this, commandArgs);
-                    return;
-                // } else {
-                //     pr(name+"!="+commandName);
-                }
-            }
-
-            throw new ClassNotFoundException("name "+commandName+" unknown");
-        } catch (ClassNotFoundException | InstantiationException | IllegalAccessException | NoSuchMethodException | InvocationTargetException e) {
-            System.err.println("Invalid command provided." + e.getClass().getName() + "/" + e.getMessage());
-            printUsage();
-        } finally {
-            messaging.terminate();
-            morphium.close();
+            final String[] cmd = {"/bin/sh", "-c", "tput cols && tput lines"};
+            final Process process = Runtime.getRuntime().exec(cmd);
+            process.waitFor();
+            // Read the terminal response
+            final byte[] input = new byte[32];
+            final int size = process.getInputStream().read(input);
+            final String[] output = new String(input, 0, size).split("\\s+");
+            final int cols = Integer.parseInt(output[0]);
+            final int rows = Integer.parseInt(output[1]);
+            // // Request the terminal size
+            // System.out.print("\u001B[7;9999H\u001B[6n");
+            // System.out.flush();
+            // // Read the terminal response
+            // byte[] input = new byte[32];
+            // int size = System.in.read(input);
+            // // Extract the row and column size from the response
+            // int row = 0;
+            // int col = 0;
+            // int i = 0;
+            //
+            // while (input[i] != 'R') {
+            //     if (input[i] == '[') {
+            //         i++;
+            //         int j = i;
+            //
+            //         while (input[j] != ';') {
+            //             j++;
+            //         }
+            //
+            //         row = Integer.parseInt(new String(input, i, j - i));
+            //         i = j + 1;
+            //     } else {
+            //         i++;
+            //     }
+            // }
+            //
+            // i++;
+            // int j = i;
+            //
+            // while (input[j] != ';') {
+            //     j++;
+            // }
+            //
+            // col = Integer.parseInt(new String(input, i, j - i));
+            return new Size(cols, rows);
+        } catch (final Exception e) {
+            e.printStackTrace();
         }
+
+        return null;
+    }
+    public static void moveCursor(final int row, final int col) {
+        System.out.print("\u001B[" + row + ";" + col + "H");
     }
 
-    public Set<Class<? extends ICommand>> getCommandClasses(){
-        Set<Class<? extends ICommand>> ret=new HashSet<>();
-        for (Class<? extends ICommand> c:commands.values()){
+    private static void printUsage() {
+        System.out.println("Usage: Morpheus <commandName> [--theme=themename] [--morphiumcfg=connetionName] [arg1=value1 arg2=value2 ...]");
+        System.out.println("    themes and connections are configured in morpheusconfig file (usually ~/.config/morpheus.properties");
+    }
+
+    private final Map<String, String> ansiCodes = new HashMap<>();
+
+    private Morphium morphium;
+
+    private Messaging messaging;
+
+
+
+    private String theme;
+
+    private String connection;
+
+    private Properties properties;
+
+    public Set<Class<? extends ICommand>> getCommandClasses() {
+        final Set<Class<? extends ICommand>> ret = new HashSet<>();
+
+        for (final Class<? extends ICommand> c : commands.values()) {
             ret.add(c);
         }
+
         return ret;
-    }
-
-
-
-    private Map<String, String> parseCommandArgs(String[] args) {
-        Map<String, String> commandArgs = new HashMap<>();
-
-        for (int i = 1; i < args.length; i++) {
-            String[] splitArg = args[i].split("=");
-            commandArgs.put(splitArg[0], splitArg[1]);
-        }
-
-        return commandArgs;
     }
 
     public Morphium getMorphium() {
@@ -364,32 +193,27 @@ public class Morpheus {
         return messaging;
     }
 
-    public String getNameFromCommandClass(Class<? extends ICommand> commandClass) throws NoSuchFieldException, IllegalAccessException {
-        Field nameField = commandClass.getDeclaredField("NAME");
+    public String getNameFromCommandClass(final Class<? extends ICommand> commandClass) throws NoSuchFieldException, IllegalAccessException {
+        final Field nameField = commandClass.getDeclaredField("NAME");
         return (String) nameField.get(null);
     }
 
-    public String getDocumentationFromCommandClass(Class<? extends ICommand> commandClass) {
+    public String getDocumentationFromCommandClass(final Class<? extends ICommand> commandClass) {
         try {
-            Field description = commandClass.getDeclaredField("DESCRIPTION");
+            final Field description = commandClass.getDeclaredField("DESCRIPTION");
             return (String) description.get(null);
-        } catch (Exception e) {
+        } catch (final Exception e) {
             return null;
         }
     }
 
-    private static void printUsage() {
-        System.out.println("Usage: Morpheus <commandName> [--theme=themename] [--morphiumcfg=connetionName] [arg1=value1 arg2=value2 ...]");
-        System.out.println("    themes and connections are configured in morpheusconfig file (usually ~/.config/morpheus.properties");
-    }
-
-    public String getAnsiFGColor(int colNum) {
-        String col1 = "\u001B[38;5;" + colNum + "m";
+    public String getAnsiFGColor(final int colNum) {
+        final String col1 = "\u001B[38;5;" + colNum + "m";
         return col1;
     }
 
-    public String getAnsiBGColor(int colNum) {
-        String col1 = "\u001B[48;5;" + colNum + "m";
+    public String getAnsiBGColor(final int colNum) {
+        final String col1 = "\u001B[48;5;" + colNum + "m";
         return col1;
     }
 
@@ -397,10 +221,10 @@ public class Morpheus {
         return ANSI_RESET;
     }
 
-    public String getAnsiString(String str) {
+    public String getAnsiString(final String str) {
         String out = str;
 
-        for (String k : ansiCodes.keySet()) {
+        for (final String k : ansiCodes.keySet()) {
             out = out.replaceAll("\\[" + k + "\\]", ansiCodes.get(k));
         }
 
@@ -412,16 +236,16 @@ public class Morpheus {
         return out;
     }
 
-    public void pr(String str) {
+    public void pr(final String str) {
         System.out.println(getAnsiString(str));
     }
 
-    public String getColumn(String str, int len) {
+    public String getColumn(String str, final int len) {
         if (str.length() >= len) {
             return str.substring(0, len);
         }
 
-        int ctr = (len - str.length()) / 2;
+        final int ctr = (len - str.length()) / 2;
 
         for (int i = 0; i < ctr; i++) {
             str = " " + str + " ";
@@ -438,13 +262,14 @@ public class Morpheus {
         return str;
     }
 
-    public void pr(String str, int themeGradientNr) {
-        String gradient = properties.getProperty("theme." + theme + ".gradient" + themeGradientNr, "grey");
+    public void pr(final String str, final int themeGradientNr) {
+        final String gradient = properties.getProperty("theme." + theme + ".gradient" + themeGradientNr, "grey");
         pr(str, Gradient.valueOf(gradient));
     }
 
-    public void pr(String str, Gradient gr) {
-        int l = str.length();
+
+    public void pr(final String str, final Gradient gr) {
+        final int l = str.length();
         int gradient[];
 
         switch (gr) {
@@ -506,100 +331,271 @@ public class Morpheus {
         System.out.println(ANSI_RESET);
     }
 
-    public static Size getTerminalSize() {
+    private void runApp(final String args[]) throws Exception {
+        //disabling logback
+        // LoggerContext context = (LoggerContext) LoggerFactory.getILoggerFactory();
+        // JoranConfigurator jc = new JoranConfigurator();
+        // jc.setContext(context);
+        // context.reset(); // override default configuration
+        //color codes...
+        commands.put(HelloCommand.NAME, HelloCommand.class);
+        commands.put(ListCommands.NAME, ListCommands.class);
+        commands.put(GetStatus.NAME, GetStatus.class);
+        commands.put(MessageMonitor.NAME, MessageMonitor.class);
+        ansiCodes.put("r", ANSI_RESET);
+        ansiCodes.put("rd", ANSI_RED);
+        ansiCodes.put("gr", ANSI_GREEN);
+        ansiCodes.put("y", ANSI_YELLOW);
+        ansiCodes.put("b", ANSI_BLUE);
+        ansiCodes.put("bl", ANSI_BLACK);
+        ansiCodes.put("m", ANSI_MAGENTA);
+        ansiCodes.put("c", ANSI_CYAN);
+        ansiCodes.put("w", ANSI_WHITE);
+        ansiCodes.put("b_bl", ANSI_BG_BLACK);
+        ansiCodes.put("b_rd", ANSI_BG_RED);
+        ansiCodes.put("b_gr", ANSI_BG_GREEN);
+        ansiCodes.put("b_y", ANSI_BG_YELLOW);
+        ansiCodes.put("b_b", ANSI_BG_BLUE);
+        ansiCodes.put("b_m", ANSI_BG_MAGENTA);
+        ansiCodes.put("b_c", ANSI_BG_CYAN);
+        ansiCodes.put("b_w", ANSI_BG_WHITE);
+        ansiCodes.put("ital", ANSI_ITALIC);
+        ansiCodes.put("bld", ANSI_BOLD);
+        ansiCodes.put("fnt", ANSI_FAINT);
+        ansiCodes.put("sb", ANSI_SLOW_BLINK);
+        ansiCodes.put("fb", ANSI_FAST_BLINK);
+        ansiCodes.put("inv", ANSI_INVERT);
+        ansiCodes.put("hid", ANSI_HIDDEN);
+        ansiCodes.put("str", ANSI_STRIKETHROUGH);
+        ansiCodes.put("ul", ANSI_UNDERLINE);
+        final String col1 = getAnsiFGColor(241);
+        final String col2 = getAnsiFGColor(245);
+        final String col3 = getAnsiFGColor(252);
+        final String bg = getAnsiBGColor(236);
+        System.out.println(bg + col1 + "   __  __                  _                          " + ANSI_RESET);
+        System.out.println(bg + col2 + "  |  \\/  | ___  _ __ _ __ | |__   ___ _   _ ___       " + ANSI_RESET);
+        System.out.println(bg + col3 + "  | |\\/| |/ _ \\| '__| '_ \\| '_ \\ / _ \\ | | / __|      " + ANSI_RESET);
+        System.out.println(bg + col3 + "  | |  | | (_) | |  | |_) | | | |  __/ |_| \\__ \\      " + ANSI_RESET);
+        System.out.println(bg + col2 + "  |_|  |_|\\___/|_|  | .__/|_| |_|\\___|\\__,_|___/      " + ANSI_RESET);
+        System.out.println(bg + col1 + "                    |_|                               " + ANSI_RESET);
+        System.out.println(col1 + "  Version: " + Version.VERSION + ANSI_RESET);
+        properties = new Properties();
+        final String userHomeDir = System.getProperty("user.home");
+        final var f = new File(userHomeDir + "/.config/morpheus.properties");
+
+        if (!f.exists()) {
+            // properties.setProperty("theme.default.bg","");
+            properties.setProperty("theme.default.c1", "[rd]");
+            properties.setProperty("theme.default.c2", "[bg1][bld][fg230]");
+            properties.setProperty("theme.default.c3", "[fg33]");
+            properties.setProperty("theme.default.header1", "[bld]");
+            properties.setProperty("theme.default.header2", "[ital]");
+            properties.setProperty("theme.default.error", "[rd]");
+            properties.setProperty("theme.default.warning", "[y]");
+            properties.setProperty("theme.default.good", "[gr]");
+            properties.setProperty("theme.default.gradient1", "grey");
+            properties.setProperty("theme.default.gradient2", "green");
+            properties.setProperty("theme.default.gradient3", "yellow");
+            final MorphiumConfig cfg = new MorphiumConfig();
+            cfg.addHostToSeed("localhost", 27017);
+            cfg.setDatabase("test");
+            cfg.setMongoAuthDb("admin");
+            cfg.setMongoLogin("test");
+            cfg.setMongoPassword("test");
+            properties.putAll(cfg.asProperties("morphium.default_connection"));
+            properties.put("morphium.default_connection.messaging.processMultiple", "true");
+            properties.put("morphium.default_connection.messaging.multithreadded", "true");
+            properties.put("morphium.default_connection.messaging.windowSize", "10");
+            properties.put("morphium.default_connection.messaging.pause", "100");
+            properties.put("morphium.default_connection.messaging.queueName", "msg");
+            properties.put("morphium.default_connection.messaging.senderId", UUID.randomUUID().toString());
+            final StringBuilder doc = new StringBuilder();
+            doc.append("Default configuration for morpheus\n");
+            doc.append("Define morphium connection / settings with prefixes morphium.CONNECTIONNAME\nyou can then refer to it via commandline");
+            doc.append("Theme definition:\n");
+            doc.append("define the color-settings mentioned below, settings refer to keys");
+            properties.store(new FileWriter(f), doc.toString());
+        } else {
+            properties.load(new FileReader(f));
+        }
+
+        // moveCursor(1, 25);
+        pr("  Terminal Size: [good]" + getTerminalSize().toString());
+        final String commandName = args[0];
+        pr("  CommandName: '" + commandName + "'");
+        final Map<String, String> commandArgs = parseCommandArgs(args);
+        theme = "default";
+
+        if (commandArgs.containsKey("--theme")) {
+            //choose theme
+            if (commandArgs.get("--theme").equals("?")) {
+                //show list of themes
+                final Set<String> themes = new HashSet<>();
+
+                for (final Object k : properties.keySet()) {
+                    if (k.toString().startsWith("theme")) {
+                        final String t = k.toString().split("\\.")[1];
+                        themes.add(t);
+                    }
+                }
+
+                pr("=========== Configured themes: ===========", Gradient.green);
+
+                for (final String t : themes) {
+                    System.out.println("Theme: " + t);
+                }
+
+                System.exit(0);
+            } else {
+                theme = commandArgs.get("--theme");
+            }
+        }
+
+        //adding theme settings
+        for (final Object k : properties.keySet()) {
+            if (k.toString().startsWith("theme." + theme)) {
+                final String themeKey = k.toString().split("\\.")[2]; //should be the key
+                ansiCodes.put(themeKey, getAnsiString(properties.getProperty(k.toString())));
+            }
+        }
+
+        connection = "default_connection";
+
+        if (commandArgs.containsKey("--morphiumcfg")) {
+            if (commandArgs.get("--morphiumcfg").equals("?")) {
+                final Set<String> cfg = new HashSet<>();
+
+                for (final Object k : properties.keySet()) {
+                    if (k.toString().startsWith("morphium.")) {
+                        final String t = k.toString().split("\\.")[1];
+                        cfg.add(t);
+                    }
+                }
+
+                pr("=========== Configured connections: ===========", Gradient.green);
+                int i = 1;
+                final Map<String, String> map = new HashMap<>();
+
+                for (final String t : cfg) {
+                    pr("[good]" + i + "[r]. Connection name: [header1]" + t + "[r]");
+                    map.put("" + i, t);
+                    i++;
+                }
+
+                pr("[c1]Choose connection or x to quit....[r]");
+                final int input = System.in.read();
+                final char c = (char) input;
+
+                if (!map.containsKey("" + c)) {
+                    pr("[c2] aborting[r]");
+                    System.exit(0);
+                }
+
+                pr("[good]you chose: " + c + "[c2]" + map.get("" + c));
+                connection = map.get("" + c);
+            } else {
+                connection = commandArgs.get("--morphiumcfg");
+            }
+        }
+
+        pr("Connecting to mongo [good] " + connection + "[r] ");
+        final MorphiumConfig cfg = MorphiumConfig.fromProperties("morphium." + connection, properties);
+        pr("[error] IndexCheck: " + cfg.getIndexCheck().name());
+
+        if (cfg.getHostSeed() == null || cfg.getHostSeed().isEmpty()) {
+            pr("[error]--> connection not configured properly -no hosts set[r]");
+            System.exit(1);
+        }
+
+        cfg.setMinConnections(2);
+        cfg.setMaxConnections(8);
+        cfg.setHousekeepingTimeout(1000);
+        cfg.setDefaultReadPreference(ReadPreference.secondaryPreferred());
+        cfg.setMaxWaitTime(10000);
+        cfg.setIndexCheck(IndexCheck.NO_CHECK);
+        cfg.setCappedCheck(CappedCheck.NO_CHECK);
+        morphium = new Morphium(cfg);
+        final boolean processMultiple = properties.getProperty("morphium." + connection + ".messaging.processMultiple", "true").equals("true");
+        final boolean multithreadded = properties.getProperty("morphium." + connection + ".messaging.multiThreadded", "true").equals("true");
+        final int pause = Integer.valueOf(properties.getProperty("morphium." + connection + ".messaging.pause", "100"));
+        final int windowSize = Integer.valueOf(properties.getProperty("morphium." + connection + ".messaging.windowSize", "10"));
+        final String queueName = properties.getProperty("morphium." + connection + ".messaging.queueName", "msg");
+        final String senderId = properties.getProperty("morphium." + connection + ".messaging.senderId", UUID.randomUUID().toString());
+        final var pd = ((PooledDriver) morphium.getDriver());
+        Thread.sleep(2000);
+
+        while (!morphium.getDriver().isConnected()) {
+            pr("[warning]not connected yet...[r]" + pd.getMaxConnections() + "/" + pd.getMaxConnectionsPerHost());
+            // var con = pd.getPrimaryConnection(null);
+            // var cons = new ArrayList<MongoConnection>();
+            //
+            // for (int i = 0; i < 2; i++) {
+            //     cons.add(pd.getReadConnection(null));
+            // }
+            // var con=morphium.getDriver().getPrimaryConnection(null);
+            // pr("got connection?!?!? minConnections: "+morphium.getDriver().getMinConnectionsPerHost());
+            // morphium.getDriver().releaseConnection(con);
+            Thread.sleep(1000);
+            // pd.releaseConnection(con);
+            //
+            // for (MongoConnection con2 : cons) {
+            //     pd.releaseConnection(con2);
+            // }
+        }
+
+        pr("[good]connection established[r]: Hosts: [c1]" + morphium.getDriver().getHostSeed().get(0) + "[r]");
+        final var con = pd.getReadConnection(null);
+        pd.releaseConnection(con);
+        final var cons = pd.getNumConnectionsByHost();
+
+        for (final var k : cons.keySet()) {
+            pr("Connections to " + k + ": " + cons.get(k));
+        }
+
+        messaging = new Messaging(morphium, pause, processMultiple, multithreadded, windowSize);
+
+        if (!queueName.equals("msg")) {
+            messaging.setQueueName(queueName);
+        }
+
+        messaging.setSenderId(senderId);
+        pr("[c1]Messaging configured - starting it[r] ");
+        messaging.start();
+
         try {
-            String[] cmd = {"/bin/sh", "-c", "tput cols && tput lines"};
-            Process process = Runtime.getRuntime().exec(cmd);
-            process.waitFor();
-            // Read the terminal response
-            byte[] input = new byte[32];
-            int size = process.getInputStream().read(input);
-            String[] output = new String(input, 0, size).split("\\s+");
-            int cols = Integer.parseInt(output[0]);
-            int rows = Integer.parseInt(output[1]);
-            // // Request the terminal size
-            // System.out.print("\u001B[7;9999H\u001B[6n");
-            // System.out.flush();
-            // // Read the terminal response
-            // byte[] input = new byte[32];
-            // int size = System.in.read(input);
-            // // Extract the row and column size from the response
-            // int row = 0;
-            // int col = 0;
-            // int i = 0;
-            //
-            // while (input[i] != 'R') {
-            //     if (input[i] == '[') {
-            //         i++;
-            //         int j = i;
-            //
-            //         while (input[j] != ';') {
-            //             j++;
-            //         }
-            //
-            //         row = Integer.parseInt(new String(input, i, j - i));
-            //         i = j + 1;
-            //     } else {
-            //         i++;
-            //     }
-            // }
-            //
-            // i++;
-            // int j = i;
-            //
-            // while (input[j] != ';') {
-            //     j++;
-            // }
-            //
-            // col = Integer.parseInt(new String(input, i, j - i));
-            return new Size(cols, rows);
-        } catch (Exception e) {
-            e.printStackTrace();
+            final Set<Class<? extends ICommand>> commandClasses = getCommandClasses();
 
+            for (final Class<? extends ICommand> commandClass : commandClasses) {
+                final String name = getNameFromCommandClass(commandClass);
+
+                if (name.equals(commandName)) {
+                    final ICommand command = commandClass.getDeclaredConstructor().newInstance();
+                    command.execute(this, commandArgs);
+                    return;
+                    // } else {
+                    //     pr(name+"!="+commandName);
+                }
+            }
+
+            throw new ClassNotFoundException("name " + commandName + " unknown");
+        } catch (ClassNotFoundException | InstantiationException | IllegalAccessException | NoSuchMethodException | InvocationTargetException e) {
+            System.err.println("Invalid command provided." + e.getClass().getName() + "/" + e.getMessage());
+            printUsage();
+        } finally {
+            messaging.terminate();
+            morphium.close();
         }
-
-        return null;
     }
 
+    private Map<String, String> parseCommandArgs(final String[] args) {
+        final Map<String, String> commandArgs = new HashMap<>();
 
-    public static void moveCursor(int row,int col){
-        System.out.print("\u001B["+row+";"+col+"H");
-    }
-
-    public static class Size {
-        private int col, row;
-
-        public Size(int col, int row) {
-            this.col = col;
-            this.row = row;
+        for (int i = 1; i < args.length; i++) {
+            final String[] splitArg = args[i].split("=");
+            commandArgs.put(splitArg[0], splitArg[1]);
         }
 
-        public int getCol() {
-            return col;
-        }
-
-        public void setCol(int col) {
-            this.col = col;
-        }
-
-        public int getRow() {
-            return row;
-        }
-
-        public void setRow(int row) {
-            this.row = row;
-        }
-
-        @Override
-        public String toString() {
-            return "col=" + col + ", row=" + row;
-        }
-
-
-    }
-
-    public enum Gradient {
-        blue, cyan, grey, green, red, yellow, purple,
+        return commandArgs;
     }
 
 }
