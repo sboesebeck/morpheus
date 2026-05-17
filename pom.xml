@@ -30,6 +30,16 @@
       <artifactId>morphium</artifactId>
       <version>${morphium.version}</version>
     </dependency>
+    <dependency>
+      <groupId>ch.qos.logback</groupId>
+      <artifactId>logback-core</artifactId>
+      <version>1.4.0</version>
+    </dependency>
+    <dependency>
+      <groupId>ch.qos.logback</groupId>
+      <artifactId>logback-classic</artifactId>
+      <version>1.4.0</version>
+    </dependency>
     <!-- <dependency> -->
     <!--     <groupId>org.mongodb</groupId> -->
     <!--     <artifactId>mongodb-driver-sync</artifactId> -->
@@ -70,6 +80,11 @@
         <directory>${project.basedir}/src/main/resources</directory>
       </resource>
     </resources>
+    <testResources>
+      <testResource>
+        <directory>${project.basedir}/src/main/resources</directory>
+      </testResource>
+    </testResources>
     <plugins>
       <plugin>
         <groupId>org.springframework.boot</groupId>
