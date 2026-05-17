@@ -92,12 +92,14 @@ public class Morpheus {
     private static String ANSI_STRIKETHROUGH = "\u001B[9m";
     public static Map<String, Class<? extends ICommand>> commands = new HashMap<>();
     public static void main(final String args[]) throws Exception {
+        final var app = new Morpheus();
+        app.registerAnsiCodes();
+
         if (args.length < 1) {
-            printUsage();
+            app.printUsage();
             return;
         }
 
-        final var app = new Morpheus();
         app.runApp(args);
     }
     public static Size getTerminalSize() {
@@ -157,9 +159,22 @@ public class Morpheus {
         System.out.print("\u001B[" + row + ";" + col + "H");
     }
 
-    private static void printUsage() {
-        System.out.println("Usage: Morpheus <commandName> [--theme=themename] [--morphiumcfg=connetionName] [arg1=value1 arg2=value2 ...]");
-        System.out.println("    themes and connections are configured in morpheusconfig file (usually ~/.config/morpheus.properties");
+    private void printUsage() {
+        final String col1 = getAnsiFGColor(241);
+        final String col2 = getAnsiFGColor(245);
+        final String col3 = getAnsiFGColor(252);
+        final String bg = getAnsiBGColor(236);
+        System.out.println(bg + col2 + "   __  __                  _                          " + ANSI_RESET);
+        System.out.println(bg + col2 + "  |  \\/  | ___  _ __ _ __ | |__   ___ _   _ ___       " + ANSI_RESET);
+        System.out.println(bg + col3 + "  | |\\/| |/ _ \\| '__| '_ \\| '_ \\ / _ \\ | | / __|      " + ANSI_RESET);
+        System.out.println(bg + col3 + "  | |  | | (_) | |  | |_) | | | |  __/ |_| \\__ \\      " + ANSI_RESET);
+        System.out.println(bg + col2 + "  |_|  |_|\\___/|_|  | .__/|_| |_|\\___|\\__,_|___/      " + ANSI_RESET);
+        System.out.println(bg + col2 + "                    |_|                               " + ANSI_RESET);
+        System.out.println(col1 + "  Version: " + Version.VERSION + ANSI_RESET);
+        pr("[rd]Usage:[r] [bld]Morpheus[r] [b]<commandName>[r] " + col2 + "[--theme=themename] [--morphiumcfg=connetionName] [arg1=value1 arg2=value2 ...][r]");
+        pr("    themes and connections are configured in morpheusconfig file (usually [ul]~/.config/morpheus.properties[r])");
+        pr("    to get a list of themes, use " + col2 + " --theme=?[r]");
+        pr("    to get a list of configs and choose, use " + col2 + " --morphiumcfg=?[r]");
     }
 
     private final Map<String, String> ansiCodes = new HashMap<>();
@@ -339,48 +354,6 @@ public class Morpheus {
         // jc.setContext(context);
         // context.reset(); // override default configuration
         //color codes...
-        commands.put(HelloCommand.NAME, HelloCommand.class);
-        commands.put(ListCommands.NAME, ListCommands.class);
-        commands.put(GetStatus.NAME, GetStatus.class);
-        commands.put(MessageMonitor.NAME, MessageMonitor.class);
-        commands.put(SendMessageCommand.NAME, SendMessageCommand.class);
-        ansiCodes.put("r", ANSI_RESET);
-        ansiCodes.put("rd", ANSI_RED);
-        ansiCodes.put("gr", ANSI_GREEN);
-        ansiCodes.put("y", ANSI_YELLOW);
-        ansiCodes.put("b", ANSI_BLUE);
-        ansiCodes.put("bl", ANSI_BLACK);
-        ansiCodes.put("m", ANSI_MAGENTA);
-        ansiCodes.put("c", ANSI_CYAN);
-        ansiCodes.put("w", ANSI_WHITE);
-        ansiCodes.put("b_bl", ANSI_BG_BLACK);
-        ansiCodes.put("b_rd", ANSI_BG_RED);
-        ansiCodes.put("b_gr", ANSI_BG_GREEN);
-        ansiCodes.put("b_y", ANSI_BG_YELLOW);
-        ansiCodes.put("b_b", ANSI_BG_BLUE);
-        ansiCodes.put("b_m", ANSI_BG_MAGENTA);
-        ansiCodes.put("b_c", ANSI_BG_CYAN);
-        ansiCodes.put("b_w", ANSI_BG_WHITE);
-        ansiCodes.put("ital", ANSI_ITALIC);
-        ansiCodes.put("bld", ANSI_BOLD);
-        ansiCodes.put("fnt", ANSI_FAINT);
-        ansiCodes.put("sb", ANSI_SLOW_BLINK);
-        ansiCodes.put("fb", ANSI_FAST_BLINK);
-        ansiCodes.put("inv", ANSI_INVERT);
-        ansiCodes.put("hid", ANSI_HIDDEN);
-        ansiCodes.put("str", ANSI_STRIKETHROUGH);
-        ansiCodes.put("ul", ANSI_UNDERLINE);
-        final String col1 = getAnsiFGColor(241);
-        final String col2 = getAnsiFGColor(245);
-        final String col3 = getAnsiFGColor(252);
-        final String bg = getAnsiBGColor(236);
-        System.out.println(bg + col1 + "   __  __                  _                          " + ANSI_RESET);
-        System.out.println(bg + col2 + "  |  \\/  | ___  _ __ _ __ | |__   ___ _   _ ___       " + ANSI_RESET);
-        System.out.println(bg + col3 + "  | |\\/| |/ _ \\| '__| '_ \\| '_ \\ / _ \\ | | / __|      " + ANSI_RESET);
-        System.out.println(bg + col3 + "  | |  | | (_) | |  | |_) | | | |  __/ |_| \\__ \\      " + ANSI_RESET);
-        System.out.println(bg + col2 + "  |_|  |_|\\___/|_|  | .__/|_| |_|\\___|\\__,_|___/      " + ANSI_RESET);
-        System.out.println(bg + col1 + "                    |_|                               " + ANSI_RESET);
-        System.out.println(col1 + "  Version: " + Version.VERSION + ANSI_RESET);
         properties = new Properties();
         final String userHomeDir = System.getProperty("user.home");
         final var f = new File(userHomeDir + "/.config/morpheus.properties");
@@ -587,6 +560,39 @@ public class Morpheus {
             messaging.terminate();
             morphium.close();
         }
+    }
+    private void registerAnsiCodes() {
+        commands.put(HelloCommand.NAME, HelloCommand.class);
+        commands.put(ListCommands.NAME, ListCommands.class);
+        commands.put(GetStatus.NAME, GetStatus.class);
+        commands.put(MessageMonitor.NAME, MessageMonitor.class);
+        commands.put(SendMessageCommand.NAME, SendMessageCommand.class);
+        ansiCodes.put("r", ANSI_RESET);
+        ansiCodes.put("rd", ANSI_RED);
+        ansiCodes.put("gr", ANSI_GREEN);
+        ansiCodes.put("y", ANSI_YELLOW);
+        ansiCodes.put("b", ANSI_BLUE);
+        ansiCodes.put("bl", ANSI_BLACK);
+        ansiCodes.put("m", ANSI_MAGENTA);
+        ansiCodes.put("c", ANSI_CYAN);
+        ansiCodes.put("w", ANSI_WHITE);
+        ansiCodes.put("b_bl", ANSI_BG_BLACK);
+        ansiCodes.put("b_rd", ANSI_BG_RED);
+        ansiCodes.put("b_gr", ANSI_BG_GREEN);
+        ansiCodes.put("b_y", ANSI_BG_YELLOW);
+        ansiCodes.put("b_b", ANSI_BG_BLUE);
+        ansiCodes.put("b_m", ANSI_BG_MAGENTA);
+        ansiCodes.put("b_c", ANSI_BG_CYAN);
+        ansiCodes.put("b_w", ANSI_BG_WHITE);
+        ansiCodes.put("ital", ANSI_ITALIC);
+        ansiCodes.put("bld", ANSI_BOLD);
+        ansiCodes.put("fnt", ANSI_FAINT);
+        ansiCodes.put("sb", ANSI_SLOW_BLINK);
+        ansiCodes.put("fb", ANSI_FAST_BLINK);
+        ansiCodes.put("inv", ANSI_INVERT);
+        ansiCodes.put("hid", ANSI_HIDDEN);
+        ansiCodes.put("str", ANSI_STRIKETHROUGH);
+        ansiCodes.put("ul", ANSI_UNDERLINE);
     }
 
     private Map<String, String> parseCommandArgs(final String[] args) {
