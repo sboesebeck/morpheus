@@ -475,7 +475,7 @@ public class Morpheus {
                     System.exit(0);
                 }
 
-                pr("[good]you chose: " + c + "[c2]" + map.get("" + c));
+                pr("[good]you chose: " + c + " -> [c2]" + map.get("" + c) + "[r]");
                 connection = map.get("" + c);
             } else {
                 connection = commandArgs.get("--morphiumcfg");
