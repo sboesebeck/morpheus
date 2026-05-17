@@ -89,44 +89,60 @@ public class GetStatus implements ICommand {
                 morpheus.pr("Answer from: [c3]" + r.getSender() + "[r] on host [good]" + r.getSenderHost() + "[r] after [warning]" + (r.getTimestamp() - sendTS) + "ms[r]");
 
                 if (r.getMapValue() != null) {
-                    for (Map.Entry<String, Object> k : r.getMapValue().entrySet()) {
-                        if (!keys.isEmpty() && !keys.contains(k.getKey())) {
-                            continue;
-                        }
-
-                        if (k.getKey().equals("message_listeners_by_name")) {
-                            morpheus.pr("      " + morpheus.getColumn("[c3]registered Listeners:[r]", 25));
-                            String[] lst = k.getValue().toString().replaceAll("[{}]+", "").split(",");
-
-                            for (String l : lst) {
-                                morpheus.pr(morpheus.getColumn("", 34) + "[good]" + l.substring(0, l.indexOf("=")) + "[r]");
-                            }
-                        } else if (k.getValue() instanceof List) {
-                            if (((List)k.getValue()).isEmpty()) continue;
-
-                            morpheus.pr(morpheus.getColumn("[good]" + k.getKey() + "[r]", 25));
-
-                            for (Object l : (List)k.getValue()) {
-                                morpheus.pr(morpheus.getColumn("", 34) + "[good]" + l.toString() + "[r]");
-                            }
-
-                            // morpheus.pr("      [c3]" + morpheus.getColumn(k.getKey(), 25) + "[r] List!");
-                        } else if (k.getValue() instanceof Map) {
-                            morpheus.pr("      [c3]" + morpheus.getColumn(k.getKey(), 35) + "[r]");
-                            Map<String, Object> m = (Map<String, Object>)k.getValue();
-
-                            for (var e : m.entrySet()) {
-                                morpheus.pr("      " + morpheus.getColumn("", 35) + " [good]" + morpheus.getColumn(e.getKey(), 35) + ":[r]  " + e.getValue());
-                            }
-                        } else {
-                            morpheus.pr("      [c3]" + morpheus.getColumn(k.getKey(), 35) + "[r] | " + k.getValue());
-                        }
-                    }
+                    printMap(morpheus, r.getMapValue(), 1, keys);
                 }
             } else {
                 long after = (r.getTimestamp() - sendTS);
                 morpheus.pr(morpheus.getColumn(r.getSender(), 25) + " | " + morpheus.getColumn(r.getSenderHost(), 25) + " | " + morpheus.getColumn("" + after + "ms", 8));
                 // morpheus.pr("Answer from: [c3]" + r.getSender() + "[r] on host [good]" + r.getSenderHost() + "[r] after [warning]" + (r.getTimestamp() - sendTS) + "ms[r]");
+            }
+        }
+    }
+
+    private void printMap(Morpheus morpheus, Map<String, Object> map, int indent, List<String> keys) {
+        int columnWidth = 35;
+
+        for (Map.Entry<String, Object> k : map.entrySet()) {
+            if (keys != null && !keys.isEmpty() && !keys.contains(k.getKey())) {
+                continue;
+            }
+
+            String ind = " ";
+
+            for (int i = 0; i < indent; i++) ind += " ";
+
+            if (k.getKey().equals("message_listeners_by_name")) {
+                morpheus.pr(ind + morpheus.getColumn("[c3]registered Listeners:[r]", columnWidth));
+                String[] lst = k.getValue().toString().replaceAll("[{}]+", "").split(",");
+
+                for (String l : lst) {
+                    morpheus.pr(morpheus.getColumn("", columnWidth) + "[good]" + l.substring(0, l.indexOf("=")) + "[r]");
+                }
+            } else if (k.getValue() instanceof List) {
+                if (((List)k.getValue()).isEmpty()) continue;
+
+                morpheus.pr(morpheus.getColumn("[good]" + k.getKey() + "[r]", indent));
+
+                for (Object l : (List)k.getValue()) {
+                    if (l instanceof Map) {
+                        printMap(morpheus, (Map<String, Object>)l, columnWidth, keys);
+                    } else {
+                        morpheus.pr(morpheus.getColumn("", columnWidth) + "[good]" + l.toString() + "[r]");
+                    }
+                }
+
+                // morpheus.pr("      [c3]" + morpheus.getColumn(k.getKey(), 25) + "[r] List!");
+            } else if (k.getValue() instanceof Map) {
+                morpheus.pr(ind + "[c3]" + morpheus.getColumn(k.getKey(), columnWidth) + "[r]");
+                printMap(morpheus, (Map<String, Object>)k.getValue(), indent + columnWidth, keys);
+                //morpheus.pr("      [c3]" + morpheus.getColumn(k.getKey(), 35) + "[r]");
+                //Map<String, Object> m = (Map<String, Object>)k.getValue();
+                //
+                //for (var e : m.entrySet()) {
+                //    morpheus.pr("      " + morpheus.getColumn("", 35) + " [good]" + morpheus.getColumn(e.getKey(), 35) + ":[r]  " + e.getValue());
+                //}
+            } else {
+                morpheus.pr(ind + "[c3]" + morpheus.getColumn(k.getKey(), columnWidth) + "[r] | " + k.getValue());
             }
         }
     }
