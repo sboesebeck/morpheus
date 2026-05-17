@@ -19,6 +19,9 @@ for l in $(<$csv); do
   cp="$cp:$HOME/.m2/repository/$path/$art/$ver/$art-$ver.jar"
 done
 
-mvn compile >/dev/null || exit 1
+mvn compile >/dev/null || {
+  echo "Maven compile failed"
+  exit 1
+}
 
 java -cp $cp de.caluga.morpheus.Morpheus "$@"
