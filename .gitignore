@@ -17,3 +17,4 @@ settings.gradle.kts
 .ipynb_checkpoints
 bin/main
 openPMD-visualization.ipynb
+cp.csv
