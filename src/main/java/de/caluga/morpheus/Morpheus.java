@@ -482,9 +482,9 @@ public class Morpheus {
             }
         }
 
-        pr("Connecting to mongo [good] " + connection + "[r] ");
+        // pr("Connecting to mongo [good] " + connection + "[r] ");
         final MorphiumConfig cfg = MorphiumConfig.fromProperties("morphium." + connection, properties);
-        pr("[error] IndexCheck: " + cfg.getIndexCheck().name());
+        // pr("[error] IndexCheck: " + cfg.getIndexCheck().name());
 
         if (cfg.getHostSeed() == null || cfg.getHostSeed().isEmpty()) {
             pr("[error]--> connection not configured properly -no hosts set[r]");
@@ -527,15 +527,13 @@ public class Morpheus {
             // }
         }
 
-        pr("[good]connection established[r]: Hosts: [c1]" + morphium.getDriver().getHostSeed().get(0) + "[r]");
+        // pr("[good]connection established[r]: Hosts: [c1]" + morphium.getDriver().getHostSeed().get(0) + "[r]");
         final var con = pd.getReadConnection(null);
         pd.releaseConnection(con);
         final var cons = pd.getNumConnectionsByHost();
-
-        for (final var k : cons.keySet()) {
-            pr("Connections to " + k + ": " + cons.get(k));
-        }
-
+        // for (final var k : cons.keySet()) {
+        //     pr("Connections to " + k + ": " + cons.get(k));
+        // }
         messaging = new Messaging(morphium, pause, processMultiple, multithreadded, windowSize);
 
         if (!queueName.equals("msg")) {
@@ -543,7 +541,7 @@ public class Morpheus {
         }
 
         messaging.setSenderId(senderId);
-        pr("[c1]Messaging configured - starting it[r] ");
+        // pr("[c1]Messaging configured - starting it[r] ");
         messaging.start();
 
         try {

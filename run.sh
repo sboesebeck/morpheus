@@ -1,7 +1,16 @@
 #!/bin/bash
 # test a change
-csv=$(mktemp)
-mvn -U dependency:list | grep ":.*:.*:compile" | sed "s/\[INFO\]    \([^:]*\):\([^:]*\):jar:\([^:]*\):compile/\1;\2;\3/" | sed -e 's/--.*$//' | sort -u >$csv
+csv=$(dirname $0)/cp.csv
+rerun=0
+if [ "q$1" == "q--rerun" ]; then
+  rerun=1
+  shift
+else
+  rm -f $csv
+fi
+if [ "$rerun" -eq 0 ]; then
+  mvn -U dependency:list | grep ":.*:.*:compile" | sed "s/\[INFO\]    \([^:]*\):\([^:]*\):jar:\([^:]*\):compile/\1;\2;\3/" | sed -e 's/--.*$//' | sort -u >$csv
+fi
 cp="./target/classes"
 for l in $(<$csv); do
   # echo "Line: $l"
@@ -18,10 +27,11 @@ for l in $(<$csv); do
   fi
   cp="$cp:$HOME/.m2/repository/$path/$art/$ver/$art-$ver.jar"
 done
-
-mvn compile >/dev/null || {
-  echo "Maven compile failed"
-  exit 1
-}
+if [ "$rerun" != 1 ]; then
+  mvn compile >/dev/null || {
+    echo "Maven compile failed"
+    exit 1
+  }
+fi
 
 java -cp $cp de.caluga.morpheus.Morpheus "$@"
