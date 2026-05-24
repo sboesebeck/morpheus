@@ -20,7 +20,12 @@ public class MessageStats {
     private final AtomicLong totalTimeouts = new AtomicLong();
     private final long startTime = System.currentTimeMillis();
 
-    private final ConcurrentHashMap<String, long[]> topicRtt = new ConcurrentHashMap<>();
+    private record RttAcc(AtomicLong sum, AtomicLong count) {
+        void add(long v) { sum.addAndGet(v); count.incrementAndGet(); }
+        long avg() { long c = count.get(); return c == 0 ? 0 : sum.get() / c; }
+    }
+
+    private final ConcurrentHashMap<String, RttAcc> topicRtt = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, AtomicInteger> hostCounts = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, AtomicInteger> senderCounts = new ConcurrentHashMap<>();
 
@@ -40,12 +45,7 @@ public class MessageStats {
 
     public void recordRtt(String topic, long rttMs) {
         if (topic == null || topic.isEmpty()) return;
-        topicRtt.compute(topic, (k, v) -> {
-            if (v == null) return new long[] {rttMs, 1};
-            v[0] += rttMs;
-            v[1]++;
-            return v;
-        });
+        topicRtt.computeIfAbsent(topic, k -> new RttAcc(new AtomicLong(), new AtomicLong())).add(rttMs);
     }
 
     public long getTotalMessages() { return totalMessages.get(); }
@@ -65,20 +65,20 @@ public class MessageStats {
     }
 
     public long getAvgRtt(String topic) {
-        long[] v = topicRtt.get(topic);
-        return v == null || v[1] == 0 ? 0 : v[0] / v[1];
+        RttAcc acc = topicRtt.get(topic);
+        return acc == null ? 0 : acc.avg();
     }
 
     public long getRttCount(String topic) {
-        long[] v = topicRtt.get(topic);
-        return v == null ? 0 : v[1];
+        RttAcc acc = topicRtt.get(topic);
+        return acc == null ? 0 : acc.count().get();
     }
 
     public List<TopicRtt> getSlowestTopics(int limit) {
         List<TopicRtt> all = new ArrayList<>();
-        topicRtt.forEach((topic, v) -> all.add(new TopicRtt(topic, v[1] == 0 ? 0 : v[0] / v[1], v[1])));
+        topicRtt.forEach((topic, acc) -> all.add(new TopicRtt(topic, acc.avg(), acc.count().get())));
         all.sort((a, b) -> Long.compare(b.avgRtt(), a.avgRtt()));
-        return all.subList(0, Math.min(limit, all.size()));
+        return List.copyOf(all.subList(0, Math.min(limit, all.size())));
     }
 
     public List<NamedCount> getTopHosts(int limit) { return top(hostCounts, limit); }
@@ -88,6 +88,6 @@ public class MessageStats {
         List<NamedCount> all = new ArrayList<>();
         map.forEach((name, c) -> all.add(new NamedCount(name, c.get())));
         all.sort((a, b) -> Integer.compare(b.count(), a.count()));
-        return all.subList(0, Math.min(limit, all.size()));
+        return List.copyOf(all.subList(0, Math.min(limit, all.size())));
     }
 }
