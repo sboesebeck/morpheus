@@ -14,12 +14,6 @@
     <!-- <jline.version>RELEASE</jline.version> -->
   </properties>
   <dependencies>
-    <!-- spring mvc, rest -->
-    <dependency>
-      <groupId>org.springframework</groupId>
-      <artifactId>spring-core</artifactId>
-      <version>6.1.5</version>
-    </dependency>
     <!-- <dependency> -->
     <!--   <groupId>org.springframework.boot</groupId> -->
     <!--   <artifactId>spring-boot-starter-freemarker</artifactId> -->
@@ -57,9 +51,14 @@
     <!--   <version>${jline.version}</version> -->
     <!-- </dependency> -->
     <dependency>
+      <groupId>info.picocli</groupId>
+      <artifactId>picocli</artifactId>
+      <version>4.7.7</version>
+    </dependency>
+    <dependency>
       <groupId>org.junit.jupiter</groupId>
-      <artifactId>junit-jupiter-params</artifactId>
-      <version>5.9.0</version>
+      <artifactId>junit-jupiter</artifactId>
+      <version>5.10.2</version>
       <scope>test</scope>
     </dependency>
     <!-- <dependency> -->
@@ -80,15 +79,11 @@
         <directory>${project.basedir}/src/main/resources</directory>
       </resource>
     </resources>
-    <testResources>
-      <testResource>
-        <directory>${project.basedir}/src/main/resources</directory>
-      </testResource>
-    </testResources>
     <plugins>
       <plugin>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-maven-plugin</artifactId>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <version>3.2.5</version>
       </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
