@@ -46,6 +46,7 @@ public class MessageMonitor implements IRequiresMorphium {
         int deleteAfterProcessingTime = 0;
         boolean isV5 = false; // true if message has no 'topic' field (V5 format)
         boolean answerIsV5 = false; // true if answer message is V5 format
+        boolean isDeleted = false; // true if message was deleted from collection
 
         MessageInfo(Msg msg, String topic) {
             this.id = msg.getMsgId();
@@ -63,7 +64,12 @@ public class MessageMonitor implements IRequiresMorphium {
             this.deleteAfterProcessingTime = msg.getDeleteAfterProcessingTime();
 
             // Detect V5 format: if msg.getTopic() returns null/empty, it's V5 (uses 'name' field)
-            this.isV5 = (msg.getTopic() == null || msg.getTopic().isEmpty());
+            try {
+                this.isV5 = (msg.getTopic() == null || msg.getTopic().isEmpty());
+            } catch (Exception e) {
+                // getTopic() might not exist in V5 - assume V5 if exception
+                this.isV5 = true;
+            }
         }
 
         void update(Msg msg) {
@@ -82,7 +88,11 @@ public class MessageMonitor implements IRequiresMorphium {
             if (msg.getMsg() != null) size += msg.getMsg().length();
             if (msg.getMapValue() != null) size += msg.getMapValue().size() * 50;
             if (msg.getSender() != null) size += msg.getSender().length();
-            if (msg.getTopic() != null) size += msg.getTopic().length();
+            try {
+                if (msg.getTopic() != null) size += msg.getTopic().length();
+            } catch (Exception e) {
+                // Ignore - V5 message without topic
+            }
             return size;
         }
     }
@@ -341,9 +351,25 @@ public class MessageMonitor implements IRequiresMorphium {
             @Override
             public boolean incomingData(ChangeStreamEvent evt) {
                 try {
-                    // Skip delete events - we're only interested in insert/update
+                    if (verbose) System.err.println("[DEBUG] Event type: " + evt.getOperationType());
+
+                    // Handle delete events - mark message as deleted
                     if (evt.getOperationType().equals("delete")) {
-                        return false; // Don't trigger redraw
+                        if (verbose) System.err.println("[DEBUG] Processing delete event");
+                        Object docIdObj = ((Map) evt.getDocumentKey()).get("_id");
+                        if (docIdObj instanceof MorphiumId) {
+                            MorphiumId docId = (MorphiumId) docIdObj;
+                            synchronized (messageBuffer) {
+                                MessageInfo existing = messageBuffer.get(docId);
+                                if (existing != null) {
+                                    existing.isDeleted = true;
+                                    existing.updateCount++;
+                                    if (verbose) System.err.println("[DEBUG] Marked message as deleted: " + docId);
+                                    redrawScreen();
+                                }
+                            }
+                        }
+                        return true; // Continue listening
                     }
 
                     // Try to get fullDocument first
@@ -370,8 +396,13 @@ public class MessageMonitor implements IRequiresMorphium {
                     }
 
                     // Deserialize message
+                    if (verbose) System.err.println("[DEBUG] Deserializing message...");
                     Msg msg = morpheus.getMorphium().getMapper().deserialize(Msg.class, doc);
-                    if (msg == null || msg.getMsgId() == null) return true;
+                    if (msg == null || msg.getMsgId() == null) {
+                        if (verbose) System.err.println("[DEBUG] Message is null or has no ID");
+                        return true;
+                    }
+                    if (verbose) System.err.println("[DEBUG] Message ID: " + msg.getMsgId());
 
                     // V5/V6 compatibility: Extract topic/name from document
                     // V6 uses 'topic', V5 used 'name'
@@ -383,10 +414,12 @@ public class MessageMonitor implements IRequiresMorphium {
                     synchronized (messageBuffer) {
                         if (evt.getOperationType().equals("insert")) {
                             // New message
+                            if (verbose) System.err.println("[DEBUG] Processing INSERT event");
                             totalMessages.incrementAndGet();
 
                             // Check if this is an answer to a message in our buffer
                             if (msg.isAnswer() && msg.getInAnswerTo() != null) {
+                                if (verbose) System.err.println("[DEBUG] Processing ANSWER to: " + msg.getInAnswerTo());
                                 totalAnswers.incrementAndGet();
 
                                 // Find the original message in buffer
@@ -399,12 +432,20 @@ public class MessageMonitor implements IRequiresMorphium {
                                     if (roundtripMs >= 0) {
                                         // Update the ORIGINAL message with RTT and answerer info
                                         if (originalMsg != null) {
+                                            if (verbose) System.err.println("[DEBUG] Updating original message with RTT: " + roundtripMs);
                                             originalMsg.rtt = roundtripMs;
                                             originalMsg.isTimedOut = false; // Clear timeout if answered
                                             originalMsg.answeredBy = msg.getSender();
                                             originalMsg.answeredByHost = msg.getSenderHost();
                                             // Detect if answer is V5 format
-                                            originalMsg.answerIsV5 = (msg.getTopic() == null || msg.getTopic().isEmpty());
+                                            try {
+                                                if (verbose) System.err.println("[DEBUG] Detecting answer version...");
+                                                originalMsg.answerIsV5 = (msg.getTopic() == null || msg.getTopic().isEmpty());
+                                                if (verbose) System.err.println("[DEBUG] Answer is V5: " + originalMsg.answerIsV5);
+                                            } catch (Exception e) {
+                                                if (verbose) System.err.println("[DEBUG] getTopic() failed, assuming V5: " + e.getMessage());
+                                                originalMsg.answerIsV5 = true; // Assume V5 if getTopic() fails
+                                            }
                                             needsRedraw = true; // Redraw to show RTT on original message
                                         }
 
@@ -486,14 +527,18 @@ public class MessageMonitor implements IRequiresMorphium {
 
                     // Redraw if needed
                     if (needsRedraw) {
+                        if (verbose) System.err.println("[DEBUG] Calling redrawScreen...");
                         redrawScreen();
+                        if (verbose) System.err.println("[DEBUG] redrawScreen completed");
                     }
 
                 } catch (Exception e) {
                     if (verbose) {
                         morpheus.pr("[error]Error processing change stream event: " + e.getMessage() + "[r]");
+                        e.printStackTrace(System.err);
                     }
                 }
+                if (verbose) System.err.println("[DEBUG] incomingData returning true");
                 return true;
             }
 
@@ -635,10 +680,10 @@ public class MessageMonitor implements IRequiresMorphium {
                         // Alternating row colors - use white and bright white for better readability
                         String rowColor = (rowNum % 2 == 0) ? "\033[97m" : "\033[37m"; // Bright white / white
 
-                        // Highlight updated messages in yellow
-                        if (info.updateCount > 1) {
-                            rowColor = "\033[93m"; // Bright yellow for updated
-                        }
+                        // // Highlight updated messages in yellow
+                        // if (info.updateCount > 1) {
+                        //     rowColor = "\033[93m"; // Bright yellow for updated
+                        // }
 
                         // Highlight timed-out messages in RED (overrides others)
                         if (info.isTimedOut) {
@@ -651,9 +696,11 @@ public class MessageMonitor implements IRequiresMorphium {
                         String rttStr = info.rtt != null ? formatRoundtrip(info.rtt) : "";
                         String sizeStr = formatSize(info.size);
                         String timeStr = formatRelativeTime(currentTime - info.timestamp);
-                        // Show processed count, lock status, or note if answered but not processed
+                        // Show processed count, lock status, deleted status, or note if answered but not processed
                         String processedStr = "";
-                        if (info.processedByCount > 0) {
+                        if (info.isDeleted) {
+                            processedStr = "DELETED";
+                        } else if (info.processedByCount > 0) {
                             processedStr = info.processedByCount + " proc";
                         } else if (info.lockedBy != null) {
                             // Message is locked - show who locked it
@@ -666,7 +713,7 @@ public class MessageMonitor implements IRequiresMorphium {
                         } else if (hasAnswer) {
                             // Message was answered but processed_by is empty and not locked
                             if (info.isDeleteAfterProcessing && info.deleteAfterProcessingTime == 0) {
-                                processedStr = "deleted";
+                                processedStr = "deleted after processing";
                             } else if (info.isDeleteAfterProcessing && info.deleteAfterProcessingTime != 0) {
                                 processedStr = "delete (after " + info.deleteAfterProcessingTime + "ms)";
                             } else {
@@ -683,67 +730,78 @@ public class MessageMonitor implements IRequiresMorphium {
                         }
                         if (colVis.showSender) {
                             // Add V5/V6 marker: V5 = yellow, V6 = green
-                            String versionMarker = info.isV5 ? "\033[93m[V5]\033[0m" : "\033[32m[V6]\033[0m";
-                            String senderStr = truncate(info.sender, colWidths.sender - 4) + versionMarker; // -4 for [Vx]
-                            sb.append(" │ ").append(rowColor).append(String.format("%-" + colWidths.sender + "s", senderStr));
+                            String versionColor = info.isV5 ? "\033[93m" : "\033[32m";
+                            String versionTag = info.isV5 ? "[V5]" : "[V6]";
+                            String senderText = truncate(info.sender, colWidths.sender - 4); // -4 for [Vx]
+                            String senderPad = " ".repeat(Math.max(0, colWidths.sender - senderText.length() - 4));
+                            sb.append(" │ ").append(rowColor).append(senderText).append(versionColor).append(versionTag).append(rowColor).append(senderPad);
                         }
                         if (colVis.showSenderHost) {
-                            String versionMarker = info.isV5 ? "\033[93m[V5]\033[0m" : "\033[32m[V6]\033[0m";
-                            String hostStr = truncate(info.senderHost != null ? info.senderHost : "", colWidths.senderHost - 4) + versionMarker;
-                            sb.append(" │ ").append(rowColor).append(String.format("%-" + colWidths.senderHost + "s", hostStr));
+                            String versionColor = info.isV5 ? "\033[93m" : "\033[32m";
+                            String versionTag = info.isV5 ? "[V5]" : "[V6]";
+                            String hostText = truncate(info.senderHost != null ? info.senderHost : "", colWidths.senderHost - 4);
+                            String hostPad = " ".repeat(Math.max(0, colWidths.senderHost - hostText.length() - 4));
+                            sb.append(" │ ").append(rowColor).append(hostText).append(versionColor).append(versionTag).append(rowColor).append(hostPad);
                         }
                         if (colVis.showRecipient) {
-                            sb.append(" │ ").append(String.format("%-" + colWidths.recipient + "s", truncate(info.recipient, colWidths.recipient)));
+                            sb.append(" │ ").append(rowColor).append(String.format("%-" + colWidths.recipient + "s", truncate(info.recipient, colWidths.recipient)));
                         }
                         if (colVis.showTopic) {
-                            sb.append(" │ ").append(String.format("%-" + colWidths.topic + "s", truncate(info.topic, colWidths.topic)));
+                            String topicStr = info.topic;
+                            if (info.isDeleted) {
+                                // Add [DEL] marker for deleted messages
+                                topicStr = "[DEL] " + topicStr;
+                            }
+                            sb.append(" │ ").append(rowColor).append(String.format("%-" + colWidths.topic + "s", truncate(topicStr, colWidths.topic)));
                         }
                         if (colVis.showSize) {
-                            sb.append(" │ ").append(String.format("%-8s", sizeStr));
+                            sb.append(" │ ").append(rowColor).append(String.format("%-8s", sizeStr));
                         }
                         if (colVis.showProcessed) {
-                            sb.append(" │ ").append(String.format("%-" + colWidths.processed + "s", processedStr));
+                            sb.append(" │ ").append(rowColor).append(String.format("%-" + colWidths.processed + "s", processedStr));
                         }
 
                         if (colVis.showExclusive) {
                             String exclDisplay = info.isExclusive ? "X" : "";
-                            sb.append(" │ ").append(String.format("%-4s", exclDisplay));
+                            sb.append(" │ ").append(rowColor).append(String.format("%-4s", exclDisplay));
                         }
 
                         if (colVis.showAnswer) {
                             sb.append(" │ ");
-                            sb.append("\033[0m"); // Reset row color first
                             if (hasAnswer) {
-                                sb.append("\033[32m"); // Green
-                            }
-                            sb.append(String.format("%-3s", answerDisplay));
-                            if (hasAnswer) {
-                                sb.append("\033[0m"); // Reset green
-                                sb.append(rowColor); // Back to row color
+                                sb.append("\033[32m"); // Green for YES
+                                sb.append(String.format("%-3s", answerDisplay));
+                                sb.append("\033[0m").append(rowColor); // Reset and back to row color
+                            } else {
+                                sb.append(rowColor).append(String.format("%-3s", answerDisplay));
                             }
                         }
 
                         if (colVis.showAnsweredBy) {
-                            String answeredByStr = "";
                             if (info.answeredBy != null) {
                                 // Add V5/V6 marker for answer: V5 = yellow, V6 = green
                                 String versionMarker = info.answerIsV5 ? "\033[93m[V5]\033[0m" : "\033[32m[V6]\033[0m";
-                                answeredByStr = truncate(info.answeredBy, colWidths.answeredBy - 4) + versionMarker;
+                                String answeredByText = truncate(info.answeredBy, colWidths.answeredBy - 4);
+                                String answeredByPad = " ".repeat(Math.max(0, colWidths.answeredBy - answeredByText.length() - 4));
+                                sb.append(" │ ").append(rowColor).append(answeredByText).append(versionMarker).append(rowColor).append(answeredByPad);
+                            } else {
+                                sb.append(" │ ").append(rowColor).append(" ".repeat(colWidths.answeredBy));
                             }
-                            sb.append(" │ ").append(rowColor).append(String.format("%-" + colWidths.answeredBy + "s", answeredByStr));
                         }
 
                         if (colVis.showAnsweredByHost) {
-                            String answeredByHostStr = "";
                             if (info.answeredByHost != null) {
                                 String versionMarker = info.answerIsV5 ? "\033[93m[V5]\033[0m" : "\033[32m[V6]\033[0m";
-                                answeredByHostStr = truncate(info.answeredByHost, colWidths.answeredByHost - 4) + versionMarker;
+                                String answeredByHostText = truncate(info.answeredByHost, colWidths.answeredByHost - 4);
+                                String answeredByHostPad = " ".repeat(Math.max(0, colWidths.answeredByHost - answeredByHostText.length() - 4));
+                                sb.append(" │ ").append(rowColor).append(answeredByHostText).append(versionMarker).append(rowColor).append(answeredByHostPad);
+                            } else {
+                                sb.append(" │ ").append(rowColor).append(" ".repeat(colWidths.answeredByHost));
                             }
-                            sb.append(" │ ").append(rowColor).append(String.format("%-" + colWidths.answeredByHost + "s", answeredByHostStr));
                         }
 
                         if (colVis.showRtt) {
-                            sb.append(" │ ").append(String.format("%-11s", rttStr));
+                            sb.append(" │ ").append(rowColor).append(String.format("%-11s", rttStr));
                         }
 
                         sb.append("\033[0m"); // Reset color
