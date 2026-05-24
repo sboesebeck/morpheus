@@ -1,5 +1,8 @@
 package de.caluga.morpheus.utils;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+
 /**
  * Terminal utility functions
  */
@@ -36,22 +39,70 @@ public class TerminalUtils {
     }
 
     public static Size getTerminalSize() {
+        return getTerminalSize(false);
+    }
+
+    public static Size getTerminalSize(boolean verbose) {
+        // Method 1: Try environment variables (set by many terminals)
         try {
-            String[] cmd = {"/bin/sh", "-c", "tput cols && tput lines"};
-            Process process = Runtime.getRuntime().exec(cmd);
+            String cols = System.getenv("COLUMNS");
+            String rows = System.getenv("LINES");
+            if (cols != null && rows != null) {
+                int c = Integer.parseInt(cols);
+                int r = Integer.parseInt(rows);
+                if (verbose) System.err.println("[TerminalUtils] Using COLUMNS/LINES env vars: " + c + "x" + r);
+                return new Size(c, r);
+            }
+        } catch (Exception e) {
+            if (verbose) System.err.println("[TerminalUtils] Env vars failed: " + e.getMessage());
+        }
+
+        // Method 2: Try stty size (works better with redirected streams)
+        try {
+            ProcessBuilder pb = new ProcessBuilder("stty", "size");
+            pb.redirectInput(ProcessBuilder.Redirect.INHERIT);
+            Process process = pb.start();
+            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+            String line = reader.readLine();
             process.waitFor();
 
-            byte[] input = new byte[32];
-            int size = process.getInputStream().read(input);
-            String[] output = new String(input, 0, size).split("\\s+");
-            int cols = Integer.parseInt(output[0]);
-            int rows = Integer.parseInt(output[1]);
-
-            return new Size(cols, rows);
+            if (line != null && !line.isEmpty()) {
+                String[] parts = line.trim().split("\\s+");
+                if (parts.length >= 2) {
+                    int rows = Integer.parseInt(parts[0]);
+                    int cols = Integer.parseInt(parts[1]);
+                    if (verbose) System.err.println("[TerminalUtils] Using stty size: " + cols + "x" + rows);
+                    return new Size(cols, rows);
+                }
+            }
         } catch (Exception e) {
-            // Return default size if detection fails
-            return new Size(80, 24);
+            if (verbose) System.err.println("[TerminalUtils] stty failed: " + e.getMessage());
         }
+
+        // Method 3: Try tput (fallback)
+        try {
+            ProcessBuilder pb = new ProcessBuilder("sh", "-c", "tput cols 2>/dev/null && tput lines 2>/dev/null");
+            pb.redirectInput(ProcessBuilder.Redirect.INHERIT);
+            Process process = pb.start();
+            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+
+            String colsLine = reader.readLine();
+            String rowsLine = reader.readLine();
+            process.waitFor();
+
+            if (colsLine != null && rowsLine != null) {
+                int cols = Integer.parseInt(colsLine.trim());
+                int rows = Integer.parseInt(rowsLine.trim());
+                if (verbose) System.err.println("[TerminalUtils] Using tput: " + cols + "x" + rows);
+                return new Size(cols, rows);
+            }
+        } catch (Exception e) {
+            if (verbose) System.err.println("[TerminalUtils] tput failed: " + e.getMessage());
+        }
+
+        // Fallback: Use default size
+        if (verbose) System.err.println("[TerminalUtils] All detection methods failed, using default 80x24");
+        return new Size(80, 24);
     }
 
     public static void moveCursor(int row, int col) {

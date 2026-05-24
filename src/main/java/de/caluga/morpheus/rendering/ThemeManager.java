@@ -133,26 +133,26 @@ public class ThemeManager {
 
         switch (gr) {
             case yellow:
-                gradient = new int[]{184, 220, 226, 227, 228, 229, 230, 231};
+                gradient = new int[] {184, 220, 226, 227, 228, 229, 230, 231};
                 break;
             case cyan:
-                gradient = new int[]{29, 41, 42, 43, 48, 49, 50, 51};
+                gradient = new int[] {29, 41, 42, 43, 48, 49, 50, 51};
                 break;
             case blue:
-                gradient = new int[]{25, 26, 27, 32, 33, 38, 39};
+                gradient = new int[] {25, 26, 27, 32, 33, 38, 39};
                 break;
             case green:
-                gradient = new int[]{22, 28, 34, 40, 46, 118, 119, 120};
+                gradient = new int[] {22, 28, 34, 40, 46, 118, 119, 120};
                 break;
             case red:
-                gradient = new int[]{88, 124, 125, 160, 196};
+                gradient = new int[] {88, 124, 125, 160, 196};
                 break;
             case purple:
-                gradient = new int[]{53, 91, 127, 163, 199};
+                gradient = new int[] {53, 91, 127, 163, 199};
                 break;
             case grey:
             default:
-                gradient = new int[]{241, 243, 245, 248, 249, 252, 254, 231};
+                gradient = new int[] {241, 243, 245, 248, 249, 252, 254, 231};
         }
 
         int l = str.length();
@@ -188,6 +188,7 @@ public class ThemeManager {
     }
 
     public String getColumn(String str, int len) {
+        if (str == null) return "null";
         if (str.length() >= len) {
             return str.substring(0, len);
         }

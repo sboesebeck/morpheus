@@ -30,7 +30,7 @@ import de.caluga.morphium.messaging.Msg;
 public class GetStatus implements ICommand  {
     public final static String NAME = "get_status";
     public final static String DESCRIPTION =
-        "getting status of all connected nodes, params wait=secs, verbose=true/false, expect_answers=NUM, filter_host=PATTERN, level=[PING,MESSAGING_ONLY,MORPHIUM_ONLY|ALL], filter_sender=PATTERN, keys=LIST_OF_KEYS, filter_path=PATTERN, not_filter_path=PATTERN graphite=host:port";
+                    "getting status of all connected nodes, params wait=secs, verbose=true/false, expect_answers=NUM, filter_host=PATTERN, level=[PING,MESSAGING_ONLY,MORPHIUM_ONLY|ALL], filter_sender=PATTERN, keys=LIST_OF_KEYS, filter_path=PATTERN, not_filter_path=PATTERN graphite=host:port";
 
     private MorphiumId sentMessageId;
     private List<Msg> answers = new ArrayList<>();
@@ -122,6 +122,7 @@ public class GetStatus implements ICommand  {
         morpheus.pr("[c1]sending status ping[r]....(waiting " + sl + "s for answers)\n");
         var msg = new Msg(morpheus.getMessaging().getStatusInfoListenerName(), "ALL", level, sl * 1000);
         msg.setMsgId(new MorphiumId());
+        msg.setProcessedBy(new ArrayList());
         final int timeout = sl;
         sentMessageId = msg.getMsgId();
         final var exp = expectAnswers;
