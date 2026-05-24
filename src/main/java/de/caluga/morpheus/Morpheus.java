@@ -34,10 +34,12 @@ public class Morpheus {
 
     private final ConfigurationManager config;
     private final ThemeManager theme;
+    private final Map<String, String> rawArgs;
     private Morphium morphium;
     private MorphiumMessaging messaging;
 
     public Morpheus(Map<String, String> commandArgs) {
+        this.rawArgs = commandArgs;
         this.config = new ConfigurationManager(commandArgs);
         this.theme = new ThemeManager(config);
     }
@@ -243,9 +245,9 @@ public class Morpheus {
 
     private boolean handleSpecialArguments() {
         // Theme listing
-        if (config.getCommandArgs().containsKey("--theme") &&
-                (config.getCommandArgs().get("--theme").equals("?") ||
-                 config.getCommandArgs().get("--theme").equals("list"))) {
+        if (rawArgs.containsKey("--theme") &&
+                (rawArgs.get("--theme").equals("?") ||
+                 rawArgs.get("--theme").equals("list"))) {
             theme.print("=========== Configured themes: ===========", ThemeManager.Gradient.green);
             for (String themeName : config.getAvailableThemes()) {
                 theme.print("  • " + themeName);
@@ -254,9 +256,9 @@ public class Morpheus {
         }
 
         // Connection listing
-        if (config.getCommandArgs().containsKey("--morphiumcfg") &&
-                (config.getCommandArgs().get("--morphiumcfg").equals("?") ||
-                 config.getCommandArgs().get("--morphiumcfg").equals("list"))) {
+        if (rawArgs.containsKey("--morphiumcfg") &&
+                (rawArgs.get("--morphiumcfg").equals("?") ||
+                 rawArgs.get("--morphiumcfg").equals("list"))) {
             theme.print("=========== Configured connections: ===========", ThemeManager.Gradient.green);
             int i = 1;
             Map<String, String> connMap = new HashMap<>();
@@ -314,7 +316,7 @@ public class Morpheus {
                     }
 
                     ICommand command = commandClass.getDeclaredConstructor().newInstance();
-                    command.execute(this, config.getCommandArgs());
+                    command.execute(this, rawArgs);
                     return;
                 }
             }

@@ -4,7 +4,6 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Properties;
@@ -18,23 +17,37 @@ import de.caluga.morphium.MorphiumConfig;
  */
 public class ConfigurationManager {
     private final Properties properties;
-    private final Map<String, String> commandArgs;
     private final String configFilePath;
 
-    private String selectedTheme;
-    private String selectedConnection;
+    private String themeOverride;
+    private String connectionOverride;
+    private String messagingOverride;
+    private boolean verbose;
 
     public ConfigurationManager() {
-        this(new HashMap<>());
+        this(System.getProperty("user.home") + "/.config/morpheus.properties");
     }
 
-    public ConfigurationManager(Map<String, String> commandArgs) {
-        this.commandArgs = commandArgs;
+    public ConfigurationManager(String configFilePath) {
         this.properties = new Properties();
-        this.configFilePath = System.getProperty("user.home") + "/.config/morpheus.properties";
-
+        this.configFilePath = configFilePath;
         loadConfiguration();
     }
+
+    /** @deprecated transition bridge for the old hand-rolled parser; removed in the cleanup task */
+    @Deprecated
+    public ConfigurationManager(Map<String, String> commandArgs) {
+        this();
+        if (commandArgs.containsKey("--theme")) setThemeOverride(commandArgs.get("--theme"));
+        if (commandArgs.containsKey("--morphiumcfg")) setConnectionOverride(commandArgs.get("--morphiumcfg"));
+        if (commandArgs.containsKey("--messaging")) setMessagingOverride(commandArgs.get("--messaging"));
+        if (commandArgs.containsKey("--verbose")) setVerbose(true);
+    }
+
+    public void setThemeOverride(String theme) { this.themeOverride = theme; }
+    public void setConnectionOverride(String connection) { this.connectionOverride = connection; }
+    public void setMessagingOverride(String messaging) { this.messagingOverride = messaging; }
+    public void setVerbose(boolean verbose) { this.verbose = verbose; }
 
     private void loadConfiguration() {
         File configFile = new File(configFilePath);
@@ -96,17 +109,7 @@ public class ConfigurationManager {
     }
 
     public String getTheme() {
-        if (selectedTheme != null) {
-            return selectedTheme;
-        }
-
-        if (commandArgs.containsKey("--theme")) {
-            selectedTheme = commandArgs.get("--theme");
-        } else {
-            selectedTheme = "default";
-        }
-
-        return selectedTheme;
+        return themeOverride != null ? themeOverride : "default";
     }
 
     public Set<String> getAvailableThemes() {
@@ -121,17 +124,18 @@ public class ConfigurationManager {
     }
 
     public String getConnection() {
-        if (selectedConnection != null) {
-            return selectedConnection;
+        if (connectionOverride != null) {
+            return connectionOverride;
         }
-
-        if (commandArgs.containsKey("--morphiumcfg")) {
-            selectedConnection = commandArgs.get("--morphiumcfg");
-        } else {
-            selectedConnection = "default_connection";
+        String configured = properties.getProperty("morpheus.defaultConnection");
+        if (configured != null && !configured.isBlank()) {
+            return configured;
         }
-
-        return selectedConnection;
+        Set<String> available = getAvailableConnections();
+        if (available.size() == 1) {
+            return available.iterator().next();
+        }
+        return "default_connection";
     }
 
     public Set<String> getAvailableConnections() {
@@ -157,19 +161,13 @@ public class ConfigurationManager {
         return properties;
     }
 
-    public Map<String, String> getCommandArgs() {
-        return commandArgs;
-    }
-
     public boolean isVerbose() {
-        return commandArgs.containsKey("--verbose") ||
-               commandArgs.getOrDefault("--verbose", "false").equalsIgnoreCase("true");
+        return verbose;
     }
 
     public String getMessagingImplementation() {
-        String fromArgs = commandArgs.get("--messaging");
-        if (fromArgs != null) {
-            return fromArgs;
+        if (messagingOverride != null) {
+            return messagingOverride;
         }
         return getProperty("morphium." + getConnection() + ".messaging.implementation", "single");
     }
