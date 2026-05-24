@@ -33,10 +33,19 @@ public class MessageMonitor implements IRequiresMorphium {
         int size;
         long timestamp;
         boolean isAnswer;
-        String processedBy;
+        int processedByCount = 0; // Track how many processors handled this
+        String lockedBy = null; // Who locked this message
+        Long lockedUntil = null; // Lock expiry timestamp
+        String answeredBy = null; // Who sent the answer
+        String answeredByHost = null; // Host of the answerer
+        boolean isExclusive = false; // Whether message is exclusive
         Long rtt; // null until answered
         int updateCount = 1;
         boolean isTimedOut = false; // true if no answer after timeout threshold
+        boolean isDeleteAfterProcessing = false;
+        int deleteAfterProcessingTime = 0;
+        boolean isV5 = false; // true if message has no 'topic' field (V5 format)
+        boolean answerIsV5 = false; // true if answer message is V5 format
 
         MessageInfo(Msg msg, String topic) {
             this.id = msg.getMsgId();
@@ -48,15 +57,23 @@ public class MessageMonitor implements IRequiresMorphium {
             this.size = calculateSize(msg);
             this.timestamp = msg.getTimestamp();
             this.isAnswer = msg.isAnswer();
-            this.processedBy = msg.getProcessedBy() != null && !msg.getProcessedBy().isEmpty()
-                               ? msg.getProcessedBy().get(0) : "";
+            this.isExclusive = msg.isExclusive();
+            this.processedByCount = msg.getProcessedBy() != null ? msg.getProcessedBy().size() : 0;
+            this.isDeleteAfterProcessing = msg.isDeleteAfterProcessing();
+            this.deleteAfterProcessingTime = msg.getDeleteAfterProcessingTime();
+
+            // Detect V5 format: if msg.getTopic() returns null/empty, it's V5 (uses 'name' field)
+            this.isV5 = (msg.getTopic() == null || msg.getTopic().isEmpty());
         }
 
         void update(Msg msg) {
             // Update fields that can change
-            if (msg.getProcessedBy() != null && !msg.getProcessedBy().isEmpty()) {
-                this.processedBy = msg.getProcessedBy().get(0);
-                this.updateCount++;
+            if (msg.getProcessedBy() != null) {
+                int newCount = msg.getProcessedBy().size();
+                if (newCount > this.processedByCount) {
+                    this.processedByCount = newCount;
+                    this.updateCount++;
+                }
             }
         }
 
@@ -111,14 +128,16 @@ public class MessageMonitor implements IRequiresMorphium {
         // Flag to trigger redraw on resize
         final AtomicBoolean resizeTriggered = new AtomicBoolean(false);
 
-        // Register signal handler for terminal resize (SIGWINCH)
+        // Register signal handler for terminal resize (SIGWINCH) for immediate reaction
         try {
             sun.misc.Signal.handle(new sun.misc.Signal("WINCH"), signal -> {
                 TerminalUtils.Size newSize = TerminalUtils.getTerminalSize(false);
-                termState.resize(newSize);
-                resizeTriggered.set(true); // Trigger immediate redraw
-                if (verbose) {
-                    System.err.println("DEBUG: Terminal resized to " + newSize.getCol() + "x" + newSize.getRow());
+                if (newSize.getCol() != termState.width || newSize.getRow() != termState.height) {
+                    termState.resize(newSize);
+                    resizeTriggered.set(true); // Trigger immediate redraw
+                    if (verbose) {
+                        System.err.println("DEBUG: Terminal resized to " + newSize.getCol() + "x" + newSize.getRow());
+                    }
                 }
             });
         } catch (Exception e) {
@@ -171,7 +190,10 @@ public class MessageMonitor implements IRequiresMorphium {
             volatile boolean showTopic = true;
             volatile boolean showSize = true;
             volatile boolean showProcessed = true;
+            volatile boolean showExclusive = true; // Show exclusive flag
             volatile boolean showAnswer = true;
+            volatile boolean showAnsweredBy = true; // Show who answered
+            volatile boolean showAnsweredByHost = false; // Hidden by default
             volatile boolean showRtt = true;
         }
 
@@ -179,7 +201,7 @@ public class MessageMonitor implements IRequiresMorphium {
 
         // Column widths calculation (will be recalculated on resize)
         class ColumnWidths {
-            int timestamp, sender, senderHost, recipient, topic, processed;
+            int timestamp, sender, senderHost, recipient, topic, processed, answeredBy, answeredByHost;
 
             void calculate(int termWidth, ColumnVisibility vis) {
                 // Fixed columns with exact widths
@@ -187,6 +209,7 @@ public class MessageMonitor implements IRequiresMorphium {
                 fixedTotal += 5;  // "#" column always shown
                 if (vis.showTimestamp) fixedTotal += 8;   // "Time" column
                 if (vis.showSize) fixedTotal += 8;        // "Size" column
+                if (vis.showExclusive) fixedTotal += 4;   // "Excl" column (just "X" or empty)
                 if (vis.showAnswer) fixedTotal += 6;      // "Ans" column (3 chars + padding)
                 if (vis.showRtt) fixedTotal += 11;        // "RTT" column
 
@@ -199,7 +222,10 @@ public class MessageMonitor implements IRequiresMorphium {
                 if (vis.showTopic) numCols++;
                 if (vis.showSize) numCols++;
                 if (vis.showProcessed) numCols++;
+                if (vis.showExclusive) numCols++;
                 if (vis.showAnswer) numCols++;
+                if (vis.showAnsweredBy) numCols++;
+                if (vis.showAnsweredByHost) numCols++;
                 if (vis.showRtt) numCols++;
 
                 int separatorTotal = (numCols - 1) * 3;
@@ -214,6 +240,8 @@ public class MessageMonitor implements IRequiresMorphium {
                 if (vis.showRecipient) varCount++;
                 if (vis.showTopic) varCount++;
                 if (vis.showProcessed) varCount++;
+                if (vis.showAnsweredBy) varCount++;
+                if (vis.showAnsweredByHost) varCount++;
 
                 // Distribute width
                 if (varCount > 0 && available > 0) {
@@ -223,6 +251,8 @@ public class MessageMonitor implements IRequiresMorphium {
                     recipient = vis.showRecipient ? Math.max(8, widthPerVar) : 0;
                     topic = vis.showTopic ? Math.max(10, widthPerVar) : 0;
                     processed = vis.showProcessed ? Math.max(8, widthPerVar) : 0;
+                    answeredBy = vis.showAnsweredBy ? Math.max(8, widthPerVar) : 0;
+                    answeredByHost = vis.showAnsweredByHost ? Math.max(8, widthPerVar) : 0;
                 } else {
                     // Fallback to minimal widths
                     sender = vis.showSender ? 10 : 0;
@@ -230,6 +260,8 @@ public class MessageMonitor implements IRequiresMorphium {
                     recipient = vis.showRecipient ? 10 : 0;
                     topic = vis.showTopic ? 12 : 0;
                     processed = vis.showProcessed ? 8 : 0;
+                    answeredBy = vis.showAnsweredBy ? 10 : 0;
+                    answeredByHost = vis.showAnsweredByHost ? 10 : 0;
                 }
 
                 timestamp = vis.showTimestamp ? 8 : 0;
@@ -249,46 +281,104 @@ public class MessageMonitor implements IRequiresMorphium {
         // For now, use fixed column visibility to avoid terminal issues
         AtomicBoolean keyboardNeedsRedraw = new AtomicBoolean(false);
 
+        // Shared redraw state
+        final AtomicBoolean forceRedraw = new AtomicBoolean(true); // Start with true for initial draw
+        final long REDRAW_INTERVAL_MS = 500; // Redraw every 500ms max
+
         // Periodic refresh timer to update timeouts even when no messages arrive
         java.util.Timer refreshTimer = new java.util.Timer("MonitorRefresh", true);
         final long REFRESH_INTERVAL_MS = 1000; // Refresh every 1 second
 
-        m.watchDb(true, new ChangeStreamListener() {
-            private long lastRedraw = 0;
-            private final long REDRAW_INTERVAL_MS = 500; // Redraw every 500ms max
-            private volatile boolean needsPeriodicRedraw = false;
-
-            {
-                // Schedule periodic refresh
-                refreshTimer.scheduleAtFixedRate(new java.util.TimerTask() {
-                    @Override
-                    public void run() {
-                        needsPeriodicRedraw = true;
+        // Schedule periodic check for resize - just detection, the watchDb will handle redraws
+        refreshTimer.scheduleAtFixedRate(new java.util.TimerTask() {
+            @Override
+            public void run() {
+                // Check for terminal size changes (polling fallback if SIGWINCH doesn't work)
+                TerminalUtils.Size currentSize = TerminalUtils.getTerminalSize(false);
+                if (currentSize.getCol() != termState.width || currentSize.getRow() != termState.height) {
+                    termState.resize(currentSize);
+                    resizeTriggered.set(true);
+                    if (verbose) {
+                        System.err.println("DEBUG: Polling - Terminal resized to " + currentSize.getCol() + "x" + currentSize.getRow());
                     }
-                }, REFRESH_INTERVAL_MS, REFRESH_INTERVAL_MS);
+                }
+                // Set flag to trigger redraw in watchDb
+                forceRedraw.set(true);
+            }
+        }, 0, REFRESH_INTERVAL_MS); // Start immediately with delay 0
+
+        // Helper method to check lock status for a message
+
+        m.watchDb(true, new ChangeStreamListener() {
+
+            // Check lock status for a message ID
+            private void updateLockStatus(MessageInfo info) {
+                try {
+                    final String lockCollectionName = morpheus.getMessaging().getLockCollectionName(info.topic);
+                    // Query lock collection for this message ID
+                    var lockQuery = m.createQueryFor(Map.class, lockCollectionName)
+                                    .f("_id").eq(info.id);
+                    Map<String, Object> lockDoc = lockQuery.get();
+
+                    if (lockDoc != null) {
+                        info.lockedBy = (String) lockDoc.get("locked_by");
+                        Object lockedUntilObj = lockDoc.get("locked_until");
+                        if (lockedUntilObj instanceof Number) {
+                            info.lockedUntil = ((Number) lockedUntilObj).longValue();
+                        }
+                    } else {
+                        info.lockedBy = null;
+                        info.lockedUntil = null;
+                    }
+                } catch (Exception e) {
+                    // Lock collection might not exist or query failed - ignore
+                    if (verbose) {
+                        System.err.println("Lock query failed: " + e.getMessage());
+                    }
+                }
             }
 
             @Override
             public boolean incomingData(ChangeStreamEvent evt) {
                 try {
-                    if (evt.getOperationType().equals("delete")) return true;
-                    if (evt.getFullDocument() == null) return true;
+                    // Skip delete events - we're only interested in insert/update
+                    if (evt.getOperationType().equals("delete")) {
+                        return false; // Don't trigger redraw
+                    }
 
-                    if (!evt.getFullDocument().containsKey("name") && ! evt.getFullDocument().containsKey("topic")) {
+                    // Try to get fullDocument first
+                    Map<String, Object> doc = evt.getFullDocument();
+
+                    // If fullDocument is null, try to fetch by ID
+                    if (doc == null) {
+                        Object docIdObj = evt.getDocumentKey();
+                        if (docIdObj instanceof MorphiumId) {
+                            MorphiumId docId = (MorphiumId) docIdObj;
+                            Msg msg = morpheus.getMorphium().findById(Msg.class, docId);
+                            if (msg != null) {
+                                doc = morpheus.getMorphium().getMapper().serialize(msg);
+                            }
+                        }
+                    }
+
+                    // If we still don't have a document, skip
+                    if (doc == null) return true;
+
+                    // Check if this looks like a message document
+                    if (!doc.containsKey("name") && !doc.containsKey("topic")) {
                         return true;
                     }
 
                     // Deserialize message
-                    Map<String, Object> doc = evt.getFullDocument();
-                    if (!doc.containsKey("msg") && !doc.containsKey("value")) return true;
                     Msg msg = morpheus.getMorphium().getMapper().deserialize(Msg.class, doc);
-                    if (msg.getMsgId() == null) return true;
+                    if (msg == null || msg.getMsgId() == null) return true;
 
                     // V5/V6 compatibility: Extract topic/name from document
                     // V6 uses 'topic', V5 used 'name'
                     String messageTopic = (String) doc.getOrDefault("topic", doc.get("name"));
 
                     boolean needsRedraw = false;
+
 
                     synchronized (messageBuffer) {
                         if (evt.getOperationType().equals("insert")) {
@@ -307,10 +397,14 @@ public class MessageMonitor implements IRequiresMorphium {
                                 if (originalTime != null) {
                                     long roundtripMs = msg.getTimestamp() - originalTime;
                                     if (roundtripMs >= 0) {
-                                        // Update the ORIGINAL message with RTT
+                                        // Update the ORIGINAL message with RTT and answerer info
                                         if (originalMsg != null) {
                                             originalMsg.rtt = roundtripMs;
                                             originalMsg.isTimedOut = false; // Clear timeout if answered
+                                            originalMsg.answeredBy = msg.getSender();
+                                            originalMsg.answeredByHost = msg.getSenderHost();
+                                            // Detect if answer is V5 format
+                                            originalMsg.answerIsV5 = (msg.getTopic() == null || msg.getTopic().isEmpty());
                                             needsRedraw = true; // Redraw to show RTT on original message
                                         }
 
@@ -353,6 +447,10 @@ public class MessageMonitor implements IRequiresMorphium {
                                 }
 
                                 messageBuffer.put(msg.getMsgId(), info);
+
+                                // Check lock status for this message
+                                updateLockStatus(info);
+
                                 needsRedraw = true;
                             }
 
@@ -361,6 +459,10 @@ public class MessageMonitor implements IRequiresMorphium {
                             MessageInfo existing = messageBuffer.get(msg.getMsgId());
                             if (existing != null) {
                                 existing.update(msg);
+
+                                // Update lock status
+                                updateLockStatus(existing);
+
                                 totalUpdates.incrementAndGet();
                                 needsRedraw = true;
                             }
@@ -377,17 +479,14 @@ public class MessageMonitor implements IRequiresMorphium {
                         needsRedraw = true; // Force immediate redraw after column toggle
                     }
 
-                    // Check if periodic refresh is needed
-                    if (needsPeriodicRedraw) {
-                        needsPeriodicRedraw = false;
-                        needsRedraw = true; // Force redraw for timeout detection
+                    // Check if periodic timer requested a redraw
+                    if (forceRedraw.getAndSet(false)) {
+                        needsRedraw = true;
                     }
 
-                    // Throttle redraws to avoid flickering
-                    long now = System.currentTimeMillis();
-                    if (needsRedraw && (now - lastRedraw) >= REDRAW_INTERVAL_MS) {
+                    // Redraw if needed
+                    if (needsRedraw) {
                         redrawScreen();
-                        lastRedraw = now;
                     }
 
                 } catch (Exception e) {
@@ -401,10 +500,12 @@ public class MessageMonitor implements IRequiresMorphium {
             private void redrawScreen() {
                 StringBuilder sb = new StringBuilder();
 
-                // Check if we need to recalculate column widths due to resize
-                if (termState.checkAndClearRecalc()) {
-                    colWidths.calculate(termState.width, colVis);
-                }
+                // Always recalculate column widths based on current terminal size
+                // This ensures we adapt to any size changes
+                colWidths.calculate(termState.width, colVis);
+
+                // Clear flag if set
+                termState.checkAndClearRecalc();
 
                 // Clear screen and move to home
                 sb.append("\033[2J\033[H"); // Clear screen + move to home
@@ -502,7 +603,10 @@ public class MessageMonitor implements IRequiresMorphium {
                 if (colVis.showTopic) sb.append(" │ ").append(String.format("%-" + colWidths.topic + "s", "Topic"));
                 if (colVis.showSize) sb.append(" │ ").append(String.format("%-8s", "Size"));
                 if (colVis.showProcessed) sb.append(" │ ").append(String.format("%-" + colWidths.processed + "s", "Processed"));
+                if (colVis.showExclusive) sb.append(" │ ").append(String.format("%-4s", "Excl"));
                 if (colVis.showAnswer) sb.append(" │ ").append(String.format("%-6s", "Ans"));
+                if (colVis.showAnsweredBy) sb.append(" │ ").append(String.format("%-" + colWidths.answeredBy + "s", "AnswerBy"));
+                if (colVis.showAnsweredByHost) sb.append(" │ ").append(String.format("%-" + colWidths.answeredByHost + "s", "AnsHost"));
                 if (colVis.showRtt) sb.append(" │ ").append(String.format("%-11s", "RTT"));
                 sb.append("\033[0m\n");
                 sb.append("\033[36m").append(separator).append("\033[0m\n");
@@ -536,7 +640,7 @@ public class MessageMonitor implements IRequiresMorphium {
                             rowColor = "\033[93m"; // Bright yellow for updated
                         }
 
-                        // Highlight timed-out messages in RED
+                        // Highlight timed-out messages in RED (overrides others)
                         if (info.isTimedOut) {
                             rowColor = "\033[91m"; // Bright red for timeout
                         }
@@ -547,6 +651,28 @@ public class MessageMonitor implements IRequiresMorphium {
                         String rttStr = info.rtt != null ? formatRoundtrip(info.rtt) : "";
                         String sizeStr = formatSize(info.size);
                         String timeStr = formatRelativeTime(currentTime - info.timestamp);
+                        // Show processed count, lock status, or note if answered but not processed
+                        String processedStr = "";
+                        if (info.processedByCount > 0) {
+                            processedStr = info.processedByCount + " proc";
+                        } else if (info.lockedBy != null) {
+                            // Message is locked - show who locked it
+                            boolean lockExpired = info.lockedUntil != null && info.lockedUntil < currentTime;
+                            if (lockExpired) {
+                                processedStr = "lock-exp:" + truncate(info.lockedBy, 8);
+                            } else {
+                                processedStr = "locked:" + truncate(info.lockedBy, 8);
+                            }
+                        } else if (hasAnswer) {
+                            // Message was answered but processed_by is empty and not locked
+                            if (info.isDeleteAfterProcessing && info.deleteAfterProcessingTime == 0) {
+                                processedStr = "deleted";
+                            } else if (info.isDeleteAfterProcessing && info.deleteAfterProcessingTime != 0) {
+                                processedStr = "delete (after " + info.deleteAfterProcessingTime + "ms)";
+                            } else {
+                                processedStr = "ans-only";
+                            }
+                        }
 
                         // Build row dynamically based on column visibility
                         sb.append(rowColor);
@@ -556,10 +682,15 @@ public class MessageMonitor implements IRequiresMorphium {
                             sb.append(" │ ").append(String.format("%-8s", timeStr));
                         }
                         if (colVis.showSender) {
-                            sb.append(" │ ").append(String.format("%-" + colWidths.sender + "s", truncate(info.sender, colWidths.sender)));
+                            // Add V5/V6 marker: V5 = yellow, V6 = green
+                            String versionMarker = info.isV5 ? "\033[93m[V5]\033[0m" : "\033[32m[V6]\033[0m";
+                            String senderStr = truncate(info.sender, colWidths.sender - 4) + versionMarker; // -4 for [Vx]
+                            sb.append(" │ ").append(rowColor).append(String.format("%-" + colWidths.sender + "s", senderStr));
                         }
                         if (colVis.showSenderHost) {
-                            sb.append(" │ ").append(String.format("%-" + colWidths.senderHost + "s", truncate(info.senderHost != null ? info.senderHost : "", colWidths.senderHost)));
+                            String versionMarker = info.isV5 ? "\033[93m[V5]\033[0m" : "\033[32m[V6]\033[0m";
+                            String hostStr = truncate(info.senderHost != null ? info.senderHost : "", colWidths.senderHost - 4) + versionMarker;
+                            sb.append(" │ ").append(rowColor).append(String.format("%-" + colWidths.senderHost + "s", hostStr));
                         }
                         if (colVis.showRecipient) {
                             sb.append(" │ ").append(String.format("%-" + colWidths.recipient + "s", truncate(info.recipient, colWidths.recipient)));
@@ -571,7 +702,12 @@ public class MessageMonitor implements IRequiresMorphium {
                             sb.append(" │ ").append(String.format("%-8s", sizeStr));
                         }
                         if (colVis.showProcessed) {
-                            sb.append(" │ ").append(String.format("%-" + colWidths.processed + "s", truncate(info.processedBy, colWidths.processed)));
+                            sb.append(" │ ").append(String.format("%-" + colWidths.processed + "s", processedStr));
+                        }
+
+                        if (colVis.showExclusive) {
+                            String exclDisplay = info.isExclusive ? "X" : "";
+                            sb.append(" │ ").append(String.format("%-4s", exclDisplay));
                         }
 
                         if (colVis.showAnswer) {
@@ -587,9 +723,29 @@ public class MessageMonitor implements IRequiresMorphium {
                             }
                         }
 
+                        if (colVis.showAnsweredBy) {
+                            String answeredByStr = "";
+                            if (info.answeredBy != null) {
+                                // Add V5/V6 marker for answer: V5 = yellow, V6 = green
+                                String versionMarker = info.answerIsV5 ? "\033[93m[V5]\033[0m" : "\033[32m[V6]\033[0m";
+                                answeredByStr = truncate(info.answeredBy, colWidths.answeredBy - 4) + versionMarker;
+                            }
+                            sb.append(" │ ").append(rowColor).append(String.format("%-" + colWidths.answeredBy + "s", answeredByStr));
+                        }
+
+                        if (colVis.showAnsweredByHost) {
+                            String answeredByHostStr = "";
+                            if (info.answeredByHost != null) {
+                                String versionMarker = info.answerIsV5 ? "\033[93m[V5]\033[0m" : "\033[32m[V6]\033[0m";
+                                answeredByHostStr = truncate(info.answeredByHost, colWidths.answeredByHost - 4) + versionMarker;
+                            }
+                            sb.append(" │ ").append(rowColor).append(String.format("%-" + colWidths.answeredByHost + "s", answeredByHostStr));
+                        }
+
                         if (colVis.showRtt) {
                             sb.append(" │ ").append(String.format("%-11s", rttStr));
                         }
+
                         sb.append("\033[0m"); // Reset color
                         sb.append("\n");
                     }
