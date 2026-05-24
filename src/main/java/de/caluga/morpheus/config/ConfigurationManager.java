@@ -176,12 +176,15 @@ public class ConfigurationManager {
 
     public MessagingConfig getMessagingConfig() {
         String conn = getConnection();
+        // Queue name should be null if not set, not default to "msg"
+        String queueName = getProperty("morphium." + conn + ".messaging.queueName");
+
         return new MessagingConfig(
             getProperty("morphium." + conn + ".messaging.processMultiple", "true").equals("true"),
             getProperty("morphium." + conn + ".messaging.multithreadded", "true").equals("true"),
             Integer.parseInt(getProperty("morphium." + conn + ".messaging.pause", "100")),
             Integer.parseInt(getProperty("morphium." + conn + ".messaging.windowSize", "10")),
-            getProperty("morphium." + conn + ".messaging.queueName", "msg"),
+            queueName,
             getProperty("morphium." + conn + ".messaging.senderId", UUID.randomUUID().toString()),
             getMessagingImplementation()
         );

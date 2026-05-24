@@ -59,7 +59,12 @@ public class MorphiumConnectionFactory {
         msgSettings.setMessagingMultithreadded(msgConfig.multithreadded);
         msgSettings.setMessagingPollPause(msgConfig.pause);
         msgSettings.setMessagingWindowSize(msgConfig.windowSize);
-        msgSettings.setMessageQueueName(msgConfig.queueName);
+
+        // Only set queue name if explicitly configured (null means use Morphium default)
+        if (msgConfig.queueName != null) {
+            msgSettings.setMessageQueueName(msgConfig.queueName);
+        }
+
         msgSettings.setSenderId(msgConfig.senderId);
 
         // Set messaging implementation
