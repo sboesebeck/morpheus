@@ -24,7 +24,7 @@ import de.caluga.morpheus.ICommand;
 import de.caluga.morpheus.Morpheus;
 import de.caluga.morphium.driver.MorphiumId;
 import de.caluga.morphium.messaging.MessageListener;
-import de.caluga.morphium.messaging.Messaging;
+import de.caluga.morphium.messaging.MorphiumMessaging;
 import de.caluga.morphium.messaging.Msg;
 
 public class GetStatus implements ICommand  {

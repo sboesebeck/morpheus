@@ -34,4 +34,4 @@ if [ "$rerun" != 1 ]; then
   }
 fi
 
-java -DsocksProxyHost=127.0.0.1 -DsocksProxyPort=5555 -cp $cp de.caluga.morpheus.Morpheus "$@"
+java -cp $cp de.caluga.morpheus.Morpheus "$@"
