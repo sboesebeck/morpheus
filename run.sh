@@ -116,4 +116,4 @@ fi
 # Debug output (can be disabled by commenting out)
 echo "DEBUG: Terminal size set to ${COLUMNS}x${LINES}" >&2
 
-java --sun-misc-unsafe-memory-access=allow -cp $cp de.caluga.morpheus.Morpheus "$@"
+java -cp $cp de.caluga.morpheus.Morpheus "$@"
