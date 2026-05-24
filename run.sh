@@ -1,16 +1,70 @@
 #!/bin/bash
-# test a change
+# Optimized run script with smart recompilation detection
+
 csv=$(dirname $0)/cp.csv
 rerun=0
-if [ "q$1" == "q--rerun" ]; then
-  rerun=1
-  shift
-else
-  rm -f $csv
-fi
+recompile=0
+
+# Parse flags
+while [[ "$1" == --* ]]; do
+  case "$1" in
+  --rerun)
+    rerun=1
+    shift
+    ;;
+  --recompile)
+    recompile=1
+    shift
+    ;;
+  *)
+    break
+    ;;
+  esac
+done
+
+# Check if recompilation is needed (only check once)
+needs_rebuild=0
+
 if [ "$rerun" -eq 0 ]; then
+  # If cp.csv doesn't exist, we need to build
+  if [ ! -f "$csv" ]; then
+    needs_rebuild=1
+  # If --recompile flag is given, force rebuild
+  elif [ "$recompile" -eq 1 ]; then
+    echo "DEBUG: Forced recompilation (--recompile flag)" >&2
+    needs_rebuild=1
+  # Check if pom.xml is newer than cp.csv
+  elif [ "pom.xml" -nt "$csv" ]; then
+    echo "DEBUG: pom.xml changed, recompilation needed" >&2
+    needs_rebuild=1
+  # Check if target/classes exists (might have been cleaned)
+  elif [ ! -d "target/classes" ]; then
+    echo "DEBUG: target/classes missing, recompilation needed" >&2
+    needs_rebuild=1
+  # Check if any source files are newer than cp.csv
+  elif [ -d "src/main/java" ]; then
+    newer_files=$(find src/main/java -name "*.java" -newer "$csv" 2>/dev/null | head -1)
+    if [ -n "$newer_files" ]; then
+      echo "DEBUG: Source files changed, recompilation needed" >&2
+      needs_rebuild=1
+    else
+      echo "DEBUG: No changes detected, using cached build" >&2
+    fi
+  else
+    echo "DEBUG: No changes detected, using cached build" >&2
+  fi
+fi
+
+# Regenerate dependencies if needed
+if [ "$needs_rebuild" -eq 1 ]; then
+  echo "DEBUG: Refreshing dependencies..." >&2
+  mvn -U dependency:list | grep ":.*:.*:compile" | sed "s/\[INFO\]    \([^:]*\):\([^:]*\):jar:\([^:]*\):compile/\1;\2;\3/" | sed -e 's/--.*$//' | sort -u >$csv
+elif [ ! -f "$csv" ]; then
+  # If cp.csv doesn't exist and we're in rerun mode, create it
   mvn -U dependency:list | grep ":.*:.*:compile" | sed "s/\[INFO\]    \([^:]*\):\([^:]*\):jar:\([^:]*\):compile/\1;\2;\3/" | sed -e 's/--.*$//' | sort -u >$csv
 fi
+
+# Build classpath
 cp="./target/classes"
 for l in $(<$csv); do
   # echo "Line: $l"
@@ -27,11 +81,16 @@ for l in $(<$csv); do
   fi
   cp="$cp:$HOME/.m2/repository/$path/$art/$ver/$art-$ver.jar"
 done
-if [ "$rerun" != 1 ]; then
-  mvn compile >/dev/null || {
+
+# Compile if needed
+if [ "$needs_rebuild" -eq 1 ]; then
+  echo "DEBUG: Running Maven compile..." >&2
+  mvn compile 2>&1 | grep -v "^WARNING: " >/dev/null || {
     echo "Maven compile failed"
     exit 1
   }
+  # Touch cp.csv to update its timestamp
+  touch "$csv"
 fi
 
 # Export terminal size for Java to detect
@@ -57,4 +116,4 @@ fi
 # Debug output (can be disabled by commenting out)
 echo "DEBUG: Terminal size set to ${COLUMNS}x${LINES}" >&2
 
-java -cp $cp de.caluga.morpheus.Morpheus "$@"
+java --sun-misc-unsafe-memory-access=allow -cp $cp de.caluga.morpheus.Morpheus "$@"
