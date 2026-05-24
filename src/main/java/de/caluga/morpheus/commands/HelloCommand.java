@@ -3,11 +3,12 @@ package de.caluga.morpheus.commands;
 import java.io.OutputStreamWriter;
 import java.util.Map;
 import de.caluga.morpheus.ICommand;
+import de.caluga.morpheus.IRequiresMorphium;
 import de.caluga.morpheus.Morpheus;
 import de.caluga.morpheus.Version;
 import de.caluga.morpheus.Morpheus.Gradient;
 
-public class HelloCommand implements ICommand {
+public class HelloCommand implements IRequiresMorphium {
     public final static String NAME = "hello";
     public final static String DESCRIPTION="Little Hello World-Test Command";
 

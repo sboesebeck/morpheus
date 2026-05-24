@@ -19,7 +19,7 @@ import de.caluga.morphium.messaging.MorphiumMessaging;
  * Refactored for cleaner architecture with ConfigurationManager, ThemeManager, and MorphiumConnectionFactory
  */
 public class Morpheus {
-    private static final Map<String, Class<? extends ICommand>> commands = new HashMap<>();
+    private static final Map < String, Class <? extends ICommand>> commands = new HashMap<>();
 
     static {
         // Register commands
@@ -29,6 +29,7 @@ public class Morpheus {
         commands.put(MessageMonitor.NAME, MessageMonitor.class);
         commands.put(SendMessageCommand.NAME, SendMessageCommand.class);
         commands.put(ConfigCommand.NAME, ConfigCommand.class);
+        commands.put(ChangeStreamViewer.NAME, ChangeStreamViewer.class);
     }
 
     private final ConfigurationManager config;
@@ -95,12 +96,12 @@ public class Morpheus {
         }
     }
 
-    public String getNameFromCommandClass(Class<? extends ICommand> commandClass) throws NoSuchFieldException, IllegalAccessException {
+    public String getNameFromCommandClass(Class <? extends ICommand > commandClass) throws NoSuchFieldException, IllegalAccessException {
         Field nameField = commandClass.getDeclaredField("NAME");
         return (String) nameField.get(null);
     }
 
-    public String getDocumentationFromCommandClass(Class<? extends ICommand> commandClass) {
+    public String getDocumentationFromCommandClass(Class <? extends ICommand > commandClass) {
         try {
             Field description = commandClass.getDeclaredField("DESCRIPTION");
             return (String) description.get(null);
@@ -109,7 +110,7 @@ public class Morpheus {
         }
     }
 
-    public Set<Class<? extends ICommand>> getCommandClasses() {
+    public Set < Class <? extends ICommand>> getCommandClasses() {
         return new HashSet<>(commands.values());
     }
 
@@ -141,7 +142,7 @@ public class Morpheus {
 
         // Collect and sort commands
         java.util.List<CommandInfo> commandInfos = new java.util.ArrayList<>();
-        for (Class<? extends ICommand> commandClass : getCommandClasses()) {
+        for (Class <? extends ICommand > commandClass : getCommandClasses()) {
             try {
                 String name = getNameFromCommandClass(commandClass);
                 String description = getDocumentationFromCommandClass(commandClass);
@@ -159,9 +160,9 @@ public class Morpheus {
 
         // Print commands with aligned descriptions
         int maxNameLength = commandInfos.stream()
-            .mapToInt(c -> c.name.length())
-            .max()
-            .orElse(15);
+                            .mapToInt(c -> c.name.length())
+                            .max()
+                            .orElse(15);
 
         for (CommandInfo cmd : commandInfos) {
             String padding = " ".repeat(Math.max(0, maxNameLength - cmd.name.length()));
@@ -226,15 +227,6 @@ public class Morpheus {
                 theme.print("  Terminal: [c2]" + TerminalUtils.getTerminalSize(true) + "[r]");
             }
 
-            // Connect to Morphium
-            MorphiumConnectionFactory factory = new MorphiumConnectionFactory(config, theme);
-            morphium = factory.createMorphium();
-            messaging = factory.createMessaging(morphium);
-
-            if (config.isVerbose()) {
-                theme.print("");
-            }
-
             // Execute command
             executeCommand(commandName);
 
@@ -252,8 +244,8 @@ public class Morpheus {
     private boolean handleSpecialArguments() {
         // Theme listing
         if (config.getCommandArgs().containsKey("--theme") &&
-            (config.getCommandArgs().get("--theme").equals("?") ||
-             config.getCommandArgs().get("--theme").equals("list"))) {
+                (config.getCommandArgs().get("--theme").equals("?") ||
+                 config.getCommandArgs().get("--theme").equals("list"))) {
             theme.print("=========== Configured themes: ===========", ThemeManager.Gradient.green);
             for (String themeName : config.getAvailableThemes()) {
                 theme.print("  • " + themeName);
@@ -263,8 +255,8 @@ public class Morpheus {
 
         // Connection listing
         if (config.getCommandArgs().containsKey("--morphiumcfg") &&
-            (config.getCommandArgs().get("--morphiumcfg").equals("?") ||
-             config.getCommandArgs().get("--morphiumcfg").equals("list"))) {
+                (config.getCommandArgs().get("--morphiumcfg").equals("?") ||
+                 config.getCommandArgs().get("--morphiumcfg").equals("list"))) {
             theme.print("=========== Configured connections: ===========", ThemeManager.Gradient.green);
             int i = 1;
             Map<String, String> connMap = new HashMap<>();
@@ -298,9 +290,29 @@ public class Morpheus {
 
     private void executeCommand(String commandName) {
         try {
-            for (Class<? extends ICommand> commandClass : getCommandClasses()) {
+            for (Class <? extends ICommand > commandClass : getCommandClasses()) {
                 String name = getNameFromCommandClass(commandClass);
                 if (name.equals(commandName)) {
+                    // Check if command requires Morphium connection
+                    boolean requiresMorphium = IRequiresMorphium.class.isAssignableFrom(commandClass);
+
+                    if (requiresMorphium) {
+                        // Initialize Morphium only when needed
+                        if (config.isVerbose()) {
+                            theme.print("");
+                            theme.print("[c3]Connecting to MongoDB...[r]");
+                        }
+
+                        MorphiumConnectionFactory factory = new MorphiumConnectionFactory(config, theme);
+                        morphium = factory.createMorphium();
+                        messaging = factory.createMessaging(morphium);
+
+                        if (config.isVerbose()) {
+                            theme.print("[good]✓ Connected[r]");
+                            theme.print("");
+                        }
+                    }
+
                     ICommand command = commandClass.getDeclaredConstructor().newInstance();
                     command.execute(this, config.getCommandArgs());
                     return;
@@ -319,11 +331,11 @@ public class Morpheus {
 
     private void cleanup() {
         try {
-            if (morphium != null) {
-                morphium.close();
-            }
             if (messaging != null) {
                 messaging.terminate();
+            }
+            if (morphium != null) {
+                morphium.close();
             }
         } catch (Exception e) {
             // Ignore cleanup errors

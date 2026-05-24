@@ -119,11 +119,12 @@ public class ConfigCommand implements ICommand {
         morpheus.pr("");
 
         // Get connection details interactively
-        morpheus.pr("[c3]MongoDB Host[r] (default: localhost):");
-        String host = readLine("localhost");
+        morpheus.pr("[c3]MongoDB Hosts[r] (comma-separated host:port, e.g., host1:27017,host2:27017):");
+        morpheus.pr("  Default: localhost:27017");
+        String hostsInput = readLine("localhost:27017");
 
-        morpheus.pr("[c3]MongoDB Port[r] (default: 27017):");
-        String port = readLine("27017");
+        // Parse multiple hosts
+        String[] hosts = hostsInput.split(",");
 
         morpheus.pr("[c3]Database Name[r]:");
         String database = readLine("test");
@@ -131,21 +132,33 @@ public class ConfigCommand implements ICommand {
         morpheus.pr("[c3]Authentication Database[r] (default: admin):");
         String authDb = readLine("admin");
 
-        morpheus.pr("[c3]Username[r]:");
+        morpheus.pr("[c3]Username[r] (press ENTER to skip authentication):");
         String username = readLine("");
 
-        morpheus.pr("[c3]Password[r] (hidden):");
-        String password = readPassword();
+        String password = "";
+        if (!username.isEmpty()) {
+            morpheus.pr("[c3]Password[r] (hidden):");
+            password = readPassword();
+        }
 
         morpheus.pr("[c3]Messaging Implementation[r] (single/multi, default: single):");
         String messagingImpl = readLine("single");
 
         morpheus.pr("[c3]Queue Name[r] (press ENTER for default 'msg'):");
-        String queueName = readLine("");
+        String queueName = readLine("msg");
 
         // Create MorphiumConfig to get properties
         MorphiumConfig cfg = new MorphiumConfig();
-        cfg.addHostToSeed(host, Integer.parseInt(port));
+
+        // Add all hosts to seed
+        for (String hostPort : hosts) {
+            String trimmed = hostPort.trim();
+            String[] parts = trimmed.split(":");
+            String host = parts[0];
+            int port = parts.length > 1 ? Integer.parseInt(parts[1]) : 27017;
+            cfg.addHostToSeed(host, port);
+        }
+
         cfg.setDatabase(database);
         cfg.setMongoAuthDb(authDb);
 
@@ -174,12 +187,7 @@ public class ConfigCommand implements ICommand {
         configMgr.setProperty("morphium." + name + ".messaging.multithreadded", "true");
         configMgr.setProperty("morphium." + name + ".messaging.windowSize", "10");
         configMgr.setProperty("morphium." + name + ".messaging.pause", "100");
-
-        // Only set queue name if provided (null/empty means use default)
-        if (!queueName.isEmpty()) {
-            configMgr.setProperty("morphium." + name + ".messaging.queueName", queueName);
-        }
-
+        configMgr.setProperty("morphium." + name + ".messaging.queueName", queueName);
         configMgr.setProperty("morphium." + name + ".messaging.senderId", UUID.randomUUID().toString());
 
         configMgr.save();
@@ -203,23 +211,103 @@ public class ConfigCommand implements ICommand {
         morpheus.pr("Press ENTER to keep current value");
         morpheus.pr("");
 
-        // Show and edit each field
-        String currentHost = configMgr.getProperty("morphium." + name + ".hosts.0", "localhost:27017");
-        String[] hostParts = currentHost.split(":");
+        // Parse hostSeed - format is [host1:port1, host2:port2] or [host1\:port1]
+        String hostSeed = configMgr.getProperty("morphium." + name + ".hostSeed", "[localhost:27017]");
+        // Remove brackets and backslashes
+        String cleanedHosts = hostSeed.replaceAll("[\\[\\]\\\\]", "").trim();
 
-        morpheus.pr("[c3]MongoDB Host[r] (current: " + hostParts[0] + "):");
-        String host = readLineOrKeep(hostParts[0]);
+        morpheus.pr("[c3]MongoDB Hosts[r] (comma-separated host:port)");
+        morpheus.pr("  Current: " + cleanedHosts);
+        String hostsInput = readLineOrKeep(cleanedHosts);
 
-        morpheus.pr("[c3]MongoDB Port[r] (current: " + (hostParts.length > 1 ? hostParts[1] : "27017") + "):");
-        String port = readLineOrKeep(hostParts.length > 1 ? hostParts[1] : "27017");
+        // Parse multiple hosts
+        String[] hosts = hostsInput.split(",");
 
         String currentDb = configMgr.getProperty("morphium." + name + ".database", "");
         morpheus.pr("[c3]Database Name[r] (current: " + currentDb + "):");
         String database = readLineOrKeep(currentDb);
 
-        // Update properties
-        configMgr.setProperty("morphium." + name + ".hosts.0", host + ":" + port);
-        configMgr.setProperty("morphium." + name + ".database", database);
+        String currentAuthDb = configMgr.getProperty("morphium." + name + ".mongoAuthDb", "admin");
+        morpheus.pr("[c3]Authentication Database[r] (current: " + currentAuthDb + "):");
+        String authDb = readLineOrKeep(currentAuthDb);
+
+        String currentUsername = configMgr.getProperty("morphium." + name + ".mongoLogin", "");
+        morpheus.pr("[c3]Username[r] (current: " + (currentUsername.isEmpty() ? "none" : currentUsername) + "):");
+        String username = readLineOrKeep(currentUsername);
+
+        String password = "";
+        if (!username.isEmpty()) {
+            morpheus.pr("[c3]Password[r] (press ENTER to keep current, type new to change):");
+            password = readLine("");
+        }
+
+        String currentMessagingImpl = configMgr.getProperty("morphium." + name + ".messaging.implementation", "single");
+        morpheus.pr("[c3]Messaging Implementation[r] (current: " + currentMessagingImpl + "):");
+        String messagingImpl = readLineOrKeep(currentMessagingImpl);
+
+        String currentQueueName = configMgr.getProperty("morphium." + name + ".messaging.queueName", "msg");
+        morpheus.pr("[c3]Queue Name[r] (current: " + currentQueueName + "):");
+        String queueName = readLineOrKeep(currentQueueName);
+
+        // Rebuild configuration using MorphiumConfig
+        MorphiumConfig cfg = new MorphiumConfig();
+
+        // Add all hosts to seed
+        for (String hostPort : hosts) {
+            String trimmed = hostPort.trim();
+            String[] parts = trimmed.split(":");
+            String host = parts[0];
+            int port = parts.length > 1 ? Integer.parseInt(parts[1]) : 27017;
+            cfg.addHostToSeed(host, port);
+        }
+
+        cfg.setDatabase(database);
+        cfg.setMongoAuthDb(authDb);
+
+        // Only set authentication if username is provided
+        if (!username.isEmpty()) {
+            cfg.setMongoLogin(username);
+            if (!password.isEmpty()) {
+                cfg.setMongoPassword(password);
+            } else {
+                // Keep existing password
+                String existingPassword = configMgr.getProperty("morphium." + name + ".mongoPassword", "");
+                if (!existingPassword.isEmpty()) {
+                    cfg.setMongoPassword(existingPassword);
+                }
+            }
+        }
+
+        // Save connection properties
+        java.util.Properties props = cfg.asProperties("morphium." + name);
+        for (Object key : props.keySet()) {
+            String keyStr = key.toString();
+            // Skip authentication properties if username was empty
+            if (username.isEmpty() && (keyStr.contains(".login") || keyStr.contains(".password"))) {
+                continue;
+            }
+            configMgr.setProperty(keyStr, props.getProperty(keyStr));
+        }
+
+        // Update messaging settings
+        configMgr.setProperty("morphium." + name + ".messaging.implementation", messagingImpl);
+        configMgr.setProperty("morphium." + name + ".messaging.queueName", queueName);
+        // Keep other messaging settings unchanged
+        if (configMgr.getProperty("morphium." + name + ".messaging.processMultiple") == null) {
+            configMgr.setProperty("morphium." + name + ".messaging.processMultiple", "true");
+        }
+        if (configMgr.getProperty("morphium." + name + ".messaging.multithreadded") == null) {
+            configMgr.setProperty("morphium." + name + ".messaging.multithreadded", "true");
+        }
+        if (configMgr.getProperty("morphium." + name + ".messaging.windowSize") == null) {
+            configMgr.setProperty("morphium." + name + ".messaging.windowSize", "10");
+        }
+        if (configMgr.getProperty("morphium." + name + ".messaging.pause") == null) {
+            configMgr.setProperty("morphium." + name + ".messaging.pause", "100");
+        }
+        if (configMgr.getProperty("morphium." + name + ".messaging.senderId") == null) {
+            configMgr.setProperty("morphium." + name + ".messaging.senderId", UUID.randomUUID().toString());
+        }
 
         configMgr.save();
 
@@ -280,11 +368,17 @@ public class ConfigCommand implements ICommand {
             morpheus.pr("  [warning]No connections configured[r]");
         } else {
             for (String conn : connections) {
-                String host = configMgr.getProperty("morphium." + conn + ".hosts.0", "N/A");
+                // Read hostSeed - format is [host1:port1, host2:port2] or [host1\:port1]
+                String hostSeed = configMgr.getProperty("morphium." + conn + ".hostSeed", "N/A");
+                String cleanedHosts = hostSeed.equals("N/A") ? "N/A" : hostSeed.replaceAll("[\\[\\]\\\\]", "").trim();
+
                 String db = configMgr.getProperty("morphium." + conn + ".database", "N/A");
+                String messagingImpl = configMgr.getProperty("morphium." + conn + ".messaging.implementation", "N/A");
+
                 morpheus.pr("  [c3]" + conn + "[r]");
-                morpheus.pr("    Host: " + host);
+                morpheus.pr("    Host(s): " + cleanedHosts);
                 morpheus.pr("    Database: " + db);
+                morpheus.pr("    Messaging: " + messagingImpl);
                 morpheus.pr("");
             }
         }
