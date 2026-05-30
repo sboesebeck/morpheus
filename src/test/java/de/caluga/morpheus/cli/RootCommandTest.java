@@ -29,8 +29,8 @@ public class RootCommandTest {
         StringWriter err = new StringWriter();
         CommandLine cl = cli();
         cl.setErr(new PrintWriter(err));
-        int exit = cl.execute("--bogus-option");
+        int exit = cl.execute("status", "--wiat", "5");
         assertEquals(2, exit, "usage errors must exit with 2");
-        assertTrue(err.toString().contains("--bogus-option"));
+        assertTrue(err.toString().contains("--wiat"));
     }
 }

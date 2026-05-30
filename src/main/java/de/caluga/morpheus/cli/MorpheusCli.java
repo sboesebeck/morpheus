@@ -7,7 +7,8 @@ public class MorpheusCli {
 
     public static CommandLine buildCommandLine(RootCommand root) {
         CommandLine cl = new CommandLine(root);
-        // subcommands are registered here as they are ported (Tasks 7-10)
+        cl.addSubcommand("status", new StatusCommand());
+        // further subcommands are registered here as they are ported (Tasks 8-10)
         return cl;
     }
 

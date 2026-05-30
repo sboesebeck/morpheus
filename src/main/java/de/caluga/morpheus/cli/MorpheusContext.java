@@ -26,6 +26,7 @@ public class MorpheusContext implements AutoCloseable {
     public ThemeManager getTheme() { return theme; }
 
     public void pr(String s) { theme.print(s); }
+    public void pr(String s, int gradientNr) { theme.print(s, gradientNr); }
     public String getColumn(String s, int len) { return theme.getColumn(s, len); }
 
     public void printBanner() {
