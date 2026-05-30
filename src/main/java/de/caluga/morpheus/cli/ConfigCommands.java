@@ -485,7 +485,7 @@ public class ConfigCommands implements Callable<Integer> {
                     ctx.pr("");
                     ctx.pr("[c2]Checking connection: " + conn + "[r]");
 
-                    String host = cm.getProperty("morphium." + conn + ".hosts.0");
+                    String host = cm.getProperty("morphium." + conn + ".hostSeed");
                     String db = cm.getProperty("morphium." + conn + ".database");
 
                     if (host == null || host.isEmpty()) {
