@@ -11,7 +11,6 @@ import picocli.CommandLine.ParentCommand;
 
 import java.util.List;
 import java.util.concurrent.Callable;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 @Command(name = "monitor", description = "Real-time messaging monitor (TOP-like).",
          mixinStandardHelpOptions = true)
@@ -153,14 +152,12 @@ public class MonitorCommand implements Callable<Integer> {
         tracker = new MessageTracker(termState.maxMessages);
 
         // 3. SIGWINCH handler — resize termState AND notify tracker
-        final AtomicBoolean resizeTriggered = new AtomicBoolean(false);
         try {
             sun.misc.Signal.handle(new sun.misc.Signal("WINCH"), signal -> {
                 TerminalUtils.Size newSize = TerminalUtils.getTerminalSize(false);
                 if (newSize.getCol() != termState.width || newSize.getRow() != termState.height) {
                     termState.resize(newSize);
                     tracker.setMaxMessages(termState.maxMessages);
-                    resizeTriggered.set(true);
                     if (verbose) {
                         System.err.println("DEBUG: Terminal resized to "
                                 + newSize.getCol() + "x" + newSize.getRow());
@@ -198,7 +195,6 @@ public class MonitorCommand implements Callable<Integer> {
                 if (currentSize.getCol() != termState.width || currentSize.getRow() != termState.height) {
                     termState.resize(currentSize);
                     tracker.setMaxMessages(termState.maxMessages);
-                    resizeTriggered.set(true);
                     if (verbose) {
                         System.err.println("DEBUG: Polling - Terminal resized to "
                                 + currentSize.getCol() + "x" + currentSize.getRow());
