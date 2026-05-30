@@ -54,6 +54,10 @@ public class MorpheusContext implements AutoCloseable {
     public synchronized void close() {
         try {
             if (messaging != null) messaging.terminate();
+        } catch (Exception e) {
+            // ignore cleanup errors
+        }
+        try {
             if (morphium != null) morphium.close();
         } catch (Exception e) {
             // ignore cleanup errors
