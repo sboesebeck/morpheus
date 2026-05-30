@@ -82,7 +82,9 @@ public class MessageFeed {
         switch (evt.getOperationType()) {
             case "insert" -> {
                 tracker.onInsert(msg, topic);
-                resolveLockStatus(msg.getMsgId(), topic);
+                if (!msg.isAnswer()) {
+                    resolveLockStatus(msg.getMsgId(), topic);
+                }
                 onChange.run();
             }
             case "update", "replace" -> {
