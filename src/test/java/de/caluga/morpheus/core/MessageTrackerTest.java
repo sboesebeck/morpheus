@@ -118,4 +118,40 @@ public class MessageTrackerTest {
         tracker.onInsert(msg("t2", "s2", "h2"), "t2");
         assertEquals(1, tracker.getMessagesNewestFirst().size());
     }
+
+    @Test
+    void negativeRttIsIgnored() {
+        MessageTracker tracker = new MessageTracker(10);
+        Msg original = msg("t1", "s1", "h1");
+        original.setTimestamp(5000);
+        tracker.onInsert(original, "t1");
+
+        Msg answer = msg("t1", "s2", "h2");
+        answer.setInAnswerTo(original.getMsgId());
+        answer.setTimestamp(4000);
+        tracker.onInsert(answer, "t1");
+
+        MessageInfo info = tracker.getMessagesNewestFirst().get(0);
+        assertNull(info.rtt, "negative RTT (clock skew) must not be recorded");
+        assertEquals(0, tracker.getStats().getRttCount("t1"));
+    }
+
+    @Test
+    void answersDoNotPolluteSenderStatsAndEvictionCleansCorrelationMaps() {
+        MessageTracker tracker = new MessageTracker(1);
+        Msg first = msg("t1", "s1", "h1");
+        tracker.onInsert(first, "t1");
+        Msg second = msg("t2", "s2", "h2");
+        tracker.onInsert(second, "t2"); // evicts first
+
+        Msg lateAnswer = msg("t1", "answerer", "answerHost");
+        lateAnswer.setInAnswerTo(first.getMsgId());
+        tracker.onInsert(lateAnswer, "t1"); // correlation target evicted -> ignored
+
+        assertEquals(3, tracker.getStats().getTotalMessages());
+        assertEquals(1, tracker.getStats().getTotalAnswers());
+        assertEquals(0, tracker.getStats().getSenderCount("answerer"), "answers must not count as sender activity");
+        assertEquals(0, tracker.getStats().getRttCount("t1"), "evicted request must not correlate");
+        assertEquals(1, tracker.getMessagesNewestFirst().size());
+    }
 }

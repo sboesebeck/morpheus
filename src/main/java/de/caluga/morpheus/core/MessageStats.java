@@ -29,6 +29,11 @@ public class MessageStats {
     private final ConcurrentHashMap<String, AtomicInteger> hostCounts = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, AtomicInteger> senderCounts = new ConcurrentHashMap<>();
 
+    /** Counts a message without attributing sender/host activity (used for answers). */
+    public void recordMessage() {
+        totalMessages.incrementAndGet();
+    }
+
     public void recordMessage(String sender, String host) {
         totalMessages.incrementAndGet();
         if (sender != null && !sender.isEmpty()) {

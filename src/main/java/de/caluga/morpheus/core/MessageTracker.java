@@ -23,7 +23,13 @@ public class MessageTracker {
         new LinkedHashMap<>(16, 0.75f, false) {
             @Override
             protected boolean removeEldestEntry(Map.Entry<MorphiumId, MessageInfo> eldest) {
-                return size() > maxMessages;
+                // maxMessages is volatile; this callback only runs under synchronized(buffer) via put()
+                if (size() > maxMessages) {
+                    requestTimestamps.remove(eldest.getKey());
+                    requestTopics.remove(eldest.getKey());
+                    return true;
+                }
+                return false;
             }
         };
 
@@ -39,7 +45,9 @@ public class MessageTracker {
         synchronized (buffer) {
             var it = buffer.entrySet().iterator();
             while (buffer.size() > maxMessages && it.hasNext()) {
-                it.next();
+                var eldest = it.next();
+                requestTimestamps.remove(eldest.getKey());
+                requestTopics.remove(eldest.getKey());
                 it.remove();
             }
         }
@@ -49,17 +57,18 @@ public class MessageTracker {
 
     /** A new message document appeared. topic is extracted by the feed (V6 'topic' / V5 'name'). */
     public void onInsert(Msg msg, String topic) {
-        stats.recordMessage(msg.getSender(), msg.getSenderHost());
-
         if (msg.isAnswer() && msg.getInAnswerTo() != null) {
+            stats.recordMessage();
             stats.recordAnswer();
             correlateAnswer(msg);
             return; // answers are not buffered - we track request status
         }
         if (msg.isAnswer()) {
+            stats.recordMessage();
             return;
         }
 
+        stats.recordMessage(msg.getSender(), msg.getSenderHost());
         MessageInfo info = new MessageInfo(msg, topic);
         requestTimestamps.put(msg.getMsgId(), msg.getTimestamp());
         if (topic != null && !topic.isEmpty()) {
