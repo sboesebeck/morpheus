@@ -137,6 +137,22 @@ public class MessageTrackerTest {
     }
 
     @Test
+    void setLockStatusUpdatesBufferedMessage() {
+        MessageTracker tracker = new MessageTracker(10);
+        Msg m = msg("t1", "s1", "h1");
+        tracker.onInsert(m, "t1");
+
+        tracker.setLockStatus(m.getMsgId(), "node-x", 12345L);
+
+        MessageInfo info = tracker.getMessagesNewestFirst().get(0);
+        assertEquals("node-x", info.lockedBy);
+        assertEquals(12345L, info.lockedUntil);
+
+        tracker.setLockStatus(m.getMsgId(), null, null);
+        assertNull(tracker.getMessagesNewestFirst().get(0).lockedBy);
+    }
+
+    @Test
     void answersDoNotPolluteSenderStatsAndEvictionCleansCorrelationMaps() {
         MessageTracker tracker = new MessageTracker(1);
         Msg first = msg("t1", "s1", "h1");

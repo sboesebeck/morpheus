@@ -125,6 +125,17 @@ public class MessageTracker {
         }
     }
 
+    /** Sets/clears lock info on a buffered message; no-op if the message is not buffered. */
+    public void setLockStatus(MorphiumId id, String lockedBy, Long lockedUntil) {
+        synchronized (buffer) {
+            MessageInfo existing = buffer.get(id);
+            if (existing != null) {
+                existing.lockedBy = lockedBy;
+                existing.lockedUntil = lockedUntil;
+            }
+        }
+    }
+
     /** Flags unanswered requests older than threshold. Returns number of NEW timeouts. */
     public int markTimeouts(long now, long thresholdMs) {
         int newTimeouts = 0;
