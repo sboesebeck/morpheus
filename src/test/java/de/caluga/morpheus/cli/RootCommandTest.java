@@ -33,4 +33,19 @@ public class RootCommandTest {
         assertEquals(2, exit, "usage errors must exit with 2");
         assertTrue(err.toString().contains("--wiat"));
     }
+
+    @Test
+    void helpListsSubcommands() {
+        StringWriter out = new StringWriter();
+        CommandLine cl = cli();
+        cl.setOut(new PrintWriter(out));
+        int exit = cl.execute("--help");
+        assertEquals(0, exit);
+        String help = out.toString();
+        assertTrue(help.contains("status"));
+        assertTrue(help.contains("send"));
+        assertTrue(help.contains("watch"));
+        assertTrue(help.contains("monitor"));
+        assertTrue(help.contains("config"));
+    }
 }

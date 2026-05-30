@@ -11,7 +11,7 @@ public class MorpheusCli {
         cl.addSubcommand("send", new SendCommand());
         cl.addSubcommand("watch", new WatchCommand());
         cl.addSubcommand("monitor", new MonitorCommand());
-        // further subcommands are registered here as they are ported (Tasks 9-10)
+        cl.addSubcommand("config", new ConfigCommands());
         return cl;
     }
 
