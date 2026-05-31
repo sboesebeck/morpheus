@@ -30,6 +30,12 @@ public class MonitorCommand implements Callable<Integer> {
     private ColumnWidths colWidths;
     private boolean verbose;
 
+    /**
+     * Flagged by the feed thread on every event. The render loop is the only writer to the
+     * screen, so frames never interleave and the redraw rate stays capped regardless of volume.
+     */
+    private volatile boolean dirty = true;
+
     // ── inner classes ───────────────────────────────────────────────────────────
 
     /** Tracks current terminal dimensions and max message buffer size. */
@@ -181,13 +187,23 @@ public class MonitorCommand implements Callable<Integer> {
         colWidths = new ColumnWidths();
         colWidths.calculate(termState.width, colVis);
 
-        // 5. Initial screen clear
-        System.out.print("\033[2J\033[H");
+        // 5. Initial screen clear + hide cursor. Restore the cursor on exit, including the
+        //    SIGINT (Ctrl+C) path that kills the JVM, via a shutdown hook.
+        System.out.print("\033[2J\033[H\033[?25l");
         System.out.flush();
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            System.out.print("\033[?25h\033[0m\n");
+            System.out.flush();
+        }));
 
-        // 6. Refresh timer: polls resize AND calls markTimeouts + redraws every 1s
+        // 6. Single render loop (~10 fps). The feed only flags 'dirty'; this loop is the sole
+        //    writer to the screen, so frames never interleave and the redraw rate is capped
+        //    regardless of message volume. A 1s periodic render keeps uptime/timeouts fresh
+        //    when there is no traffic.
         java.util.Timer refreshTimer = new java.util.Timer("MonitorRefresh", true);
         refreshTimer.scheduleAtFixedRate(new java.util.TimerTask() {
+            private long lastPeriodic = 0;
+
             @Override
             public void run() {
                 // Polling fallback for resize when SIGWINCH is unavailable
@@ -195,23 +211,29 @@ public class MonitorCommand implements Callable<Integer> {
                 if (currentSize.getCol() != termState.width || currentSize.getRow() != termState.height) {
                     termState.resize(currentSize);
                     tracker.setMaxMessages(termState.maxMessages);
-                    if (verbose) {
-                        System.err.println("DEBUG: Polling - Terminal resized to "
-                                + currentSize.getCol() + "x" + currentSize.getRow());
-                    }
+                    dirty = true;
                 }
-                // Mark timeouts and redraw even without incoming traffic
-                tracker.markTimeouts(System.currentTimeMillis(), timeoutThresholdMs);
-                redrawScreen();
+                if (tracker.markTimeouts(System.currentTimeMillis(), timeoutThresholdMs) > 0) {
+                    dirty = true;
+                }
+                long now = System.currentTimeMillis();
+                boolean periodic = now - lastPeriodic >= 1000;
+                if (dirty || periodic) {
+                    dirty = false;
+                    lastPeriodic = now;
+                    redrawScreen();
+                }
             }
-        }, 0, 1000L);
+        }, 0, 100L);
 
-        // 7. Feed: blocks until DB disconnect
+        // 7. Feed: blocks until DB disconnect. It only marks the screen dirty.
         MessageFeed feed = new MessageFeed(ctx.getMorphium(), ctx.getMessaging(),
-                tracker, this::redrawScreen, verbose);
+                tracker, () -> dirty = true, verbose);
         feed.watch();
 
         refreshTimer.cancel();
+        System.out.print("\033[?25h");
+        System.out.flush();
         return 0;
     }
 
@@ -223,7 +245,10 @@ public class MonitorCommand implements Callable<Integer> {
         colWidths.calculate(termState.width, colVis);
         termState.checkAndClearRecalc();
 
-        sb.append("\033[2J\033[H");
+        // Home the cursor without clearing the screen; each line clears its own tail below
+        // (see the print at the end). This overwrites the previous frame in place instead of
+        // blanking the screen first, which is what removes the flicker.
+        sb.append("\033[H");
 
         int currentWidth = termState.width;
         int currentHeight = termState.height;
@@ -441,7 +466,10 @@ public class MonitorCommand implements Callable<Integer> {
         sb.append("\033[90mPress Ctrl+C to exit\033[0m");
         sb.append("\033[J");
 
-        System.out.print(sb.toString());
+        // Clear each line's tail (\033[K) so a shorter new frame leaves no leftovers from the
+        // longer previous one — the per-line equivalent of the old full-screen clear, minus
+        // the flicker. All lines end on a reset (\033[0m) so the erase uses the default bg.
+        System.out.print(sb.toString().replace("\n", "\033[K\n"));
         System.out.flush();
     }
 
