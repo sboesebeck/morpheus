@@ -15,11 +15,12 @@ public class RootCommandTest {
     }
 
     @Test
-    void noArgsShowsUsageAndSucceeds() {
+    void helpFlagShowsUsageAndSucceeds() {
+        // --help still prints usage; no-args now opens the TUI (covered by MorpheusTuiTest).
         StringWriter out = new StringWriter();
         CommandLine cl = cli();
         cl.setOut(new PrintWriter(out));
-        int exit = cl.execute();
+        int exit = cl.execute("--help");
         assertEquals(0, exit);
         assertTrue(out.toString().contains("Usage: morpheus"));
     }

@@ -58,8 +58,7 @@ public class RootCommand implements Callable<Integer> {
 
     @Override
     public Integer call() {
-        // No subcommand: print usage (phase 2 will start the TUI here instead).
-        spec.commandLine().usage(spec.commandLine().getOut());
+        de.caluga.morpheus.tui.MorpheusTui.launch(context());
         return 0;
     }
 
