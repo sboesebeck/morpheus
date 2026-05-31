@@ -1,7 +1,6 @@
 package de.caluga.morpheus.cli;
 
 import de.caluga.morpheus.config.ConfigurationManager;
-import de.caluga.morphium.MorphiumConfig;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Parameters;
@@ -9,11 +8,8 @@ import picocli.CommandLine.ParentCommand;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
-import java.util.Properties;
 import java.util.Set;
-import java.util.UUID;
 import java.util.concurrent.Callable;
-import java.util.stream.Collectors;
 
 @Command(name = "config", description = "Manage connections, themes and proxy settings.",
          mixinStandardHelpOptions = true,
@@ -136,44 +132,11 @@ public class ConfigCommands implements Callable<Integer> {
             ctx.pr("[c3]Queue Name[r] (press ENTER for default 'msg'):");
             String queueName = readLine("msg");
 
-            MorphiumConfig cfg = new MorphiumConfig();
-
-            for (String hostPort : hosts) {
-                String trimmed = hostPort.trim();
-                String[] parts = trimmed.split(":");
-                String host = parts[0];
-                int port = parts.length > 1 ? Integer.parseInt(parts[1]) : 27017;
-                cfg.addHostToSeed(host, port);
-            }
-
-            cfg.setDatabase(database);
-            cfg.setMongoAuthDb(authDb);
-
-            if (!username.isEmpty()) {
-                cfg.setMongoLogin(username);
-                if (!password.isEmpty()) {
-                    cfg.setMongoPassword(password);
-                }
-            }
-
-            Properties props = cfg.asProperties("morphium." + name);
-            for (Object key : props.keySet()) {
-                String keyStr = key.toString();
-                if (username.isEmpty() && (keyStr.contains(".login") || keyStr.contains(".password"))) {
-                    continue;
-                }
-                cm.setProperty(keyStr, props.getProperty(keyStr));
-            }
-
-            cm.setProperty("morphium." + name + ".messaging.implementation", messagingImpl);
-            cm.setProperty("morphium." + name + ".messaging.processMultiple", "true");
-            cm.setProperty("morphium." + name + ".messaging.multithreadded", "true");
-            cm.setProperty("morphium." + name + ".messaging.windowSize", "10");
-            cm.setProperty("morphium." + name + ".messaging.pause", "100");
-            cm.setProperty("morphium." + name + ".messaging.queueName", queueName);
-            cm.setProperty("morphium." + name + ".messaging.senderId", UUID.randomUUID().toString());
-
-            cm.save();
+            java.util.List<String> hostList = new java.util.ArrayList<>();
+            for (String h : hosts) if (!h.trim().isEmpty()) hostList.add(h.trim());
+            new de.caluga.morpheus.config.ConnectionStore(cm).save(
+                new de.caluga.morpheus.config.ConnectionSpec(name, hostList, database, authDb,
+                    username, password, messagingImpl, queueName, false, "127.0.0.1", 5555));
 
             ctx.pr("");
             ctx.pr("[good]✓ Connection '" + name + "' saved successfully![r]");
@@ -228,59 +191,15 @@ public class ConfigCommands implements Callable<Integer> {
             ctx.pr("[c3]Queue Name[r] (current: " + currentQueueName + "):");
             String queueName = readLineOrKeep(currentQueueName);
 
-            MorphiumConfig cfg = new MorphiumConfig();
-
-            for (String hostPort : hosts) {
-                String trimmed = hostPort.trim();
-                String[] parts = trimmed.split(":");
-                String host = parts[0];
-                int port = parts.length > 1 ? Integer.parseInt(parts[1]) : 27017;
-                cfg.addHostToSeed(host, port);
-            }
-
-            cfg.setDatabase(database);
-            cfg.setMongoAuthDb(authDb);
-
-            if (!username.isEmpty()) {
-                cfg.setMongoLogin(username);
-                if (!password.isEmpty()) {
-                    cfg.setMongoPassword(password);
-                } else {
-                    String existingPassword = cm.getProperty("morphium." + name + ".mongoPassword", "");
-                    if (!existingPassword.isEmpty()) {
-                        cfg.setMongoPassword(existingPassword);
-                    }
-                }
-            }
-
-            Properties props = cfg.asProperties("morphium." + name);
-            for (Object key : props.keySet()) {
-                String keyStr = key.toString();
-                if (username.isEmpty() && (keyStr.contains(".login") || keyStr.contains(".password"))) {
-                    continue;
-                }
-                cm.setProperty(keyStr, props.getProperty(keyStr));
-            }
-
-            cm.setProperty("morphium." + name + ".messaging.implementation", messagingImpl);
-            cm.setProperty("morphium." + name + ".messaging.queueName", queueName);
-            if (cm.getProperty("morphium." + name + ".messaging.processMultiple") == null) {
-                cm.setProperty("morphium." + name + ".messaging.processMultiple", "true");
-            }
-            if (cm.getProperty("morphium." + name + ".messaging.multithreadded") == null) {
-                cm.setProperty("morphium." + name + ".messaging.multithreadded", "true");
-            }
-            if (cm.getProperty("morphium." + name + ".messaging.windowSize") == null) {
-                cm.setProperty("morphium." + name + ".messaging.windowSize", "10");
-            }
-            if (cm.getProperty("morphium." + name + ".messaging.pause") == null) {
-                cm.setProperty("morphium." + name + ".messaging.pause", "100");
-            }
-            if (cm.getProperty("morphium." + name + ".messaging.senderId") == null) {
-                cm.setProperty("morphium." + name + ".messaging.senderId", UUID.randomUUID().toString());
-            }
-
-            cm.save();
+            java.util.List<String> hostList = new java.util.ArrayList<>();
+            for (String h : hosts) if (!h.trim().isEmpty()) hostList.add(h.trim());
+            // Preserve existing proxy settings across an edit.
+            boolean proxyEnabled = cm.getProperty("morphium." + name + ".proxy.enabled", "false").equals("true");
+            String proxyHost = cm.getProperty("morphium." + name + ".proxy.host", "127.0.0.1");
+            int proxyPort = Integer.parseInt(cm.getProperty("morphium." + name + ".proxy.port", "5555"));
+            new de.caluga.morpheus.config.ConnectionStore(cm).save(
+                new de.caluga.morpheus.config.ConnectionSpec(name, hostList, database, authDb,
+                    username, password, messagingImpl, queueName, proxyEnabled, proxyHost, proxyPort));
 
             ctx.pr("");
             ctx.pr("[good]✓ Connection '" + name + "' updated successfully![r]");
@@ -289,22 +208,11 @@ public class ConfigCommands implements Callable<Integer> {
         private static void removeConnection(MorpheusContext ctx, ConfigurationManager cm, String name) throws Exception {
             ctx.pr("[warning]Remove connection '" + name + "'? (yes/no):[r]");
             String confirm = readLine("no");
-
             if (!confirm.equalsIgnoreCase("yes")) {
                 ctx.pr("Cancelled.");
                 return;
             }
-
-            Set<Object> keysToRemove = cm.getProperties().keySet().stream()
-                .filter(k -> k.toString().startsWith("morphium." + name + "."))
-                .collect(Collectors.toSet());
-
-            for (Object key : keysToRemove) {
-                cm.removeProperty(key.toString());
-            }
-
-            cm.save();
-
+            new de.caluga.morpheus.config.ConnectionStore(cm).delete(name);
             ctx.pr("[good]✓ Connection '" + name + "' removed successfully![r]");
         }
 
