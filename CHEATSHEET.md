@@ -117,7 +117,7 @@ Global options go **before** the subcommand:
 ./run.sh send --topic myTopic --msg "hello world"
 
 # Send with value and TTL
-./run.sh send --topic myTopic --value "42" --ttl 60000
+./run.sh send --topic myTopic --value "42" --ttl 60
 
 # Send and wait for N answers
 ./run.sh send --topic myTopic --msg "ping" --num-answers 3 --wait 10

@@ -293,7 +293,7 @@ Send messages via Morphium messaging:
 - `-t` / `--topic <name>` - Message topic
 - `--msg <text>` - Message text
 - `--value <text>` - Message value
-- `--ttl <ms>` - Time-to-live in milliseconds
+- `--ttl <secs>` - Message time-to-live in seconds (default: wait time)
 - `-n` / `--num-answers <N>` - Number of expected answers
 - `-w` / `--wait <seconds>` - Wait for answers
 - `--no-wait` - Do not wait for answers
@@ -307,7 +307,7 @@ Monitor messages in real-time:
 ```
 
 **Options:**
-- `--timeout <ms>` - Stop monitoring after this many milliseconds
+- `--timeout <ms>` - Threshold in ms after which an unanswered request is marked as timed out (default: 2000)
 
 This displays:
 - Message counter
