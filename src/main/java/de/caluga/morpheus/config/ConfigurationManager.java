@@ -33,7 +33,7 @@ public class ConfigurationManager {
         loadConfiguration();
     }
 
-public void setThemeOverride(String theme) { this.themeOverride = theme; }
+    public void setThemeOverride(String theme) { this.themeOverride = theme; }
     public void setConnectionOverride(String connection) { this.connectionOverride = connection; }
     public void setMessagingOverride(String messaging) { this.messagingOverride = messaging; }
     public void setVerbose(boolean verbose) { this.verbose = verbose; }
