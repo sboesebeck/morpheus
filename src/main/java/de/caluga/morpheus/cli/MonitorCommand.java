@@ -149,6 +149,10 @@ public class MonitorCommand implements Callable<Integer> {
     public Integer call() throws Exception {
         MorpheusContext ctx = parent.context();
         ctx.connect();
+        // The monitor owns the whole terminal from here on. Detach Logback's console appender
+        // so background log lines (ChangeStream/pool warnings on System.out) can't corrupt the
+        // frame. Done AFTER connect() so connection errors still surface normally.
+        silenceConsoleLogging();
         verbose = ctx.getConfig().isVerbose();
 
         // 1. Terminal state (determines initial buffer size)
@@ -474,6 +478,21 @@ public class MonitorCommand implements Callable<Integer> {
     }
 
     // ── helpers ─────────────────────────────────────────────────────────────────
+
+    /**
+     * Removes all appenders from the Logback root logger so nothing reaches the console while
+     * the full-screen monitor is running. No-op if the SLF4J backend is not Logback.
+     */
+    private static void silenceConsoleLogging() {
+        try {
+            org.slf4j.ILoggerFactory factory = org.slf4j.LoggerFactory.getILoggerFactory();
+            if (factory instanceof ch.qos.logback.classic.LoggerContext lc) {
+                lc.getLogger(ch.qos.logback.classic.Logger.ROOT_LOGGER_NAME).detachAndStopAllAppenders();
+            }
+        } catch (Throwable ignored) {
+            // logging backend isn't Logback or its API changed; nothing to silence
+        }
+    }
 
     private String formatRelativeTime(long ageMs) {
         long seconds = ageMs / 1000;

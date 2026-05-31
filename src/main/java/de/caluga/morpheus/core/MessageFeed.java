@@ -6,6 +6,7 @@ import de.caluga.morphium.changestream.ChangeStreamListener;
 import de.caluga.morphium.driver.MorphiumId;
 import de.caluga.morphium.messaging.MorphiumMessaging;
 import de.caluga.morphium.messaging.Msg;
+import de.caluga.morphium.messaging.MsgLock;
 
 import java.util.Map;
 
@@ -20,6 +21,9 @@ public class MessageFeed {
     private final MessageTracker tracker;
     private final Runnable onChange;
     private final boolean verbose;
+
+    /** Set true after the first lock lookup failure so a broken query can't flood the monitor. */
+    private boolean lockLookupDisabled = false;
 
     public MessageFeed(Morphium morphium, MorphiumMessaging messaging,
                        MessageTracker tracker, Runnable onChange, boolean verbose) {
@@ -97,23 +101,28 @@ public class MessageFeed {
     }
 
     private void resolveLockStatus(MorphiumId id, String topic) {
+        if (lockLookupDisabled) {
+            return;
+        }
         try {
+            // Query the lock collection via Morphium's mapped MsgLock entity, exactly as the
+            // messaging layer does internally. Map.class has no mapped _id field, which is why
+            // the old `createQueryFor(Map.class,...).f("_id")` threw "field is null" per event.
+            // MsgLock fields: lockId = who holds the lock, deleteAt = lock expiry (may be null).
             String lockCollection = messaging.getLockCollectionName(topic);
-            var lockQuery = morphium.createQueryFor(Map.class, lockCollection).f("_id").eq(id);
-            Map<String, Object> lockDoc = lockQuery.get();
-            if (lockDoc != null) {
-                Long until = null;
-                Object u = lockDoc.get("locked_until");
-                if (u instanceof Number n) {
-                    until = n.longValue();
-                }
-                tracker.setLockStatus(id, (String) lockDoc.get("locked_by"), until);
+            MsgLock lock = morphium.findById(MsgLock.class, id, lockCollection);
+            if (lock != null) {
+                Long until = lock.getDeleteAt() != null ? lock.getDeleteAt().getTime() : null;
+                tracker.setLockStatus(id, lock.getLockId(), until);
             } else {
                 tracker.setLockStatus(id, null, null);
             }
         } catch (Exception e) {
+            // Disable after the first failure so a broken lookup can't flood the full-screen
+            // monitor with one error line per message.
+            lockLookupDisabled = true;
             if (verbose) {
-                System.err.println("Lock query failed: " + e.getMessage());
+                System.err.println("Lock lookup unavailable, disabled for this session: " + e.getMessage());
             }
         }
     }
