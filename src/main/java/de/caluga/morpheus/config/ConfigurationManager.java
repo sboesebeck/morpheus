@@ -5,7 +5,6 @@ import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.HashSet;
-import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.UUID;
@@ -34,17 +33,7 @@ public class ConfigurationManager {
         loadConfiguration();
     }
 
-    /** @deprecated transition bridge for the old hand-rolled parser; removed in the cleanup task */
-    @Deprecated
-    public ConfigurationManager(Map<String, String> commandArgs) {
-        this();
-        if (commandArgs.containsKey("--theme")) setThemeOverride(commandArgs.get("--theme"));
-        if (commandArgs.containsKey("--morphiumcfg")) setConnectionOverride(commandArgs.get("--morphiumcfg"));
-        if (commandArgs.containsKey("--messaging")) setMessagingOverride(commandArgs.get("--messaging"));
-        if (commandArgs.containsKey("--verbose")) setVerbose(true);
-    }
-
-    public void setThemeOverride(String theme) { this.themeOverride = theme; }
+public void setThemeOverride(String theme) { this.themeOverride = theme; }
     public void setConnectionOverride(String connection) { this.connectionOverride = connection; }
     public void setMessagingOverride(String messaging) { this.messagingOverride = messaging; }
     public void setVerbose(boolean verbose) { this.verbose = verbose; }
