@@ -20,16 +20,19 @@ Morpheus fills in the gap by providing command-line tools for:
 mvn clean package
 
 # First run creates config file
-./run.sh list
+./run.sh --help
 
 # Add your MongoDB connection interactively
 ./run.sh config connection add myconn
 
-# Test your setup
-./run.sh hello --morphiumcfg=myconn --verbose
+# Set it as the default connection
+./run.sh config connection default myconn
+
+# Test your setup (connectivity ping)
+./run.sh -c myconn status --level PING --verbose
 
 # Monitor messages in real-time
-./run.sh monitor --morphiumcfg=myconn
+./run.sh -c myconn monitor
 ```
 
 ## Features
@@ -42,6 +45,8 @@ mvn clean package
 - ✅ **Flexible Configuration**: Multiple connections, themes, and settings
 - ✅ **Clean Architecture**: Refactored with ConfigurationManager, ThemeManager, and separated concerns
 - ✅ **Verbose Mode**: Detailed output for debugging and monitoring
+- ✅ **Per-command `--help`**: Every subcommand has detailed inline help
+- ✅ **Default Connection**: Set a default with `config connection default <name>` to omit `-c` flag
 
 ## Documentation
 

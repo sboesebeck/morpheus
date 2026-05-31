@@ -13,7 +13,7 @@ Morpheus provides an interactive configuration management tool that makes it eas
 ### Quick Help
 
 ```bash
-./run.sh config help
+./run.sh config --help
 ```
 
 ## Managing Connections
@@ -33,6 +33,14 @@ This launches an interactive wizard that prompts for:
 - Password (hidden input)
 - Messaging Implementation (single/multi, default: single)
 - Queue Name (default: msg)
+
+### Set Default Connection
+
+```bash
+./run.sh config connection default production
+```
+
+Once a default is set, you can omit `-c` entirely. If only one connection is configured it is used implicitly.
 
 ### List All Connections
 
@@ -117,7 +125,7 @@ ssh -D 5555 -f -C -q -N user@bastion-host
 # Enable: yes
 
 # Connect through the tunnel
-./run.sh get_status --morphiumcfg=production
+./run.sh -c production status
 ```
 
 ## Theme Management
@@ -149,7 +157,7 @@ theme.mytheme.gradient3=purple
 
 Then use it:
 ```bash
-./run.sh list --theme=mytheme
+./run.sh --theme mytheme status
 ```
 
 ## General Configuration
@@ -218,6 +226,9 @@ morphium.production.proxy.port=5555
 # Add connection
 ./run.sh config connection add production
 
+# Set as default
+./run.sh config connection default production
+
 # Configure proxy (if needed)
 ./run.sh config proxy config production
 
@@ -225,7 +236,7 @@ morphium.production.proxy.port=5555
 ./run.sh config validate
 
 # Test connection
-./run.sh hello --morphiumcfg=production --verbose
+./run.sh --verbose -c production status --level PING
 ```
 
 ### Multiple Environments
@@ -242,9 +253,9 @@ morphium.production.proxy.port=5555
 ./run.sh config proxy enable prod
 
 # Use them
-./run.sh monitor --morphiumcfg=dev
-./run.sh get_status --morphiumcfg=staging
-./run.sh get_status --morphiumcfg=prod
+./run.sh -c dev monitor
+./run.sh -c staging status
+./run.sh -c prod status
 ```
 
 ### Backup and Restore
@@ -288,7 +299,7 @@ cp ~/morpheus-backup.properties ~/.config/morpheus.properties
 ./run.sh config proxy disable production
 
 # Test without proxy
-./run.sh hello --morphiumcfg=production --verbose
+./run.sh --verbose -c production status --level PING
 
 # Re-enable if needed
 ./run.sh config proxy enable production
@@ -326,6 +337,7 @@ cat ~/.config/morpheus.properties
 ## Next Steps
 
 - Set up your first connection with `./run.sh config connection add myconn`
+- Set it as default with `./run.sh config connection default myconn`
 - Configure SOCKS proxy if needed with `./run.sh config proxy config myconn`
 - Validate with `./run.sh config validate`
-- Test with `./run.sh hello --morphiumcfg=myconn --verbose`
+- Test with `./run.sh --verbose -c myconn status --level PING`

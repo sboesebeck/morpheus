@@ -3,23 +3,26 @@
 ## Basic Commands
 
 ```bash
-# List all commands
-./run.sh list
+# Show all subcommands and global options
+./run.sh --help
 
-# Test setup (shows colors, config)
-./run.sh hello
+# Connectivity ping (replaces hello)
+./run.sh status --level PING
 
 # Configuration management
-./run.sh config help
+./run.sh config --help
 
 # Monitor messages in real-time
 ./run.sh monitor
 
 # Get status from all nodes
-./run.sh get_status
+./run.sh status
 
 # Send a message
-./run.sh send
+./run.sh send --topic myTopic --msg "hello"
+
+# Watch MongoDB change stream
+./run.sh watch
 ```
 
 ## Configuration Management
@@ -27,6 +30,9 @@
 ```bash
 # Add connection interactively
 ./run.sh config connection add myconn
+
+# Set default connection (omit -c afterwards)
+./run.sh config connection default myconn
 
 # List connections
 ./run.sh config connection list
@@ -47,6 +53,9 @@
 ./run.sh config proxy enable myconn
 ./run.sh config proxy disable myconn
 
+# List available themes
+./run.sh config theme list
+
 # Show all config
 ./run.sh config show
 
@@ -56,44 +65,65 @@
 
 ## Command-Line Options
 
+Global options go **before** the subcommand:
+
 ```bash
 # Verbose output
-./run.sh <command> --verbose
+./run.sh --verbose <subcommand>
 
 # Use specific theme
-./run.sh <command> --theme=<name>
+./run.sh --theme <name> <subcommand>
 
 # Use specific connection
-./run.sh <command> --morphiumcfg=<name>
+./run.sh -c <name> <subcommand>
 
 # Select messaging implementation
-./run.sh <command> --messaging=single
-./run.sh <command> --messaging=multi
+./run.sh --messaging single <subcommand>
+./run.sh --messaging multi <subcommand>
 
 # List available themes
-./run.sh list --theme=?
+./run.sh config theme list
 
 # List available connections
-./run.sh list --morphiumcfg=?
+./run.sh config connection list
 ```
 
-## Get Status Examples
+## Status Examples
 
 ```bash
 # Quick ping (5 seconds)
-./run.sh get_status level=PING wait=5
+./run.sh status --level PING --wait 5
 
 # Full status with details
-./run.sh get_status verbose=true level=ALL wait=30
+./run.sh --verbose status --level ALL --wait 30
 
 # Filter by host pattern
-./run.sh get_status filter_host=app-server.* verbose=true
+./run.sh status --filter-host 'app-server.*' --level ALL
 
 # Export to Graphite
-./run.sh get_status graphite=localhost:2003
+./run.sh status --graphite localhost:2003
 
 # Specific keys only
-./run.sh get_status keys=cpu,memory,connections verbose=true
+./run.sh --verbose status --keys cpu,memory,connections
+
+# Exclude certain paths
+./run.sh status --exclude-path '/internal/.*'
+```
+
+## Send Examples
+
+```bash
+# Send a simple message
+./run.sh send --topic myTopic --msg "hello world"
+
+# Send with value and TTL
+./run.sh send --topic myTopic --value "42" --ttl 60000
+
+# Send and wait for N answers
+./run.sh send --topic myTopic --msg "ping" --num-answers 3 --wait 10
+
+# Send without waiting
+./run.sh send --topic myTopic --msg "fire and forget" --no-wait
 ```
 
 ## Configuration
@@ -144,16 +174,16 @@ morphium.default_connection.messaging.queueName=msg
 
 ```bash
 # Production monitoring with custom theme
-./run.sh monitor --morphiumcfg=production --theme=prod_red
+./run.sh --theme prod_red -c production monitor
 
 # Debug with full verbosity
-./run.sh get_status --verbose level=ALL wait=60
+./run.sh --verbose status --level ALL --wait 60
 
 # Quick health check
-./run.sh get_status level=PING wait=5
+./run.sh status --level PING --wait 5
 
-# Development setup
-./run.sh hello --morphiumcfg=dev --theme=dev_green --verbose
+# Development setup with verbose status
+./run.sh --verbose --theme dev_green -c dev status --level ALL
 ```
 
 ## Build & Run
@@ -163,13 +193,13 @@ morphium.default_connection.messaging.queueName=msg
 mvn clean package
 
 # Run with helper script
-./run.sh <command> [options]
+./run.sh [global-options] <subcommand> [options]
 
 # Run directly with Java
-java -jar target/morpheus-1.0-SNAPSHOT-jar-with-dependencies.jar <command> [options]
+java -jar target/morpheus-1.0-SNAPSHOT-jar-with-dependencies.jar <subcommand> [options]
 
 # Run with recompile
-./run.sh --rerun <command> [options]
+./run.sh --rerun <subcommand> [options]
 ```
 
 ## Troubleshooting
@@ -178,18 +208,24 @@ java -jar target/morpheus-1.0-SNAPSHOT-jar-with-dependencies.jar <command> [opti
 # Check config file
 cat ~/.config/morpheus.properties
 
-# Test with verbose
-./run.sh hello --verbose
+# Test connectivity with verbose
+./run.sh --verbose status --level PING
 
 # List available connections
-./run.sh list --morphiumcfg=?
+./run.sh config connection list
 
 # List available themes
-./run.sh list --theme=?
+./run.sh config theme list
 
 # Check terminal size detection
-./run.sh hello --verbose | grep Terminal
+./run.sh --verbose status --level PING | grep Terminal
 ```
+
+## Exit Codes
+
+- `0` - Success
+- `1` - Operational error
+- `2` - Usage error (unknown option → did-you-mean suggestion shown)
 
 ## Color Codes
 
