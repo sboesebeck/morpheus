@@ -31,7 +31,11 @@ public class MorpheusTui {
                 stack.top().draw(lanternaScreen.newTextGraphics());
                 lanternaScreen.refresh(RefreshType.DELTA);
 
-                KeyStroke key = lanternaScreen.readInput(); // blocking
+                KeyStroke key = lanternaScreen.pollInput();
+                if (key == null) {
+                    try { Thread.sleep(100); } catch (InterruptedException ignored) {}
+                    continue;
+                }
                 Screen.Result r = stack.top().onKey(key);
                 if (r.kind() == Screen.Result.Kind.QUIT) {
                     break;

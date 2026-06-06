@@ -7,6 +7,7 @@ import com.googlecode.lanterna.input.KeyType;
 import de.caluga.morpheus.cli.MorpheusContext;
 import de.caluga.morpheus.config.ConnectionSpec;
 import de.caluga.morpheus.config.ConnectionStore;
+import de.caluga.morpheus.tui.ConnectionTester;
 import de.caluga.morpheus.tui.Screen;
 import de.caluga.morpheus.tui.widget.ListBox;
 import de.caluga.morpheus.tui.widget.ThemeStyle;
@@ -26,6 +27,8 @@ public class LauncherScreen implements Screen {
     private final ListBox<String> connections;
     private final ListBox<String> views = new ListBox<>(VIEWS);
     private Column active = Column.CONNECTIONS;
+    private ConnectionTester tester;
+    private String testedConnection;
 
     public LauncherScreen(MorpheusContext ctx) {
         this.ctx = ctx;
@@ -48,7 +51,15 @@ public class LauncherScreen implements Screen {
             case ArrowUp ->   (active == Column.CONNECTIONS ? connections : views).up();
             case ArrowDown -> (active == Column.CONNECTIONS ? connections : views).down();
             case Enter -> { /* Task 11 pushes the chosen view here */ return Result.stay(); }
-            default -> { /* a/e/d/t wired in Tasks 8-9 */ }
+            case Character -> {
+                char c = key.getCharacter();
+                if (c == 't' && active == Column.CONNECTIONS && connections.selected() != null) {
+                    testedConnection = connections.selected();
+                    tester = new ConnectionTester(this::probe, 5000);
+                    tester.start(testedConnection);
+                }
+            }
+            default -> { /* a/e/d wired in Task 9 */ }
         }
         return Result.stay();
     }
@@ -79,11 +90,40 @@ public class LauncherScreen implements Screen {
                     ? spec.proxyHost() + ":" + spec.proxyPort() + " ✓" : "aus"));
         }
 
+        // Test result line
+        if (tester != null && testedConnection != null) {
+            int ty = 4 + Math.max(connections.items().size(), VIEWS.size()) + 4;
+            g.putString(2, ty, "Test " + testedConnection + ": " + tester.status());
+        }
+
         // Footer
         g.setForegroundColor(TextColor.ANSI.WHITE);
         g.putString(2, g.getSize().getRows() - 1,
                 "[⏎] starten  [a] neu  [e] edit  [d] löschen  [t] test  [q] quit");
         g.setForegroundColor(TextColor.ANSI.DEFAULT);
+    }
+
+    /** Builds the connection and sends one status PING; returns a short result line. */
+    private String probe(String connectionName) throws Exception {
+        // Fresh config (default path) so the test never mutates the launcher's shared
+        // ConfigurationManager from a background thread.
+        de.caluga.morpheus.config.ConfigurationManager cm = new de.caluga.morpheus.config.ConfigurationManager();
+        cm.setConnectionOverride(connectionName);
+        de.caluga.morphium.Morphium m = null;
+        try {
+            var factory = new de.caluga.morpheus.connection.MorphiumConnectionFactory(cm, ctx.getTheme());
+            m = factory.createMorphium();
+            var messaging = factory.createMessaging(m);
+            var msg = new de.caluga.morphium.messaging.Msg(
+                    messaging.getStatusInfoListenerName(), "ALL", "PING", 3000);
+            msg.setMsgId(new de.caluga.morphium.driver.MorphiumId());
+            long t0 = System.currentTimeMillis();
+            var answers = messaging.sendAndAwaitAnswers(msg, 1000, 3000);
+            long ms = System.currentTimeMillis() - t0;
+            return "● " + answers.size() + " nodes, " + ms + "ms";
+        } finally {
+            if (m != null) m.close();
+        }
     }
 
     private void drawList(TextGraphics g, ListBox<String> box, int x, int y, boolean activeCol) {
