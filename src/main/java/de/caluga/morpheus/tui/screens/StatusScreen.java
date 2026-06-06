@@ -23,8 +23,8 @@ public class StatusScreen implements de.caluga.morpheus.tui.Screen {
                 var messaging = ctx.getMessaging();
                 Msg msg = new Msg(messaging.getStatusInfoListenerName(), "ALL", "PING", 3000);
                 msg.setMsgId(new MorphiumId());
-                var answers = messaging.sendAndAwaitAnswers(msg, 1000, 3000);
                 long t0 = System.currentTimeMillis();
+                var answers = messaging.sendAndAwaitAnswers(msg, 1000, 3000);
                 for (var a : answers) {
                     lines.add(a.getSender() + " @ " + a.getSenderHost()
                             + "  " + (a.getTimestamp() - t0) + "ms");
