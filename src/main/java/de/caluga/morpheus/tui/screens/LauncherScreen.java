@@ -29,6 +29,7 @@ public class LauncherScreen implements Screen {
     private Column active = Column.CONNECTIONS;
     private ConnectionTester tester;
     private String testedConnection;
+    private int lastConnCount = -1;
 
     public LauncherScreen(MorpheusContext ctx) {
         this.ctx = ctx;
@@ -58,14 +59,29 @@ public class LauncherScreen implements Screen {
                     tester = new ConnectionTester(this::probe, 5000);
                     tester.start(testedConnection);
                 }
+                if (c == 'a' && active == Column.CONNECTIONS) {
+                    return Result.push(new ConnectionFormScreen(ctx, null));
+                }
+                if (c == 'e' && active == Column.CONNECTIONS && connections.selected() != null) {
+                    return Result.push(new ConnectionFormScreen(ctx, store.load(connections.selected())));
+                }
+                if (c == 'd' && active == Column.CONNECTIONS && connections.selected() != null) {
+                    return Result.push(new ConfirmDeleteScreen(ctx, connections.selected()));
+                }
             }
-            default -> { /* a/e/d wired in Task 9 */ }
+            default -> { }
         }
         return Result.stay();
     }
 
     @Override
     public void draw(TextGraphics g) {
+        java.util.List<String> names = new java.util.ArrayList<>(store.list());
+        if (names.size() != lastConnCount) {
+            connections.setItems(names);
+            lastConnCount = names.size();
+        }
+
         g.setForegroundColor(ThemeStyle.color("c3"));
         g.putString(2, 0, "M O R P H E U S  ·  Messaging Monitor");
         g.setForegroundColor(TextColor.ANSI.DEFAULT);
