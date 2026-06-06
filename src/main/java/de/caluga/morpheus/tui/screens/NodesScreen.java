@@ -14,19 +14,26 @@ import de.caluga.morpheus.tui.Screen;
 public class NodesScreen implements Screen {
 
     private final MessageTracker tracker;
+    private MorpheusContext ownedCtx;
 
     public NodesScreen(MorpheusContext ctx) {
         this.tracker = new MessageTracker(100);
         // Same guard as MessagesScreen: safe to construct with an unconnected context.
         if (ctx.getMorphium() != null) {
+            this.ownedCtx = ctx;
             MessageFeed feed = new MessageFeed(ctx.getMorphium(), ctx.getMessaging(), tracker, () -> {}, false);
-            Thread t = new Thread(feed::watch, "nodes-feed");
+            Thread t = new Thread(() -> { try { feed.watch(); } catch (Throwable ignored) {} }, "nodes-feed");
             t.setDaemon(true);
             t.start();
         }
     }
 
     NodesScreen(MessageTracker tracker) { this.tracker = tracker; }
+
+    @Override
+    public void onClose() {
+        if (ownedCtx != null) ownedCtx.close();
+    }
 
     @Override
     public Result onKey(KeyStroke key) {

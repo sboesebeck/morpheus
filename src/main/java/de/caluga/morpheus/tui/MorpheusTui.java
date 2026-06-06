@@ -40,9 +40,13 @@ public class MorpheusTui {
                 if (r.kind() == Screen.Result.Kind.QUIT) {
                     break;
                 }
+                if (r.kind() == Screen.Result.Kind.POP || r.kind() == Screen.Result.Kind.REPLACE) {
+                    stack.top().onClose();
+                }
                 stack.apply(r);
             }
         } finally {
+            while (!stack.isEmpty()) { stack.pop().onClose(); }
             lanternaScreen.stopScreen();
         }
     }

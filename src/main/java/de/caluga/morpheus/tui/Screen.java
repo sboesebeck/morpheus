@@ -8,6 +8,9 @@ public interface Screen {
     void draw(TextGraphics g);
     Result onKey(KeyStroke key);
 
+    /** Called when this screen is removed from the stack (pop, replace, or shutdown). Default no-op. */
+    default void onClose() {}
+
     /** Navigation outcome of a key press. */
     final class Result {
         public enum Kind { STAY, POP, QUIT, PUSH, REPLACE }

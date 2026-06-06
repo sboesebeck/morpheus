@@ -16,8 +16,10 @@ public class StatusScreen implements de.caluga.morpheus.tui.Screen {
 
     private final List<String> lines = new ArrayList<>();
     private volatile boolean done = false;
+    private final MorpheusContext ctx;
 
     public StatusScreen(MorpheusContext ctx) {
+        this.ctx = ctx;
         Thread t = new Thread(() -> {
             try {
                 var messaging = ctx.getMessaging();
@@ -30,14 +32,19 @@ public class StatusScreen implements de.caluga.morpheus.tui.Screen {
                             + "  " + (a.getTimestamp() - t0) + "ms");
                 }
                 if (answers.isEmpty()) lines.add("Keine Antworten.");
-            } catch (Exception e) {
-                lines.add("Fehler: " + e.getMessage());
+            } catch (Throwable ignored) {
+                // closing mid-flight must not corrupt the TUI
             } finally {
                 done = true;
             }
         }, "status-ping");
         t.setDaemon(true);
         t.start();
+    }
+
+    @Override
+    public void onClose() {
+        ctx.close();
     }
 
     @Override

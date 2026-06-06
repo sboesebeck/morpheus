@@ -16,6 +16,7 @@ import java.util.List;
 public class MessagesScreen implements Screen {
 
     private final MessageTracker tracker;
+    private MorpheusContext ownedCtx;
 
     /** Production: connect a feed (ctx must already be connected by the launcher). */
     public MessagesScreen(MorpheusContext ctx) {
@@ -23,9 +24,10 @@ public class MessagesScreen implements Screen {
         // Guard so the screen can also be constructed with an unconnected context (unit tests,
         // disabled paths): only start the feed when there is a live Morphium.
         if (ctx.getMorphium() != null) {
+            this.ownedCtx = ctx;
             MessageFeed feed = new MessageFeed(ctx.getMorphium(), ctx.getMessaging(),
                     tracker, () -> {}, false);
-            Thread t = new Thread(feed::watch, "messages-feed");
+            Thread t = new Thread(() -> { try { feed.watch(); } catch (Throwable ignored) {} }, "messages-feed");
             t.setDaemon(true);
             t.start();
         }
@@ -34,6 +36,11 @@ public class MessagesScreen implements Screen {
     /** Test seam: render a hand-fed tracker without a DB feed. */
     MessagesScreen(MessageTracker tracker) {
         this.tracker = tracker;
+    }
+
+    @Override
+    public void onClose() {
+        if (ownedCtx != null) ownedCtx.close();
     }
 
     @Override
