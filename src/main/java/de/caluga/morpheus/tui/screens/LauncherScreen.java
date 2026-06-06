@@ -51,7 +51,24 @@ public class LauncherScreen implements Screen {
             case Tab -> active = (active == Column.CONNECTIONS) ? Column.VIEWS : Column.CONNECTIONS;
             case ArrowUp ->   (active == Column.CONNECTIONS ? connections : views).up();
             case ArrowDown -> (active == Column.CONNECTIONS ? connections : views).down();
-            case Enter -> { /* Task 11 pushes the chosen view here */ return Result.stay(); }
+            case Enter -> {
+                if (active == Column.VIEWS && connections.selected() != null) {
+                    if (views.selected().startsWith("graph")) return Result.stay(); // disabled in Phase 2
+                    // Fresh context per view so switching connections actually reconnects
+                    // (MorpheusContext.connect() is idempotent and would reuse the first one).
+                    de.caluga.morpheus.config.ConfigurationManager cm =
+                        new de.caluga.morpheus.config.ConfigurationManager();
+                    cm.setConnectionOverride(connections.selected());
+                    MorpheusContext viewCtx = new MorpheusContext(cm);
+                    try {
+                        viewCtx.connect();
+                    } catch (Exception ex) {
+                        return Result.stay();
+                    }
+                    Screen view = viewFor(views.selected(), viewCtx);
+                    return view == null ? Result.stay() : Result.push(view);
+                }
+            }
             case Character -> {
                 char c = key.getCharacter();
                 if (c == 't' && active == Column.CONNECTIONS && connections.selected() != null) {
@@ -140,6 +157,16 @@ public class LauncherScreen implements Screen {
         } finally {
             if (m != null) m.close();
         }
+    }
+
+    /** Maps a view name to its screen using the given (already connected) context; null = disabled. */
+    Screen viewFor(String viewName, MorpheusContext viewCtx) {
+        return switch (viewName) {
+            case "messages" -> new MessagesScreen(viewCtx);
+            case "nodes" -> new NodesScreen(viewCtx);
+            case "status" -> new StatusScreen(viewCtx);
+            default -> null; // "graph (Phase 3)"
+        };
     }
 
     private void drawList(TextGraphics g, ListBox<String> box, int x, int y, boolean activeCol) {
