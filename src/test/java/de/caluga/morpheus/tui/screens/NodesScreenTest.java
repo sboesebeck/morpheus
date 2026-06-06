@@ -13,6 +13,15 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 public class NodesScreenTest {
+
+    private Msg msg(String sender, String host) {
+        Msg m = new Msg("t", "m", "v", 30000);
+        m.setMsgId(new MorphiumId());
+        m.setSender(sender); m.setSenderHost(host);
+        m.setTimestamp(System.currentTimeMillis());
+        return m;
+    }
+
     @Test
     void escPops() {
         NodesScreen s = new NodesScreen(new MessageTracker(50));
@@ -20,14 +29,21 @@ public class NodesScreenTest {
     }
 
     @Test
-    void rendersWithoutError() throws Exception {
+    void vTogglesKeyingAndStays() {
+        NodesScreen s = new NodesScreen(new MessageTracker(50));
+        assertEquals(Screen.Result.Kind.STAY, s.onKey(new KeyStroke('v', false, false)).kind());
+    }
+
+    @Test
+    void rendersPairRowsWithoutError() throws Exception {
         MessageTracker tracker = new MessageTracker(50);
-        Msg m = new Msg("t", "m", "v", 30000);
-        m.setMsgId(new MorphiumId());
-        m.setSender("svc-1");
-        m.setSenderHost("host-1");
-        m.setTimestamp(System.currentTimeMillis());
-        tracker.onInsert(m, "t");
+        Msg req = msg("hermes", "app1");
+        req.setTimestamp(1000);
+        tracker.onInsert(req, "t");
+        Msg ans = msg("worker", "h9");
+        ans.setInAnswerTo(req.getMsgId());
+        ans.setTimestamp(1100);
+        tracker.onInsert(ans, "t");
 
         NodesScreen s = new NodesScreen(tracker);
         DefaultVirtualTerminal vt = new DefaultVirtualTerminal();

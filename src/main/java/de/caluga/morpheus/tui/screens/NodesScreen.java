@@ -35,10 +35,13 @@ public class NodesScreen implements Screen {
         if (ownedCtx != null) ownedCtx.close();
     }
 
+    private boolean byHost = true;
+
     @Override
     public Result onKey(KeyStroke key) {
         if (key == null) return Result.stay();
         if (key.getCharacter() != null && key.getCharacter() == 'q') return Result.quit();
+        if (key.getCharacter() != null && key.getCharacter() == 'v') { byHost = !byHost; return Result.stay(); }
         if (key.getKeyType() == KeyType.Escape) return Result.pop();
         return Result.stay();
     }
@@ -47,19 +50,30 @@ public class NodesScreen implements Screen {
     public void draw(TextGraphics g) {
         MessageStats stats = tracker.getStats();
         g.setForegroundColor(TextColor.ANSI.CYAN);
-        g.putString(2, 0, "Aktive Hosts");
+        g.putString(2, 0, "Verteilung: Sender → Antwortender  (" + (byHost ? "Hosts" : "Sender") + ")");
+        g.putString(2, 1, String.format("%-44s %8s %8s", "Sender → Antwortender", "Anzahl", "Ø-RTT"));
         g.setForegroundColor(TextColor.ANSI.DEFAULT);
-        int row = 1;
-        for (var h : stats.getTopHosts(10)) {
-            g.putString(2, row++, String.format("%-30s %d msg", h.name(), h.count()));
+
+        int row = 2;
+        int maxRows = g.getSize().getRows() - 3;
+        int n = 0;
+        for (MessageStats.PairCount p : stats.getTopPairs(byHost, maxRows)) {
+            if (n >= maxRows) break;
+            n++;
+            g.setForegroundColor(n % 2 == 0 ? TextColor.ANSI.WHITE : TextColor.ANSI.DEFAULT);
+            String pair = trunc(p.from() + " → " + p.to(), 44);
+            g.putString(2, row++, String.format("%-44s %8d %7dms", pair, p.count(), p.avgRtt()));
         }
-        row++;
-        g.setForegroundColor(TextColor.ANSI.CYAN);
-        g.putString(2, row++, "Aktive Sender");
+        if (n == 0) {
+            g.setForegroundColor(TextColor.ANSI.DEFAULT);
+            g.putString(2, row, "(noch keine Antworten beobachtet)");
+        }
         g.setForegroundColor(TextColor.ANSI.DEFAULT);
-        for (var sdr : stats.getTopSenders(10)) {
-            g.putString(2, row++, String.format("%-30s %d msg", sdr.name(), sdr.count()));
-        }
-        g.putString(2, g.getSize().getRows() - 1, "[esc] zurück  [q] quit");
+        g.putString(2, g.getSize().getRows() - 1, "[esc] zurück  [v] Hosts/Sender  [q] quit");
+    }
+
+    private String trunc(String s, int max) {
+        if (s == null) return "";
+        return s.length() <= max ? s : s.substring(0, max - 1) + "…";
     }
 }
