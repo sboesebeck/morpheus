@@ -9,8 +9,6 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.UUID;
 
-import de.caluga.morphium.MorphiumConfig;
-
 /**
  * Centralized configuration management for Morpheus
  */
@@ -65,24 +63,6 @@ public class ConfigurationManager {
         properties.setProperty("theme.default.gradient1", "grey");
         properties.setProperty("theme.default.gradient2", "green");
         properties.setProperty("theme.default.gradient3", "yellow");
-
-        // Default Morphium connection
-        MorphiumConfig cfg = new MorphiumConfig();
-        cfg.addHostToSeed("localhost", 27017);
-        cfg.setDatabase("test");
-        cfg.setMongoAuthDb("admin");
-        cfg.setMongoLogin("test");
-        cfg.setMongoPassword("test");
-        properties.putAll(cfg.asProperties("morphium.default_connection"));
-
-        // Default messaging settings
-        properties.put("morphium.default_connection.messaging.processMultiple", "true");
-        properties.put("morphium.default_connection.messaging.multithreadded", "true");
-        properties.put("morphium.default_connection.messaging.windowSize", "10");
-        properties.put("morphium.default_connection.messaging.pause", "100");
-        properties.put("morphium.default_connection.messaging.queueName", "msg");
-        properties.put("morphium.default_connection.messaging.senderId", UUID.randomUUID().toString());
-        properties.put("morphium.default_connection.messaging.implementation", "single");
 
         try {
             StringBuilder doc = new StringBuilder();

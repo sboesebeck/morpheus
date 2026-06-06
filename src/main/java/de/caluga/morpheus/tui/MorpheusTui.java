@@ -49,7 +49,7 @@ public class MorpheusTui {
         try {
             com.googlecode.lanterna.screen.Screen screen =
                 new DefaultTerminalFactory().createScreen();
-            new MorpheusTui(screen, ctx).run(new PlaceholderScreen());
+            new MorpheusTui(screen, ctx).run(new de.caluga.morpheus.tui.screens.LauncherScreen(ctx));
         } catch (IOException e) {
             System.err.println("TUI failed: " + e.getMessage());
         }
