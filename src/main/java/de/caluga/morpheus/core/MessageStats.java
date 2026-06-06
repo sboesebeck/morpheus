@@ -14,6 +14,7 @@ public class MessageStats {
     public record TopicRtt(String topic, long avgRtt, long count) {}
     public record NamedCount(String name, int count) {}
     public record TopicAggregate(String topic, long messages, long answers, long avgRtt, long timeouts) {}
+    public record PairCount(String from, String to, long count, long avgRtt) {}
 
     private final AtomicLong totalMessages = new AtomicLong();
     private final AtomicLong totalAnswers = new AtomicLong();
@@ -25,6 +26,14 @@ public class MessageStats {
         void add(long v) { sum.addAndGet(v); count.incrementAndGet(); }
         long avg() { long c = count.get(); return c == 0 ? 0 : sum.get() / c; }
     }
+
+    private record PairAcc(String from, String to, AtomicLong count, AtomicLong rttSum) {
+        void add(long rtt) { count.incrementAndGet(); rttSum.addAndGet(rtt); }
+        long avg() { long c = count.get(); return c == 0 ? 0 : rttSum.get() / c; }
+    }
+
+    private final ConcurrentHashMap<String, PairAcc> senderPairs = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, PairAcc> hostPairs = new ConcurrentHashMap<>();
 
     private final ConcurrentHashMap<String, RttAcc> topicRtt = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, AtomicLong> topicMessages = new ConcurrentHashMap<>();
@@ -124,6 +133,27 @@ public class MessageStats {
         List<NamedCount> all = new ArrayList<>();
         map.forEach((name, c) -> all.add(new NamedCount(name, c.get())));
         all.sort((a, b) -> Integer.compare(b.count(), a.count()));
+        return List.copyOf(all.subList(0, Math.min(limit, all.size())));
+    }
+
+    public void recordPair(String fromSender, String toSender, String fromHost, String toHost, long rttMs) {
+        recordInto(senderPairs, fromSender, toSender, rttMs);
+        recordInto(hostPairs, fromHost, toHost, rttMs);
+    }
+
+    private void recordInto(ConcurrentHashMap<String, PairAcc> map, String from, String to, long rttMs) {
+        if (from == null) from = "";
+        if (to == null) to = "";
+        String key = from + "→" + to;
+        final String f = from, t = to;
+        map.computeIfAbsent(key, k -> new PairAcc(f, t, new AtomicLong(), new AtomicLong())).add(rttMs);
+    }
+
+    public List<PairCount> getTopPairs(boolean byHost, int limit) {
+        ConcurrentHashMap<String, PairAcc> map = byHost ? hostPairs : senderPairs;
+        List<PairCount> all = new ArrayList<>();
+        map.forEach((k, acc) -> all.add(new PairCount(acc.from(), acc.to(), acc.count().get(), acc.avg())));
+        all.sort((a, b) -> Long.compare(b.count(), a.count()));
         return List.copyOf(all.subList(0, Math.min(limit, all.size())));
     }
 }

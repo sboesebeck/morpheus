@@ -91,6 +91,7 @@ public class MessageTracker {
         if (rtt < 0) {
             return;
         }
+        String origSender = null, origHost = null;
         synchronized (buffer) {
             MessageInfo original = buffer.get(originalId);
             if (original != null) {
@@ -99,9 +100,14 @@ public class MessageTracker {
                 original.answeredBy = answer.getSender();
                 original.answeredByHost = answer.getSenderHost();
                 original.answerIsV5 = MessageInfo.detectV5(answer);
+                origSender = original.sender;
+                origHost = original.senderHost;
             }
         }
         stats.recordRtt(originalTopic, rtt);
+        if (origSender != null || origHost != null) {
+            stats.recordPair(origSender, answer.getSender(), origHost, answer.getSenderHost(), rtt);
+        }
     }
 
     /** An existing message document changed (e.g. processed_by grew). */
