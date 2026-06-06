@@ -13,6 +13,7 @@ import java.util.concurrent.atomic.AtomicLong;
 public class MessageStats {
     public record TopicRtt(String topic, long avgRtt, long count) {}
     public record NamedCount(String name, int count) {}
+    public record TopicAggregate(String topic, long messages, long answers, long avgRtt, long timeouts) {}
 
     private final AtomicLong totalMessages = new AtomicLong();
     private final AtomicLong totalAnswers = new AtomicLong();
@@ -26,6 +27,8 @@ public class MessageStats {
     }
 
     private final ConcurrentHashMap<String, RttAcc> topicRtt = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, AtomicLong> topicMessages = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, AtomicLong> topicTimeouts = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, AtomicInteger> hostCounts = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, AtomicInteger> senderCounts = new ConcurrentHashMap<>();
 
@@ -77,6 +80,34 @@ public class MessageStats {
     public long getRttCount(String topic) {
         RttAcc acc = topicRtt.get(topic);
         return acc == null ? 0 : acc.count().get();
+    }
+
+    public void recordTopicMessage(String topic) {
+        if (topic == null || topic.isEmpty()) return;
+        topicMessages.computeIfAbsent(topic, k -> new AtomicLong()).incrementAndGet();
+    }
+
+    public void recordTopicTimeout(String topic) {
+        if (topic == null || topic.isEmpty()) return;
+        topicTimeouts.computeIfAbsent(topic, k -> new AtomicLong()).incrementAndGet();
+    }
+
+    public List<TopicAggregate> getTopicStats(int limit) {
+        java.util.Set<String> topics = new java.util.HashSet<>();
+        topics.addAll(topicMessages.keySet());
+        topics.addAll(topicRtt.keySet());
+        List<TopicAggregate> all = new ArrayList<>();
+        for (String t : topics) {
+            AtomicLong mc = topicMessages.get(t);
+            AtomicLong tc = topicTimeouts.get(t);
+            all.add(new TopicAggregate(t,
+                    mc == null ? 0 : mc.get(),
+                    getRttCount(t),
+                    getAvgRtt(t),
+                    tc == null ? 0 : tc.get()));
+        }
+        all.sort((a, b) -> Long.compare(b.messages(), a.messages()));
+        return List.copyOf(all.subList(0, Math.min(limit, all.size())));
     }
 
     public List<TopicRtt> getSlowestTopics(int limit) {

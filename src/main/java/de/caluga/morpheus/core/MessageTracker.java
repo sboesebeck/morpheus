@@ -69,6 +69,7 @@ public class MessageTracker {
         }
 
         stats.recordMessage(msg.getSender(), msg.getSenderHost());
+        stats.recordTopicMessage(topic);
         MessageInfo info = new MessageInfo(msg, topic);
         requestTimestamps.put(msg.getMsgId(), msg.getTimestamp());
         if (topic != null && !topic.isEmpty()) {
@@ -145,6 +146,7 @@ public class MessageTracker {
                         && now - info.timestamp > thresholdMs) {
                     info.isTimedOut = true;
                     newTimeouts++;
+                    stats.recordTopicTimeout(info.topic);
                 }
             }
         }
