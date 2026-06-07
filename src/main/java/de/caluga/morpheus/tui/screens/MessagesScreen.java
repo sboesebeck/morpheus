@@ -219,8 +219,8 @@ public class MessagesScreen implements Screen {
 
     /** Distributes terminal width across the variable columns (sender, host, topic, proc, ansBy, ansHost). */
     private int[] columnWidths(int termWidth) {
-        // fixed: #(4) Time(7) Size(6) Ex(3) An(3) RTT(9) + 11 single-space separators ≈ 43
-        int fixed = 4 + 7 + 6 + 3 + 3 + 9 + 12;
+        // fixed: #(4) Time(7) Size(6) Ex(3) An(3) RTT(9) = 32, plus 12 " │ " separators (12*3=36)
+        int fixed = 4 + 7 + 6 + 3 + 3 + 9 + 36;
         int available = Math.max(36, termWidth - fixed - 3);
         int per = available / 6;
         int sender = Math.max(8, per);
