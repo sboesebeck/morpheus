@@ -30,4 +30,11 @@ public class LauncherStartTest {
         assertTrue(s.viewFor("nodes", c) instanceof NodesScreen);
         assertNull(s.viewFor("graph (Phase 3)", c), "graph is disabled in Phase 2");
     }
+
+    @Test
+    void viewForMapsTopics() throws Exception {
+        MorpheusContext c = ctx();
+        LauncherScreen s = new LauncherScreen(c);
+        assertTrue(s.viewFor("topics", c) instanceof TopicsScreen);
+    }
 }

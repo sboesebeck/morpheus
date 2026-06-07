@@ -20,7 +20,7 @@ public class LauncherScreen implements Screen {
 
     public enum Column { CONNECTIONS, VIEWS }
 
-    private static final List<String> VIEWS = List.of("messages", "nodes", "status", "graph (Phase 3)");
+    private static final List<String> VIEWS = List.of("messages", "topics", "nodes", "status", "graph (Phase 3)");
 
     private final MorpheusContext ctx;
     private final ConnectionStore store;
@@ -163,6 +163,7 @@ public class LauncherScreen implements Screen {
     Screen viewFor(String viewName, MorpheusContext viewCtx) {
         return switch (viewName) {
             case "messages" -> new MessagesScreen(viewCtx);
+            case "topics" -> new TopicsScreen(viewCtx);
             case "nodes" -> new NodesScreen(viewCtx);
             case "status" -> new StatusScreen(viewCtx);
             default -> null; // "graph (Phase 3)"

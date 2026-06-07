@@ -48,7 +48,7 @@ public class LauncherScreenTest {
         LauncherScreen s = new LauncherScreen(ctxWithConnections());
         s.onKey(new KeyStroke(KeyType.Tab));
         s.onKey(new KeyStroke(KeyType.ArrowDown));
-        assertEquals("nodes", s.selectedView());
+        assertEquals("topics", s.selectedView());
     }
 
     @Test
