@@ -43,4 +43,24 @@ public class MessagesScreenTest {
         s.draw(ts.newTextGraphics()); // must not throw
         ts.stopScreen();
     }
+
+    @Test
+    void rendersAnswererColumnsWideTerminal() throws Exception {
+        MessageTracker tracker = new MessageTracker(50);
+        Msg req = msg("order.created", "hermes");
+        req.setTimestamp(1000);
+        tracker.onInsert(req, "order.created");
+        Msg ans = msg("order.created", "worker");
+        ans.setInAnswerTo(req.getMsgId());
+        ans.setSenderHost("wh1");
+        ans.setTimestamp(1050);
+        tracker.onInsert(ans, "order.created");
+
+        MessagesScreen s = new MessagesScreen(tracker);
+        DefaultVirtualTerminal vt = new DefaultVirtualTerminal(new com.googlecode.lanterna.TerminalSize(200, 40));
+        TerminalScreen ts = new TerminalScreen(vt);
+        ts.startScreen();
+        s.draw(ts.newTextGraphics()); // must not throw at 200 cols
+        ts.stopScreen();
+    }
 }
