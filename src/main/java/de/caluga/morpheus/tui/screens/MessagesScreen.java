@@ -57,73 +57,164 @@ public class MessagesScreen implements Screen {
         int height = g.getSize().getRows();
         MessageStats stats = tracker.getStats();
 
-        // Stats header
+        // Title bar (centered, blue)
+        String title = "MORPHEUS MESSAGE MONITOR";
+        g.setForegroundColor(TextColor.ANSI.BLUE_BRIGHT);
+        g.putString(Math.max(0, (width - title.length()) / 2), 0, title);
+
+        // Stats header (yellow)
         long uptime = (System.currentTimeMillis() - stats.getStartTime()) / 1000;
         long msgs = stats.getTotalMessages();
         double perSec = uptime > 0 ? msgs / (double) uptime : 0;
         g.setForegroundColor(TextColor.ANSI.YELLOW);
-        g.putString(2, 0, trunc(String.format(
+        g.putString(2, 1, trunc(String.format(
                 "Uptime: %ds | Messages: %d (%.1f/s) | Answers: %d | Updates: %d | Timeouts: %d | Buffer: %d/%d",
                 uptime, msgs, perSec, stats.getTotalAnswers(), stats.getTotalUpdates(),
                 stats.getTotalTimeouts(), tracker.getBufferSize(), 100), width - 3));
 
-        // Summary line: slowest topics
+        // Summary line: slowest topics (magenta)
         g.setForegroundColor(TextColor.ANSI.MAGENTA);
         StringBuilder rtt = new StringBuilder("Ø-RTT/Topic: ");
         for (var t : stats.getSlowestTopics(5)) rtt.append(trunc(t.topic(), 15)).append(":").append(t.avgRtt()).append("ms ");
-        g.putString(2, 1, trunc(rtt.toString(), width - 3));
+        g.putString(2, 2, trunc(rtt.toString(), width - 3));
 
-        // Summary line: most active hosts / senders (ported from the CLI monitor)
+        // Summary line: most active hosts / senders (cyan)
         g.setForegroundColor(TextColor.ANSI.CYAN);
         StringBuilder act = new StringBuilder("Aktiv — Hosts: ");
         for (var h : stats.getTopHosts(5)) act.append(trunc(h.name(), 18)).append("(").append(h.count()).append(") ");
         act.append(" | Sender: ");
         for (var sd : stats.getTopSenders(5)) act.append(trunc(sd.name(), 18)).append("(").append(sd.count()).append(") ");
-        g.putString(2, 2, trunc(act.toString(), width - 3));
+        g.putString(2, 3, trunc(act.toString(), width - 3));
 
         // Column widths from terminal width
         int[] w = columnWidths(width);
         int cSender = w[0], cHost = w[1], cTopic = w[2], cProc = w[3], cAnsBy = w[4], cAnsHost = w[5];
 
-        // Header row
+        // Top rule
+        String rule = "─".repeat(Math.max(0, width - 3));
         g.setForegroundColor(TextColor.ANSI.CYAN);
-        String header = String.format("%-4s %-7s %-" + cSender + "s %-" + cHost + "s %-" + cTopic
-                + "s %-6s %-" + cProc + "s %-3s %-3s %-" + cAnsBy + "s %-" + cAnsHost + "s %-9s",
+        g.putString(2, 4, rule);
+
+        // Header row (cyan) with │ separators
+        g.setForegroundColor(TextColor.ANSI.CYAN);
+        String header = String.format("%-4s │ %-7s │ %-" + cSender + "s │ %-" + cHost + "s │ %-" + cTopic
+                + "s │ %-6s │ %-" + cProc + "s │ %-3s │ %-3s │ %-" + cAnsBy + "s │ %-" + cAnsHost + "s │ %-9s",
                 "#", "Time", "Sender", "Host", "Topic", "Size", "Proc", "Ex", "An",
                 "AnswerBy", "AnsHost", "RTT");
-        g.putString(2, 3, trunc(header, width - 3));
+        g.putString(2, 5, trunc(header, width - 3));
 
-        // Rows newest-first
+        // Bottom rule
+        g.setForegroundColor(TextColor.ANSI.CYAN);
+        g.putString(2, 6, rule);
+
+        // Rows newest-first, cell-by-cell so version tags can be colored independently
         var messages = tracker.getMessagesNewestFirst();
         long now = System.currentTimeMillis();
-        int row = 4;
-        int maxRows = height - 6;
+        int dataStart = 7;
+        int row = dataStart;
+        int maxRows = Math.max(0, height - dataStart - 1);
         int n = 0;
         for (MessageInfo info : messages) {
             if (n >= maxRows) break;
             n++;
-            if (info.isTimedOut) g.setForegroundColor(TextColor.ANSI.RED);
-            else g.setForegroundColor(n % 2 == 0 ? TextColor.ANSI.WHITE : TextColor.ANSI.DEFAULT);
-            String time = ((now - info.timestamp) / 1000) + "s";
-            String ver = info.isV5 ? "5" : "6";
-            String sender = trunc((info.sender == null ? "" : info.sender) + "·v" + ver, cSender);
-            String host = trunc(info.senderHost, cHost);
-            String topic = trunc(info.isDeleted ? "[DEL]" + info.topic : info.topic, cTopic);
-            String size = info.size + "B";
-            String proc = trunc(procStr(info, now), cProc);
-            String ex = info.isExclusive ? "X" : "";
-            String an = info.rtt != null ? "Y" : "";
-            String ansBy = trunc(info.answeredBy, cAnsBy);
-            String ansHost = trunc(info.answeredByHost, cAnsHost);
-            String rttStr = info.rtt != null ? info.rtt + "ms" : "";
-            String line = String.format("%-4d %-7s %-" + cSender + "s %-" + cHost + "s %-" + cTopic
-                    + "s %-6s %-" + cProc + "s %-3s %-3s %-" + cAnsBy + "s %-" + cAnsHost + "s %-9s",
-                    n, time, sender, host, topic, size, proc, ex, an, ansBy, ansHost, rttStr);
-            g.putString(2, row++, trunc(line, width - 3));
+            TextColor base = info.isTimedOut ? TextColor.ANSI.RED
+                    : (n % 2 == 0 ? TextColor.ANSI.WHITE : TextColor.ANSI.DEFAULT);
+            drawRow(g, row++, width, n, base, info, now, cSender, cHost, cTopic, cProc, cAnsBy, cAnsHost);
         }
 
         g.setForegroundColor(TextColor.ANSI.DEFAULT);
         g.putString(2, height - 1, "[esc] zurück  [q] quit");
+    }
+
+    /** V5 → yellow, V6 → green (independent of the row's base color). */
+    static TextColor tagColor(boolean isV5) {
+        return isV5 ? TextColor.ANSI.YELLOW : TextColor.ANSI.GREEN;
+    }
+
+    /** Draws one message row cell-by-cell with │ separators and colored [V5]/[V6] tags. */
+    private void drawRow(TextGraphics g, int y, int width, int n, TextColor base, MessageInfo info, long now,
+                         int cSender, int cHost, int cTopic, int cProc, int cAnsBy, int cAnsHost) {
+        int maxX = width - 1;
+        int x = 2;
+        String time = ((now - info.timestamp) / 1000) + "s";
+        String topic = info.isDeleted ? "[DEL]" + info.topic : info.topic;
+        String size = info.size + "B";
+        String proc = procStr(info, now);
+        String ex = info.isExclusive ? "X" : "";
+        String an = info.rtt != null ? "Y" : "";
+        String rttStr = info.rtt != null ? info.rtt + "ms" : "";
+
+        x = field(g, x, y, maxX, String.valueOf(n), 4, base);
+        x = sep(g, x, y, maxX);
+        x = field(g, x, y, maxX, time, 7, base);
+        x = sep(g, x, y, maxX);
+        x = taggedField(g, x, y, maxX, info.sender == null ? "" : info.sender, info.isV5, cSender, base);
+        x = sep(g, x, y, maxX);
+        x = taggedField(g, x, y, maxX, info.senderHost == null ? "" : info.senderHost, info.isV5, cHost, base);
+        x = sep(g, x, y, maxX);
+        x = field(g, x, y, maxX, topic, cTopic, base);
+        x = sep(g, x, y, maxX);
+        x = field(g, x, y, maxX, size, 6, base);
+        x = sep(g, x, y, maxX);
+        x = field(g, x, y, maxX, proc, cProc, base);
+        x = sep(g, x, y, maxX);
+        x = field(g, x, y, maxX, ex, 3, base);
+        x = sep(g, x, y, maxX);
+        x = field(g, x, y, maxX, an, 3, base);
+        x = sep(g, x, y, maxX);
+        if (info.answeredBy != null) {
+            x = taggedField(g, x, y, maxX, info.answeredBy, info.answerIsV5, cAnsBy, base);
+        } else {
+            x = field(g, x, y, maxX, "", cAnsBy, base);
+        }
+        x = sep(g, x, y, maxX);
+        if (info.answeredBy != null && info.answeredByHost != null) {
+            x = taggedField(g, x, y, maxX, info.answeredByHost, info.answerIsV5, cAnsHost, base);
+        } else {
+            x = field(g, x, y, maxX, "", cAnsHost, base);
+        }
+        x = sep(g, x, y, maxX);
+        field(g, x, y, maxX, rttStr, 9, base);
+    }
+
+    /** Writes a left-justified field of width w in `color`, clipped to maxX; returns the new x. */
+    private int field(TextGraphics g, int x, int y, int maxX, String s, int w, TextColor color) {
+        if (x >= maxX) return x;
+        String text = pad(trunc(s, w), w);
+        if (x + text.length() > maxX) text = text.substring(0, Math.max(0, maxX - x));
+        g.setForegroundColor(color);
+        g.putString(x, y, text);
+        return x + text.length();
+    }
+
+    /** Writes a field whose last 4 chars are a colored [V5]/[V6] tag; total width w; returns new x. */
+    private int taggedField(TextGraphics g, int x, int y, int maxX, String text, boolean isV5, int w, TextColor base) {
+        int textW = Math.max(0, w - 4);
+        int nx = field(g, x, y, maxX, text, textW, base);
+        if (nx < maxX) {
+            String tag = isV5 ? "[V5]" : "[V6]";
+            if (nx + tag.length() > maxX) tag = tag.substring(0, Math.max(0, maxX - nx));
+            g.setForegroundColor(tagColor(isV5));
+            g.putString(nx, y, tag);
+            nx += tag.length();
+        }
+        return nx;
+    }
+
+    /** Writes the " │ " separator in a dim color, clipped to maxX; returns the new x. */
+    private int sep(TextGraphics g, int x, int y, int maxX) {
+        if (x >= maxX) return x;
+        String s = " │ ";
+        if (x + s.length() > maxX) s = s.substring(0, Math.max(0, maxX - x));
+        g.setForegroundColor(TextColor.ANSI.BLACK_BRIGHT);
+        g.putString(x, y, s);
+        return x + s.length();
+    }
+
+    /** Right-pads s with spaces to width w (no truncation; callers trunc first). */
+    private String pad(String s, int w) {
+        if (s.length() >= w) return s;
+        return s + " ".repeat(w - s.length());
     }
 
     /** Distributes terminal width across the variable columns (sender, host, topic, proc, ansBy, ansHost). */

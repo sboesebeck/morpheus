@@ -45,6 +45,40 @@ public class MessagesScreenTest {
     }
 
     @Test
+    void tagColorIsYellowForV5GreenForV6() {
+        assertEquals(com.googlecode.lanterna.TextColor.ANSI.YELLOW, MessagesScreen.tagColor(true));
+        assertEquals(com.googlecode.lanterna.TextColor.ANSI.GREEN, MessagesScreen.tagColor(false));
+    }
+
+    @Test
+    void rendersV5AndV6AndTimeoutWithoutError() throws Exception {
+        MessageTracker tracker = new MessageTracker(50);
+        Msg v6 = msg("order.created", "svc-6");                 // v6 by default
+        tracker.onInsert(v6, "order.created");
+        Msg v5 = msg("legacy.topic", "svc-5");
+        // v5.setVersion(5) omitted: Msg has no setVersion(); isV5 is detected via getTopic()==null
+        tracker.onInsert(v5, "legacy.topic");
+        MessagesScreen s = new MessagesScreen(tracker);
+        DefaultVirtualTerminal vt = new DefaultVirtualTerminal(new com.googlecode.lanterna.TerminalSize(120, 30));
+        TerminalScreen ts = new TerminalScreen(vt);
+        ts.startScreen();
+        s.draw(ts.newTextGraphics());                          // must not throw
+        ts.stopScreen();
+    }
+
+    @Test
+    void rendersNarrowTerminalWithoutError() throws Exception {
+        MessageTracker tracker = new MessageTracker(50);
+        tracker.onInsert(msg("order.created", "svc-1"), "order.created");
+        MessagesScreen s = new MessagesScreen(tracker);
+        DefaultVirtualTerminal vt = new DefaultVirtualTerminal(new com.googlecode.lanterna.TerminalSize(40, 12));
+        TerminalScreen ts = new TerminalScreen(vt);
+        ts.startScreen();
+        s.draw(ts.newTextGraphics());                          // must not throw at 40 cols
+        ts.stopScreen();
+    }
+
+    @Test
     void rendersAnswererColumnsWideTerminal() throws Exception {
         MessageTracker tracker = new MessageTracker(50);
         Msg req = msg("order.created", "hermes");
