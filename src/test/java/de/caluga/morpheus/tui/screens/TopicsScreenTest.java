@@ -29,6 +29,26 @@ public class TopicsScreenTest {
     }
 
     @Test
+    void drawMarksTimeoutsOnOldUnansweredMessages() throws Exception {
+        MessageTracker tracker = new MessageTracker(50);
+        Msg old = req("orders");
+        old.setTimestamp(System.currentTimeMillis() - 10_000);
+        tracker.onInsert(old, "orders");
+
+        TopicsScreen s = new TopicsScreen(tracker);
+        com.googlecode.lanterna.terminal.virtual.DefaultVirtualTerminal vt =
+                new com.googlecode.lanterna.terminal.virtual.DefaultVirtualTerminal();
+        com.googlecode.lanterna.screen.TerminalScreen ts =
+                new com.googlecode.lanterna.screen.TerminalScreen(vt);
+        ts.startScreen();
+        s.draw(ts.newTextGraphics());
+        ts.stopScreen();
+
+        assertEquals(1, tracker.getStats().getTopicStats(10).get(0).timeouts(),
+                "draw() must mark the old unanswered message as timed out");
+    }
+
+    @Test
     void rendersTopicRowsWithoutError() throws Exception {
         MessageTracker tracker = new MessageTracker(50);
         tracker.onInsert(req("order.created"), "order.created");

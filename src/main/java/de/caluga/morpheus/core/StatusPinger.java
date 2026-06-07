@@ -45,7 +45,6 @@ public class StatusPinger {
     }
 
     /** Parses one answer into a NodeEntry. Topics come from the listeners map's keys. */
-    @SuppressWarnings("unchecked")
     static NodeEntry parse(Msg answer, long sendTime) {
         long rtt = Math.max(0, answer.getTimestamp() - sendTime);
         List<String> topics = new ArrayList<>();

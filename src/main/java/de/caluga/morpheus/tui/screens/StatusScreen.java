@@ -71,6 +71,9 @@ public class StatusScreen implements Screen {
 
     @Override
     public void draw(TextGraphics g) {
+        if (pinger != null && !pinging && System.currentTimeMillis() - lastPing > 10_000) {
+            refresh();
+        }
         g.setForegroundColor(TextColor.ANSI.CYAN);
         g.putString(2, 0, pinging ? "Knoten-Roster (Ping läuft…)" : "Knoten-Roster (Status-Ping)");
         g.putString(2, 1, String.format("%-26s %6s  %s", "Knoten (Sender@Host)", "RTT", "Abonnierte Topics"));

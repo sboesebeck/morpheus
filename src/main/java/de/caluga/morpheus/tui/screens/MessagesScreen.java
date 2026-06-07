@@ -52,6 +52,7 @@ public class MessagesScreen implements Screen {
 
     @Override
     public void draw(TextGraphics g) {
+        tracker.markTimeouts(System.currentTimeMillis(), 2000);
         int width = g.getSize().getColumns();
         int height = g.getSize().getRows();
         MessageStats stats = tracker.getStats();

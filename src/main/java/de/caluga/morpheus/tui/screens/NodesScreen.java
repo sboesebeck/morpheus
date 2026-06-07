@@ -10,7 +10,7 @@ import de.caluga.morpheus.core.MessageStats;
 import de.caluga.morpheus.core.MessageTracker;
 import de.caluga.morpheus.tui.Screen;
 
-/** Node activity list (top hosts/senders) from the core/ stats. */
+/** Sender→answerer pair distribution (counts + avg RTT), host/sender keyed. */
 public class NodesScreen implements Screen {
 
     private final MessageTracker tracker;

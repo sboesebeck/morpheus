@@ -44,6 +44,7 @@ public class TopicsScreen implements Screen {
 
     @Override
     public void draw(TextGraphics g) {
+        tracker.markTimeouts(System.currentTimeMillis(), 2000);
         MessageStats stats = tracker.getStats();
         g.setForegroundColor(TextColor.ANSI.CYAN);
         g.putString(2, 0, String.format("%-34s %8s %8s %8s %8s", "Topic", "Nachr.", "Antw.", "Ø-RTT", "Timeout"));
