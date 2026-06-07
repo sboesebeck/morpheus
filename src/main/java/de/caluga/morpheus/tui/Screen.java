@@ -11,6 +11,9 @@ public interface Screen {
     /** Called when this screen is removed from the stack (pop, replace, or shutdown). Default no-op. */
     default void onClose() {}
 
+    /** Called every idle frame; lets a screen self-transition on a background event. Default: stay. */
+    default Result tick() { return Result.stay(); }
+
     /** Navigation outcome of a key press. */
     final class Result {
         public enum Kind { STAY, POP, QUIT, PUSH, REPLACE }
