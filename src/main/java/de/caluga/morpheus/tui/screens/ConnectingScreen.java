@@ -45,6 +45,18 @@ public class ConnectingScreen implements Screen {
         }, viewFactory);
     }
 
+    /** CLI path: connect an already-built (but not yet connected) context on its own thread. */
+    public ConnectingScreen(MorpheusContext unconnectedCtx, String viewName,
+                            BiFunction<String, MorpheusContext, Screen> viewFactory) {
+        this(labelFor(unconnectedCtx), viewName,
+             () -> { unconnectedCtx.connect(); return unconnectedCtx; }, viewFactory);
+    }
+
+    private static String labelFor(MorpheusContext ctx) {
+        String name = ctx.getConfig().getConnection();
+        return (name == null || name.isEmpty()) ? "…" : name;
+    }
+
     /** Test seam: inject the connect step and view factory. */
     ConnectingScreen(String label, String viewName, Connector connector,
                      BiFunction<String, MorpheusContext, Screen> viewFactory) {

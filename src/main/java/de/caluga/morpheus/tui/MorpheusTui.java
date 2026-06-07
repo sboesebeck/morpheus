@@ -84,6 +84,21 @@ public class MorpheusTui {
         }
     }
 
+    /** CLI entry: open the TUI directly on one view, connecting async behind the spinner.
+     *  The view is the only screen, so Esc / connect-failure empties the stack and the program exits. */
+    public static void launchView(MorpheusContext ctx, String viewName) {
+        silenceConsoleLogging();
+        try {
+            com.googlecode.lanterna.screen.Screen screen =
+                new DefaultTerminalFactory().createScreen();
+            new MorpheusTui(screen, ctx).run(
+                new de.caluga.morpheus.tui.screens.ConnectingScreen(
+                    ctx, viewName, de.caluga.morpheus.tui.screens.LauncherScreen::viewFor));
+        } catch (IOException e) {
+            System.err.println("TUI failed: " + e.getMessage());
+        }
+    }
+
     /** Detach Logback's console appender so logs cannot corrupt the full-screen UI. */
     private static void silenceConsoleLogging() {
         try {

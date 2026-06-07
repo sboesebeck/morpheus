@@ -97,4 +97,20 @@ public class ConnectingScreenTest {
         s.draw(ts.newTextGraphics()); // CONNECTING spinner, must not throw
         ts.stopScreen();
     }
+
+    @Test
+    void ctxConstructorConnectsPassedContextThenHandsOff() throws Exception {
+        boolean[] connected = {false};
+        MorpheusContext ctx = new MorpheusContext(
+                new ConfigurationManager(tmp.resolve("m.properties").toString())) {
+            @Override public synchronized void connect() { connected[0] = true; } // no real DB
+        };
+        Screen view = dummyView();
+        ConnectingScreen s = new ConnectingScreen(ctx, "messages", (name, c) -> view);
+        await(() -> s.isReady(), 2000);
+        assertTrue(connected[0], "ctx constructor must connect the passed context");
+        Screen.Result r = s.tick();
+        assertEquals(Screen.Result.Kind.REPLACE, r.kind());
+        assertSame(view, r.next());
+    }
 }

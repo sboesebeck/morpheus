@@ -173,7 +173,7 @@ public class LauncherScreen implements Screen {
     }
 
     /** Maps a view name to its screen using the given (already connected) context; null = disabled. */
-    static Screen viewFor(String viewName, MorpheusContext viewCtx) {
+    public static Screen viewFor(String viewName, MorpheusContext viewCtx) {
         return switch (viewName) {
             case "messages" -> new MessagesScreen(viewCtx);
             case "topics" -> new TopicsScreen(viewCtx);
