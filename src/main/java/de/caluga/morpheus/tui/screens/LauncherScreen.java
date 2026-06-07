@@ -9,6 +9,7 @@ import de.caluga.morpheus.config.ConnectionSpec;
 import de.caluga.morpheus.config.ConnectionStore;
 import de.caluga.morpheus.tui.ConnectionTester;
 import de.caluga.morpheus.tui.Screen;
+import de.caluga.morpheus.tui.widget.Banner;
 import de.caluga.morpheus.tui.widget.ListBox;
 import de.caluga.morpheus.tui.widget.ThemeStyle;
 
@@ -53,20 +54,9 @@ public class LauncherScreen implements Screen {
             case ArrowDown -> (active == Column.CONNECTIONS ? connections : views).down();
             case Enter -> {
                 if (active == Column.VIEWS && connections.selected() != null) {
-                    if (views.selected().startsWith("graph")) return Result.stay(); // disabled in Phase 2
-                    // Fresh context per view so switching connections actually reconnects
-                    // (MorpheusContext.connect() is idempotent and would reuse the first one).
-                    de.caluga.morpheus.config.ConfigurationManager cm =
-                        new de.caluga.morpheus.config.ConfigurationManager();
-                    cm.setConnectionOverride(connections.selected());
-                    MorpheusContext viewCtx = new MorpheusContext(cm);
-                    try {
-                        viewCtx.connect();
-                    } catch (Exception ex) {
-                        return Result.stay();
-                    }
-                    Screen view = viewFor(views.selected(), viewCtx);
-                    return view == null ? Result.stay() : Result.push(view);
+                    if (views.selected().startsWith("graph")) return Result.stay(); // disabled
+                    return Result.push(new ConnectingScreen(
+                            connections.selected(), views.selected(), LauncherScreen::viewFor));
                 }
             }
             case Character -> {
@@ -99,40 +89,63 @@ public class LauncherScreen implements Screen {
             lastConnCount = names.size();
         }
 
-        g.setForegroundColor(ThemeStyle.color("c3"));
-        g.putString(2, 0, "M O R P H E U S  ·  Messaging Monitor");
+        // Banner + tagline
+        Banner.draw(g, 2, 0); // rows 0..4
+        g.setForegroundColor(TextColor.ANSI.WHITE_BRIGHT);
+        g.putString(2, Banner.LINES.length, "Messaging Monitor · v" + de.caluga.morpheus.Version.VERSION);
         g.setForegroundColor(TextColor.ANSI.DEFAULT);
 
+        int top = Banner.LINES.length + 2; // columns start below banner+tagline
+
         // Connection column
-        g.putString(2, 2, "Verbindungen");
-        drawList(g, connections, 2, 3, active == Column.CONNECTIONS);
+        g.setForegroundColor(ThemeStyle.color("c3"));
+        g.putString(2, top, "Verbindungen");
+        g.setForegroundColor(TextColor.ANSI.DEFAULT);
+        drawList(g, connections, 2, top + 1, active == Column.CONNECTIONS);
 
         // View column
         int viewCol = 30;
-        g.putString(viewCol, 2, "Start-Ansicht");
-        drawList(g, views, viewCol, 3, active == Column.VIEWS);
+        g.setForegroundColor(ThemeStyle.color("c3"));
+        g.putString(viewCol, top, "Start-Ansicht");
+        g.setForegroundColor(TextColor.ANSI.DEFAULT);
+        drawList(g, views, viewCol, top + 1, active == Column.VIEWS);
 
         // Details of highlighted connection
         String sel = connections.selected();
+        int dy = top + 2 + Math.max(connections.items().size(), VIEWS.size());
         if (sel != null) {
             ConnectionSpec spec = store.load(sel);
-            int dy = 4 + Math.max(connections.items().size(), VIEWS.size());
-            g.putString(2, dy, "Hosts: " + String.join(",", spec.hosts()));
-            g.putString(2, dy + 1, "DB: " + spec.database());
-            g.putString(2, dy + 2, "Proxy: " + (spec.proxyEnabled()
-                    ? spec.proxyHost() + ":" + spec.proxyPort() + " ✓" : "aus"));
+            g.setForegroundColor(TextColor.ANSI.WHITE);
+            g.putString(2, dy, "Hosts: ");
+            g.setForegroundColor(TextColor.ANSI.DEFAULT);
+            g.putString(9, dy, String.join(",", spec.hosts()));
+            g.setForegroundColor(TextColor.ANSI.WHITE);
+            g.putString(2, dy + 1, "DB: ");
+            g.setForegroundColor(TextColor.ANSI.DEFAULT);
+            g.putString(6, dy + 1, spec.database());
+            g.setForegroundColor(TextColor.ANSI.WHITE);
+            g.putString(2, dy + 2, "Proxy: ");
+            if (spec.proxyEnabled()) {
+                g.setForegroundColor(TextColor.ANSI.GREEN_BRIGHT);
+                g.putString(9, dy + 2, spec.proxyHost() + ":" + spec.proxyPort() + " ✓");
+            } else {
+                g.setForegroundColor(TextColor.ANSI.DEFAULT);
+                g.putString(9, dy + 2, "aus");
+            }
+            g.setForegroundColor(TextColor.ANSI.DEFAULT);
         }
 
         // Test result line
         if (tester != null && testedConnection != null) {
-            int ty = 4 + Math.max(connections.items().size(), VIEWS.size()) + 4;
-            g.putString(2, ty, "Test " + testedConnection + ": " + tester.status());
+            g.putString(2, dy + 4, "Test " + testedConnection + ": " + tester.status());
         }
 
-        // Footer
-        g.setForegroundColor(TextColor.ANSI.WHITE);
-        g.putString(2, g.getSize().getRows() - 1,
-                "[⏎] starten  [a] neu  [e] edit  [d] löschen  [t] test  [q] quit");
+        // Footer (colored keys)
+        int fy = g.getSize().getRows() - 1;
+        g.setForegroundColor(TextColor.ANSI.GREEN_BRIGHT);
+        g.putString(2, fy, "[⏎] starten  ");
+        g.setForegroundColor(TextColor.ANSI.CYAN);
+        g.putString(15, fy, "[a] neu  [e] edit  [d] löschen  [t] test  [q] quit");
         g.setForegroundColor(TextColor.ANSI.DEFAULT);
     }
 
@@ -160,7 +173,7 @@ public class LauncherScreen implements Screen {
     }
 
     /** Maps a view name to its screen using the given (already connected) context; null = disabled. */
-    Screen viewFor(String viewName, MorpheusContext viewCtx) {
+    static Screen viewFor(String viewName, MorpheusContext viewCtx) {
         return switch (viewName) {
             case "messages" -> new MessagesScreen(viewCtx);
             case "topics" -> new TopicsScreen(viewCtx);
@@ -175,7 +188,8 @@ public class LauncherScreen implements Screen {
         for (int i = 0; i < items.size(); i++) {
             boolean sel = i == box.selectedIndex();
             String marker = sel ? "▶ " : "  ";
-            if (sel && activeCol) g.setForegroundColor(ThemeStyle.color("c3"));
+            if (sel && activeCol) g.setForegroundColor(TextColor.ANSI.GREEN_BRIGHT);
+            else if (sel) g.setForegroundColor(ThemeStyle.color("c3"));
             else g.setForegroundColor(TextColor.ANSI.DEFAULT);
             g.putString(x, y + i, marker + items.get(i));
         }
