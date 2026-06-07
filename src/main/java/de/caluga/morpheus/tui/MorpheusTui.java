@@ -24,12 +24,17 @@ public class MorpheusTui {
     public void run(Screen initial) throws IOException {
         stack.push(initial);
         lanternaScreen.startScreen();
+        java.io.PrintStream savedErr = System.err;
+        // Stray library/driver stderr would corrupt the Lanterna buffer; swallow it for the session.
+        System.setErr(new java.io.PrintStream(java.io.OutputStream.nullOutputStream()));
+        boolean forceComplete = false;
         try {
             while (!stack.isEmpty()) {
                 lanternaScreen.doResizeIfNecessary();
                 lanternaScreen.clear();
                 stack.top().draw(lanternaScreen.newTextGraphics());
-                lanternaScreen.refresh(RefreshType.DELTA);
+                lanternaScreen.refresh(forceComplete ? RefreshType.COMPLETE : RefreshType.DELTA);
+                forceComplete = false;
 
                 KeyStroke key = lanternaScreen.pollInput();
                 if (key == null) {
@@ -41,12 +46,16 @@ public class MorpheusTui {
                     break;
                 }
                 if (r.kind() == Screen.Result.Kind.POP || r.kind() == Screen.Result.Kind.REPLACE) {
-                    stack.top().onClose();
+                    try { stack.top().onClose(); } catch (Throwable ignored) {}
+                    forceComplete = true; // fully repaint the revealed screen, leaving no remnants
                 }
                 stack.apply(r);
             }
         } finally {
-            while (!stack.isEmpty()) { stack.pop().onClose(); }
+            while (!stack.isEmpty()) {
+                try { stack.pop().onClose(); } catch (Throwable ignored) {}
+            }
+            System.setErr(savedErr);
             lanternaScreen.stopScreen();
         }
     }
