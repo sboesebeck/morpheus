@@ -7,10 +7,12 @@ public class MorpheusCli {
 
     public static CommandLine buildCommandLine(RootCommand root) {
         CommandLine cl = new CommandLine(root);
+        cl.addSubcommand("messages", new MessagesCommand());
+        cl.addSubcommand("topics", new TopicsCommand());
+        cl.addSubcommand("nodes", new NodesCommand());
         cl.addSubcommand("status", new StatusCommand());
         cl.addSubcommand("send", new SendCommand());
         cl.addSubcommand("watch", new WatchCommand());
-        cl.addSubcommand("monitor", new MonitorCommand());
         cl.addSubcommand("config", new ConfigCommands());
         return cl;
     }

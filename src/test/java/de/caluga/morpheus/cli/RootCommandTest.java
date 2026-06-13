@@ -46,7 +46,9 @@ public class RootCommandTest {
         assertTrue(help.contains("status"));
         assertTrue(help.contains("send"));
         assertTrue(help.contains("watch"));
-        assertTrue(help.contains("monitor"));
+        assertTrue(help.contains("messages"));
+        assertTrue(help.contains("topics"));
+        assertTrue(help.contains("nodes"));
         assertTrue(help.contains("config"));
     }
 }
