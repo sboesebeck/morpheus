@@ -33,6 +33,7 @@ public class FlowDeriver {
         Set<MorphiumId> present = new HashSet<>();
         for (MessageInfo m : snapshot) {
             if (m.id == null) continue;
+            if (m.sender != null && m.sender.equals(selfId)) continue;   // never track our own traffic
             present.add(m.id);
             Seen s = seen.get(m.id);
             boolean isNew = s == null;
