@@ -26,4 +26,21 @@ public class CliCommandSurfaceTest {
         assertEquals("topics", new TopicsCommand().viewName());
         assertEquals("nodes", new NodesCommand().viewName());
     }
+
+    @Test
+    void statusIsViewOpenerAndPingIsScriptable() {
+        var subs = cli().getSubcommands();
+        assertTrue(subs.containsKey("ping"), "ping must be registered");
+        assertTrue(subs.get("status").getCommand() instanceof StatusViewCommand,
+                "status must be the TUI roster opener");
+        assertTrue(subs.get("ping").getCommand() instanceof PingCommand,
+                "ping must be the scriptable command");
+    }
+
+    @Test
+    void pingKeepsGraphiteOption() {
+        var ping = cli().getSubcommands().get("ping");
+        assertTrue(ping.getCommandSpec().optionsMap().containsKey("--graphite"),
+                "ping must keep the --graphite option");
+    }
 }

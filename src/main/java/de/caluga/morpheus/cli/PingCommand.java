@@ -17,10 +17,10 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
 
-@Command(name = "status",
-         description = "Query status of all connected Morphium messaging nodes.",
+@Command(name = "ping",
+         description = "One-shot status ping of all messaging nodes (scriptable; supports --graphite).",
          mixinStandardHelpOptions = true)
-public class StatusCommand implements Callable<Integer> {
+public class PingCommand implements Callable<Integer> {
 
     public enum Level { PING, MESSAGING_ONLY, MORPHIUM_ONLY, ALL }
 

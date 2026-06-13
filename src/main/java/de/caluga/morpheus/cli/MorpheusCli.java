@@ -10,7 +10,8 @@ public class MorpheusCli {
         cl.addSubcommand("messages", new MessagesCommand());
         cl.addSubcommand("topics", new TopicsCommand());
         cl.addSubcommand("nodes", new NodesCommand());
-        cl.addSubcommand("status", new StatusCommand());
+        cl.addSubcommand("status", new StatusViewCommand());
+        cl.addSubcommand("ping", new PingCommand());
         cl.addSubcommand("send", new SendCommand());
         cl.addSubcommand("watch", new WatchCommand());
         cl.addSubcommand("config", new ConfigCommands());
