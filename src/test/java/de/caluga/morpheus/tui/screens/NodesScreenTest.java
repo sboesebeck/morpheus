@@ -52,4 +52,23 @@ public class NodesScreenTest {
         s.draw(ts.newTextGraphics());
         ts.stopScreen();
     }
+
+    @Test
+    void rendersLongFqdnPairsOnWideTerminalWithoutError() throws Exception {
+        MessageTracker tracker = new MessageTracker(50);
+        Msg req = msg("hermes", "worker-03.prod.genios.de");
+        req.setTimestamp(1000);
+        tracker.onInsert(req, "t");
+        Msg ans = msg("worker", "hermes-01.prod.genios.de");
+        ans.setInAnswerTo(req.getMsgId());
+        ans.setTimestamp(1100);
+        tracker.onInsert(ans, "t");
+
+        NodesScreen s = new NodesScreen(tracker);
+        DefaultVirtualTerminal vt = new DefaultVirtualTerminal(new com.googlecode.lanterna.TerminalSize(200, 40));
+        TerminalScreen ts = new TerminalScreen(vt);
+        ts.startScreen();
+        s.draw(ts.newTextGraphics());   // wide terminal: long FQDN pairs must not throw or overflow
+        ts.stopScreen();
+    }
 }

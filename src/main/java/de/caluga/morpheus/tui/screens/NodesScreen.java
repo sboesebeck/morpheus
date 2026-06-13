@@ -48,10 +48,14 @@ public class NodesScreen implements Screen {
 
     @Override
     public void draw(TextGraphics g) {
+        int width = g.getSize().getColumns();
+        // Dynamic pair column: fill the terminal width minus the fixed count/RTT columns and margins.
+        // layout from x=2: pair(pairW) ' ' count(8) ' ' rtt(%7d+"ms"=9) → fixed tail = 19, left margin 2, +1 safety
+        int pairW = Math.max(20, width - 22);
         MessageStats stats = tracker.getStats();
         g.setForegroundColor(TextColor.ANSI.CYAN);
         g.putString(2, 0, "Verteilung: Sender → Antwortender  (" + (byHost ? "Hosts" : "Sender") + ")");
-        g.putString(2, 1, String.format("%-44s %8s %8s", "Sender → Antwortender", "Anzahl", "Ø-RTT"));
+        g.putString(2, 1, trunc(String.format("%-" + pairW + "s %8s %9s", "Sender → Antwortender", "Anzahl", "Ø-RTT"), width - 2));
         g.setForegroundColor(TextColor.ANSI.DEFAULT);
 
         int row = 2;
@@ -61,8 +65,8 @@ public class NodesScreen implements Screen {
             if (n >= maxRows) break;
             n++;
             g.setForegroundColor(n % 2 == 0 ? TextColor.ANSI.WHITE : TextColor.ANSI.DEFAULT);
-            String pair = trunc(p.from() + " → " + p.to(), 44);
-            g.putString(2, row++, String.format("%-44s %8d %7dms", pair, p.count(), p.avgRtt()));
+            String pair = trunc(p.from() + " → " + p.to(), pairW);
+            g.putString(2, row++, trunc(String.format("%-" + pairW + "s %8d %7dms", pair, p.count(), p.avgRtt()), width - 2));
         }
         if (n == 0) {
             g.setForegroundColor(TextColor.ANSI.DEFAULT);
