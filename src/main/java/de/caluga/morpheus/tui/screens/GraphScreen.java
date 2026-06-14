@@ -44,6 +44,7 @@ public class GraphScreen implements Screen {
     private final FlowDeriver deriver;        // null in the test seam
     private final NodeRegistry registry;
     private final java.util.List<Shot> shots = new java.util.ArrayList<>();
+    private final Map<String, Double> radiusFrac = new java.util.HashMap<>();   // per-node eased ring-radius fraction (senders drift inward)
     private volatile List<NodeStatus> pendingSeed;
     private volatile boolean seeded = false;
     private boolean paused = false;
@@ -214,7 +215,9 @@ public class GraphScreen implements Screen {
         g.putString(2, height - 1, "[p] " + (paused ? "weiter" : "pause") + "   [esc] zurück   [q] quit");
     }
 
-    /** Places nodes evenly on an ellipse filling the canvas (Braille subpixel coordinates cw x ch). */
+    /** Places nodes on an ellipse filling the canvas; the angle is stable (by first-seen index),
+     *  the radius eases inward with the node's "sender-ness" so request hubs drift to the middle and
+     *  their shots stop crossing over rim nodes. Braille subpixel coordinates cw x ch. */
     private Map<String, double[]> ringPositions(List<NodeRegistry.Node> nodes, double cw, double ch) {
         Map<String, double[]> pos = new LinkedHashMap<>();
         int n = nodes.size();
@@ -224,9 +227,17 @@ public class GraphScreen implements Screen {
         double radX = Math.max(4, cw / 2.0 * 0.88);
         double radY = Math.max(4, ch / 2.0 * 0.88);
         for (int i = 0; i < n; i++) {
+            NodeRegistry.Node nd = nodes.get(i);
             double a = 2 * Math.PI * i / n - Math.PI / 2;
-            pos.put(nodes.get(i).id, new double[]{cx + radX * Math.cos(a), cy + radY * Math.sin(a)});
+            // sender-ness: 0 (pure receiver → rim) … 1 (pure sender → centre)
+            double centrality = nd.sendCount / (double) (nd.sendCount + nd.recvCount + 1);
+            double target = 1.0 - centrality * 0.7;     // a pure sender settles at ~0.3 of the radius
+            double cur = radiusFrac.getOrDefault(nd.id, 1.0);
+            cur += (target - cur) * 0.12;               // ease toward the target each frame
+            radiusFrac.put(nd.id, cur);
+            pos.put(nd.id, new double[]{cx + radX * cur * Math.cos(a), cy + radY * cur * Math.sin(a)});
         }
+        radiusFrac.keySet().retainAll(pos.keySet());    // forget radii of nodes no longer present
         return pos;
     }
 
