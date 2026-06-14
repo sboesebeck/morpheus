@@ -116,10 +116,12 @@ public class GraphScreen implements Screen {
         }
 
         List<NodeRegistry.Node> nodes = registry.nodes();
-        Map<String, double[]> pos = ringPositions(nodes, width, height);
 
-        int canvasTop = 2;
+        int canvasTop = 1;
         int canvasBottom = height - 3;
+        int cCols = Math.max(1, width - 2);
+        int cRows = Math.max(1, canvasBottom - canvasTop);
+        Map<String, double[]> pos = ringPositions(nodes, cCols * 2.0, cRows * 4.0);
 
         // spawn shots from new flows
         if (deriver != null && tracker != null && !paused) {
@@ -133,8 +135,6 @@ public class GraphScreen implements Screen {
         }
 
         // advance + draw shots on the canvas
-        int cCols = Math.max(1, width - 2);
-        int cRows = Math.max(1, canvasBottom - canvasTop);
         BrailleCanvas canvas = new BrailleCanvas(cCols, cRows);
         Map<String, TextColor> legend = new LinkedHashMap<>();
         java.util.Iterator<Shot> it = shots.iterator();
@@ -150,7 +150,8 @@ public class GraphScreen implements Screen {
         }
         canvas.render(g, 1, canvasTop);
 
-        // node markers + labels
+        // node markers + labels (text fans outward: right-half nodes anchor their label to the left)
+        int centerCol = 1 + cCols / 2;
         for (NodeRegistry.Node n : nodes) {
             double[] p = pos.get(n.id);
             if (p == null) continue;
@@ -158,9 +159,19 @@ public class GraphScreen implements Screen {
             int cy = Math.max(canvasTop, Math.min(canvasBottom - 1, canvasTop + (int) (p[1] / 4)));
             boolean idle = registry.isIdle(n.id, now, IDLE_MS);
             g.setForegroundColor(idle ? TextColor.ANSI.BLACK_BRIGHT : TextColor.ANSI.GREEN_BRIGHT);
-            String label = (idle ? "○ " : "● ") + n.id + " ↑" + n.sendCount + " ↓" + n.recvCount;
-            int lx = Math.max(2, Math.min(cx, width - 2 - Math.min(label.length(), width - 4)));
-            g.putString(lx, cy, trunc(label, width - 2));
+            String info = n.id + " ↑" + n.sendCount + " ↓" + n.recvCount;
+            String marker = idle ? "○" : "●";
+            String label;
+            int lx;
+            if (cx > centerCol) {                       // right half: text left of the node, marker at the node
+                label = info + " " + marker;
+                lx = cx - (label.length() - 1);
+            } else {                                    // left half: marker at the node, text to the right
+                label = marker + " " + info;
+                lx = cx;
+            }
+            lx = Math.max(2, Math.min(lx, width - 2));
+            g.putString(lx, cy, trunc(label, Math.max(1, width - lx)));
         }
 
         // title + stats
@@ -187,19 +198,18 @@ public class GraphScreen implements Screen {
         g.putString(2, height - 1, "[p] " + (paused ? "weiter" : "pause") + "   [esc] zurück   [q] quit");
     }
 
-    /** Places nodes evenly on a ring in Braille subpixel coordinates. */
-    private Map<String, double[]> ringPositions(List<NodeRegistry.Node> nodes, int width, int height) {
+    /** Places nodes evenly on an ellipse filling the canvas (Braille subpixel coordinates cw x ch). */
+    private Map<String, double[]> ringPositions(List<NodeRegistry.Node> nodes, double cw, double ch) {
         Map<String, double[]> pos = new LinkedHashMap<>();
         int n = nodes.size();
         if (n == 0) return pos;
-        double cw = (width - 2) * 2.0;
-        double ch = (height - 5) * 4.0;
         double cx = cw / 2.0;
         double cy = ch / 2.0;
-        double rad = Math.max(4, Math.min(cw, ch) / 2.0 * 0.75);
+        double radX = Math.max(4, cw / 2.0 * 0.88);
+        double radY = Math.max(4, ch / 2.0 * 0.88);
         for (int i = 0; i < n; i++) {
             double a = 2 * Math.PI * i / n - Math.PI / 2;
-            pos.put(nodes.get(i).id, new double[]{cx + rad * Math.cos(a), cy + rad * Math.sin(a)});
+            pos.put(nodes.get(i).id, new double[]{cx + radX * Math.cos(a), cy + radY * Math.sin(a)});
         }
         return pos;
     }
