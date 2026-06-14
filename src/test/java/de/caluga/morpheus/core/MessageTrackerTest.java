@@ -111,6 +111,35 @@ public class MessageTrackerTest {
     }
 
     @Test
+    void lateAnswerCancelsItsTimeout() {
+        MessageTracker tracker = new MessageTracker(10);
+        Msg req = msg("t1", "s1", "h1");
+        req.setTimestamp(1000);
+        tracker.onInsert(req, "t1");
+        // crosses the 2s threshold while still unanswered → counted as a timeout
+        assertEquals(1, tracker.markTimeouts(1000 + 3000, 2000));
+        assertEquals(1, tracker.getStats().getTotalTimeouts());
+        assertEquals(1, topicTimeout(tracker, "t1"));
+
+        // the answer finally arrives (late) → the earlier timeout is taken back
+        Msg answer = msg("t1", "s2", "h2");
+        answer.setInAnswerTo(req.getMsgId());
+        answer.setTimestamp(1000 + 3500);
+        tracker.onInsert(answer, "t1");
+
+        assertEquals(0, tracker.getStats().getTotalTimeouts(), "a late answer cancels its earlier timeout");
+        assertEquals(0, topicTimeout(tracker, "t1"));
+        assertEquals(1, tracker.getStats().getTotalAnswers());
+        assertFalse(tracker.getMessagesNewestFirst().get(0).isTimedOut);
+    }
+
+    private long topicTimeout(MessageTracker t, String topic) {
+        return t.getStats().getTopicStats(50).stream()
+                .filter(a -> a.topic().equals(topic))
+                .mapToLong(MessageStats.TopicAggregate::timeouts).findFirst().orElse(-1);
+    }
+
+    @Test
     void maxMessagesIsAdjustable() {
         MessageTracker tracker = new MessageTracker(5);
         tracker.setMaxMessages(1);
