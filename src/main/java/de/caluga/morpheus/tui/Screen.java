@@ -14,6 +14,9 @@ public interface Screen {
     /** Called every idle frame; lets a screen self-transition on a background event. Default: stay. */
     default Result tick() { return Result.stay(); }
 
+    /** Idle redraw interval in ms (frame rate). Default 100 (10 fps); animated screens override lower. */
+    default int frameIntervalMs() { return 100; }
+
     /** Navigation outcome of a key press. */
     final class Result {
         public enum Kind { STAY, POP, QUIT, PUSH, REPLACE }
