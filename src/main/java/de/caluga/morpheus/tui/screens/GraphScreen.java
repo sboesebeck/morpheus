@@ -25,8 +25,10 @@ public class GraphScreen implements Screen {
 
     private static final int SHOT_CAP = 20;
     private static final long IDLE_MS = 15_000;
-    private static final int FRAME_MS = 33;        // ~30 fps while the graph is open (animation)
-    private static final double SHOT_SPEED = 0.34; // one leg ≈ 3 frames (~100ms) → round-trip ≤ ~230ms
+    private static final int FRAME_MS = 33;          // ~30 fps while the graph is open (animation)
+    private static final double SHOT_SPEED = 0.16;   // one leg ≈ 6 frames (~200ms) → round-trip ~450ms
+    private static final int SPAWN_PER_FRAME = 3;     // spread bursts over frames so shots don't pulse 0↔cap
+    private static final int MAX_PENDING = 300;       // flood guard for the spawn queue
 
     private static final class Shot {
         final double x0, y0, x1, y1;
@@ -46,6 +48,7 @@ public class GraphScreen implements Screen {
     private final FlowDeriver deriver;        // null in the test seam
     private final NodeRegistry registry;
     private final java.util.List<Shot> shots = new java.util.ArrayList<>();
+    private final java.util.ArrayDeque<FlowEvent> pending = new java.util.ArrayDeque<>();   // flow events waiting to be spawned (rate-limited)
     private final Map<String, Double> radiusFrac = new java.util.HashMap<>();   // per-node eased ring-radius fraction (senders drift inward)
     private volatile List<NodeStatus> pendingSeed;
     private volatile boolean seeded = false;
@@ -134,20 +137,27 @@ public class GraphScreen implements Screen {
 
         // spawn shots from new flows
         if (deriver != null && tracker != null && !paused) {
+            // Queue all of this frame's flows; bursty change-stream batches must not all pop at once.
             for (FlowEvent f : deriver.derive(tracker.getMessagesNewestFirst(), now)) {
-                if (shots.size() >= SHOT_CAP) continue;           // saturation: skip animation (count already done)
+                pending.addLast(f);
+            }
+            while (pending.size() > MAX_PENDING) pending.pollFirst();   // flood guard: drop oldest
+            // Spawn only a few per frame (saturation cap still applies) so the population stays steady.
+            int budget = SPAWN_PER_FRAME;
+            while (budget-- > 0 && shots.size() < SHOT_CAP && !pending.isEmpty()) {
+                FlowEvent f = pending.pollFirst();
                 double[] from = pos.get(f.from());
                 double[] to = pos.get(f.to());
-                if (from == null || to == null) continue;         // a node not placed yet
+                if (from == null || to == null) continue;         // a node not placed yet; drop
                 if (f.kind() == FlowEvent.Kind.ANSWER) {
                     // request leg, then the reply leg back, sequentially
                     TextColor c = TopicPalette.colorFor(f.topic());
-                    Shot reply = new Shot(to[0], to[1], from[0], from[1], c, f.topic(), SHOT_SPEED,null);
-                    shots.add(new Shot(from[0], from[1], to[0], to[1], c, f.topic(), SHOT_SPEED,reply));
+                    Shot reply = new Shot(to[0], to[1], from[0], from[1], c, f.topic(), SHOT_SPEED, null);
+                    shots.add(new Shot(from[0], from[1], to[0], to[1], c, f.topic(), SHOT_SPEED, reply));
                 } else if (f.kind() == FlowEvent.Kind.TIMEOUT) {
-                    shots.add(new Shot(from[0], from[1], to[0], to[1], TextColor.ANSI.RED_BRIGHT, f.topic(), SHOT_SPEED,null));
+                    shots.add(new Shot(from[0], from[1], to[0], to[1], TextColor.ANSI.RED_BRIGHT, f.topic(), SHOT_SPEED, null));
                 } else {
-                    shots.add(new Shot(from[0], from[1], to[0], to[1], TopicPalette.colorFor(f.topic()), f.topic(), SHOT_SPEED,null));
+                    shots.add(new Shot(from[0], from[1], to[0], to[1], TopicPalette.colorFor(f.topic()), f.topic(), SHOT_SPEED, null));
                 }
             }
         }
