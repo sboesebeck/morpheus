@@ -92,9 +92,11 @@ public class MessageTracker {
             return;
         }
         String origSender = null, origHost = null;
+        boolean wasTimedOut = false;
         synchronized (buffer) {
             MessageInfo original = buffer.get(originalId);
             if (original != null) {
+                wasTimedOut = original.isTimedOut;
                 original.rtt = rtt;
                 original.isTimedOut = false;
                 original.answeredBy = answer.getSender();
@@ -103,6 +105,9 @@ public class MessageTracker {
                 origSender = original.sender;
                 origHost = original.senderHost;
             }
+        }
+        if (wasTimedOut) {
+            stats.unrecordTimeout(originalTopic);   // a late answer cancels its earlier timeout
         }
         stats.recordRtt(originalTopic, rtt);
         if (origSender != null || origHost != null) {

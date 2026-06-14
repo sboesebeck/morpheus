@@ -101,6 +101,14 @@ public class MessageStats {
         topicTimeouts.computeIfAbsent(topic, k -> new AtomicLong()).incrementAndGet();
     }
 
+    /** Reverses a previously-counted timeout when a late answer finally arrives. */
+    public void unrecordTimeout(String topic) {
+        totalTimeouts.updateAndGet(v -> v > 0 ? v - 1 : 0);
+        if (topic == null || topic.isEmpty()) return;
+        AtomicLong tc = topicTimeouts.get(topic);
+        if (tc != null) tc.updateAndGet(v -> v > 0 ? v - 1 : 0);
+    }
+
     public List<TopicAggregate> getTopicStats(int limit) {
         java.util.Set<String> topics = new java.util.HashSet<>();
         topics.addAll(topicMessages.keySet());
