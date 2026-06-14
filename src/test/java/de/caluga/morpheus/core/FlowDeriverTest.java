@@ -14,27 +14,14 @@ public class FlowDeriverTest {
         Msg msg = new Msg(topic, "m", "v", 1000);
         msg.setMsgId(new MorphiumId());
         msg.setSender(sender);
+        msg.setTimestamp(1000);
         MessageInfo info = new MessageInfo(msg, topic);
         info.recipient = "";   // override the constructor default
         return info;
     }
 
     @Test
-    void directMessageEmitsOneEdgeToRecipient() {
-        NodeRegistry reg = new NodeRegistry("self");
-        FlowDeriver d = new FlowDeriver("self", reg);
-        MessageInfo m = mi("hermes", "order.created");
-        m.recipient = "worker1";
-        List<FlowEvent> ev = d.derive(List.of(m), 1000);
-        assertEquals(1, ev.size());
-        assertEquals(FlowEvent.Kind.DIRECT, ev.get(0).kind());
-        assertEquals("hermes", ev.get(0).from());
-        assertEquals("worker1", ev.get(0).to());
-        assertTrue(reg.listenersOf("order.created").contains("worker1"));
-    }
-
-    @Test
-    void broadcastFansOutToKnownTopicListeners() {
+    void broadcastFansOutToKnownTopicListenersOnInsert() {
         NodeRegistry reg = new NodeRegistry("self");
         reg.markListener("w1", "h", "order.created", 1);
         reg.markListener("w2", "h", "order.created", 1);
@@ -47,26 +34,26 @@ public class FlowDeriverTest {
     }
 
     @Test
-    void exclusiveEmitsOnlyWhenLockedByAppears() {
+    void directAndExclusiveEmitNothingOnInsertOrLock() {
         NodeRegistry reg = new NodeRegistry("self");
         FlowDeriver d = new FlowDeriver("self", reg);
-        MessageInfo m = mi("hermes", "jobs");
-        m.isExclusive = true;
-        assertEquals(0, d.derive(List.of(m), 1000).size(), "no recipient yet -> no edge");
-        m.lockedBy = "worker3";
-        List<FlowEvent> ev = d.derive(List.of(m), 1100);
-        assertEquals(1, ev.size());
-        assertEquals(FlowEvent.Kind.EXCLUSIVE, ev.get(0).kind());
-        assertEquals("worker3", ev.get(0).to());
-        assertEquals(0, d.derive(List.of(m), 1200).size(), "exclusive edge emitted once");
+        MessageInfo direct = mi("hermes", "t");
+        direct.recipient = "w1";
+        assertEquals(0, d.derive(List.of(direct), 1000).size(), "directed message: no shot on insert");
+        MessageInfo excl = mi("hermes", "jobs");
+        excl.isExclusive = true;
+        assertEquals(0, d.derive(List.of(excl), 1000).size(), "exclusive: no shot on insert");
+        excl.lockedBy = "w3";
+        assertEquals(0, d.derive(List.of(excl), 1100).size(), "exclusive: no shot on lock");
     }
 
     @Test
-    void answerEmitsReplyEdgeWithRttOnce() {
+    void answeredRequestEmitsRoundTripOrientedSenderToAnswerer() {
         NodeRegistry reg = new NodeRegistry("self");
         FlowDeriver d = new FlowDeriver("self", reg);
         MessageInfo m = mi("hermes", "order.created");
-        d.derive(List.of(m), 1000);          // request seen (no listeners -> no edge)
+        m.isExclusive = true;
+        d.derive(List.of(m), 1000);                 // insert: nothing
         m.answeredBy = "worker1";
         m.answeredByHost = "wh1";
         m.rtt = 42L;
@@ -74,11 +61,63 @@ public class FlowDeriverTest {
         assertEquals(1, ev.size());
         FlowEvent a = ev.get(0);
         assertEquals(FlowEvent.Kind.ANSWER, a.kind());
-        assertEquals("worker1", a.from());
-        assertEquals("hermes", a.to());
+        assertEquals("hermes", a.from(), "round-trip is oriented as the request (sender → answerer)");
+        assertEquals("worker1", a.to());
         assertEquals(42L, a.rttMs());
         assertTrue(reg.listenersOf("order.created").contains("worker1"));
         assertEquals(0, d.derive(List.of(m), 1200).size(), "answer edge emitted once");
+    }
+
+    @Test
+    void unansweredDirectTimesOutRedTowardRecipient() {
+        NodeRegistry reg = new NodeRegistry("self");
+        FlowDeriver d = new FlowDeriver("self", reg);
+        MessageInfo m = mi("hermes", "t");
+        m.recipient = "w1";
+        assertEquals(0, d.derive(List.of(m), 1000).size(), "fresh: not yet timed out");
+        List<FlowEvent> ev = d.derive(List.of(m), 1000 + FlowDeriver.TIMEOUT_MS + 1);
+        assertEquals(1, ev.size());
+        assertEquals(FlowEvent.Kind.TIMEOUT, ev.get(0).kind());
+        assertEquals("hermes", ev.get(0).from());
+        assertEquals("w1", ev.get(0).to());
+        assertEquals(0, d.derive(List.of(m), 1000 + 2 * FlowDeriver.TIMEOUT_MS).size(), "timeout emitted once");
+    }
+
+    @Test
+    void unansweredExclusiveTimesOutRedFannedToListeners() {
+        NodeRegistry reg = new NodeRegistry("self");
+        reg.markListener("w1", "h", "jobs", 1);
+        reg.markListener("w2", "h", "jobs", 1);
+        FlowDeriver d = new FlowDeriver("self", reg);
+        MessageInfo m = mi("hermes", "jobs");
+        m.isExclusive = true;
+        List<FlowEvent> ev = d.derive(List.of(m), 1000 + FlowDeriver.TIMEOUT_MS + 1);
+        assertEquals(2, ev.size());
+        assertTrue(ev.stream().allMatch(e -> e.kind() == FlowEvent.Kind.TIMEOUT));
+    }
+
+    @Test
+    void answeredMessageNeverTimesOut() {
+        NodeRegistry reg = new NodeRegistry("self");
+        FlowDeriver d = new FlowDeriver("self", reg);
+        MessageInfo m = mi("hermes", "t");
+        m.recipient = "w1";
+        m.answeredBy = "w1";
+        m.rtt = 5L;
+        List<FlowEvent> ev = d.derive(List.of(m), 1000 + FlowDeriver.TIMEOUT_MS + 1);
+        assertEquals(1, ev.size());
+        assertEquals(FlowEvent.Kind.ANSWER, ev.get(0).kind(), "answered → ANSWER, never TIMEOUT");
+    }
+
+    @Test
+    void broadcastDoesNotTimeOut() {
+        NodeRegistry reg = new NodeRegistry("self");
+        reg.markListener("w1", "h", "news", 1);
+        FlowDeriver d = new FlowDeriver("self", reg);
+        MessageInfo m = mi("hermes", "news");      // broadcast: no recipient, not exclusive
+        d.derive(List.of(m), 1000);                // fan-out on insert
+        List<FlowEvent> ev = d.derive(List.of(m), 1000 + FlowDeriver.TIMEOUT_MS + 1);
+        assertEquals(0, ev.size(), "broadcasts are not flagged red when unanswered");
     }
 
     @Test
@@ -98,6 +137,6 @@ public class FlowDeriverTest {
         FlowDeriver d = new FlowDeriver("self", reg);
         MessageInfo fromSelf = mi("self", "t");
         assertEquals(0, d.derive(List.of(fromSelf), 1000).size());
-        assertEquals(1, reg.nodeCount()); // w1 was pre-registered; self-traffic adds nothing
+        assertEquals(1, reg.nodeCount(), "w1 pre-seeded; self never registered");
     }
 }

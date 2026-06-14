@@ -32,9 +32,10 @@ public class GraphScreen implements Screen {
         final String topic;
         double progress;
         final double speed;
-        Shot(double x0, double y0, double x1, double y1, TextColor color, String topic, double speed) {
+        final Shot followUp;   // spawned when this shot arrives (e.g. the reply leg after the request)
+        Shot(double x0, double y0, double x1, double y1, TextColor color, String topic, double speed, Shot followUp) {
             this.x0 = x0; this.y0 = y0; this.x1 = x1; this.y1 = y1;
-            this.color = color; this.topic = topic; this.speed = speed; this.progress = 0;
+            this.color = color; this.topic = topic; this.speed = speed; this.followUp = followUp; this.progress = 0;
         }
     }
 
@@ -130,24 +131,39 @@ public class GraphScreen implements Screen {
                 double[] from = pos.get(f.from());
                 double[] to = pos.get(f.to());
                 if (from == null || to == null) continue;         // a node not placed yet
-                shots.add(new Shot(from[0], from[1], to[0], to[1], TopicPalette.colorFor(f.topic()), f.topic(), 0.06));
+                if (f.kind() == FlowEvent.Kind.ANSWER) {
+                    // request leg, then the reply leg back, sequentially
+                    TextColor c = TopicPalette.colorFor(f.topic());
+                    Shot reply = new Shot(to[0], to[1], from[0], from[1], c, f.topic(), 0.06, null);
+                    shots.add(new Shot(from[0], from[1], to[0], to[1], c, f.topic(), 0.06, reply));
+                } else if (f.kind() == FlowEvent.Kind.TIMEOUT) {
+                    shots.add(new Shot(from[0], from[1], to[0], to[1], TextColor.ANSI.RED_BRIGHT, f.topic(), 0.06, null));
+                } else {
+                    shots.add(new Shot(from[0], from[1], to[0], to[1], TopicPalette.colorFor(f.topic()), f.topic(), 0.06, null));
+                }
             }
         }
 
         // advance + draw shots on the canvas
         BrailleCanvas canvas = new BrailleCanvas(cCols, cRows);
         Map<String, TextColor> legend = new LinkedHashMap<>();
+        java.util.List<Shot> followUps = new java.util.ArrayList<>();
         java.util.Iterator<Shot> it = shots.iterator();
         while (it.hasNext()) {
             Shot s = it.next();
             if (!paused) s.progress += s.speed;
-            if (s.progress >= 1.0) { it.remove(); continue; }
+            if (s.progress >= 1.0) {
+                it.remove();
+                if (s.followUp != null) followUps.add(s.followUp);   // start the reply leg on arrival
+                continue;
+            }
             canvas.line((int) s.x0, (int) s.y0, (int) s.x1, (int) s.y1, TextColor.ANSI.BLACK_BRIGHT);
             double px = s.x0 + (s.x1 - s.x0) * s.progress;
             double py = s.y0 + (s.y1 - s.y0) * s.progress;
             canvas.plot((int) px, (int) py, s.color);
-            legend.putIfAbsent(s.topic, s.color);
+            legend.putIfAbsent(s.topic, TopicPalette.colorFor(s.topic));
         }
+        shots.addAll(followUps);
         canvas.render(g, 1, canvasTop);
 
         // node markers + labels (text fans outward: right-half nodes anchor their label to the left)
