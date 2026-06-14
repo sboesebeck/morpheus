@@ -11,6 +11,7 @@ public class MorpheusCli {
         cl.addSubcommand("topics", new TopicsCommand());
         cl.addSubcommand("nodes", new NodesCommand());
         cl.addSubcommand("status", new StatusViewCommand());
+        cl.addSubcommand("graph", new GraphCommand());
         cl.addSubcommand("ping", new PingCommand());
         cl.addSubcommand("send", new SendCommand());
         cl.addSubcommand("watch", new WatchCommand());

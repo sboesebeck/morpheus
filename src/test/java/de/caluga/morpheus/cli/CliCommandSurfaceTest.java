@@ -43,4 +43,11 @@ public class CliCommandSurfaceTest {
         assertTrue(ping.getCommandSpec().optionsMap().containsKey("--graphite"),
                 "ping must keep the --graphite option");
     }
+
+    @Test
+    void graphIsRegisteredViewOpener() {
+        var subs = cli().getSubcommands();
+        assertTrue(subs.containsKey("graph"));
+        assertEquals("graph", new GraphCommand().viewName());
+    }
 }

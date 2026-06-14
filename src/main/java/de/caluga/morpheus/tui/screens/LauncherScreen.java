@@ -21,7 +21,7 @@ public class LauncherScreen implements Screen {
 
     public enum Column { CONNECTIONS, VIEWS }
 
-    private static final List<String> VIEWS = List.of("messages", "topics", "nodes", "status", "graph (Phase 3)");
+    private static final List<String> VIEWS = List.of("messages", "topics", "nodes", "status", "graph");
 
     private final MorpheusContext ctx;
     private final ConnectionStore store;
@@ -54,7 +54,6 @@ public class LauncherScreen implements Screen {
             case ArrowDown -> (active == Column.CONNECTIONS ? connections : views).down();
             case Enter -> {
                 if (active == Column.VIEWS && connections.selected() != null) {
-                    if (views.selected().startsWith("graph")) return Result.stay(); // disabled
                     return Result.push(new ConnectingScreen(
                             connections.selected(), views.selected(), LauncherScreen::viewFor));
                 }
@@ -179,7 +178,8 @@ public class LauncherScreen implements Screen {
             case "topics" -> new TopicsScreen(viewCtx);
             case "nodes" -> new NodesScreen(viewCtx);
             case "status" -> new StatusScreen(viewCtx);
-            default -> null; // "graph (Phase 3)"
+            case "graph" -> new GraphScreen(viewCtx);
+            default -> null;
         };
     }
 
