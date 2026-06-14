@@ -41,6 +41,49 @@ public class GraphScreenTest {
         renderOk(new GraphScreen(new NodeRegistry("self")), 100, 30);
     }
 
+    @Test
+    void gReturnsStayAndUnsupportedStaysBraille() throws Exception {
+        NodeRegistry r = new NodeRegistry("self");
+        r.observeSend("hermes", "h1", 1000);
+        GraphScreen s = new GraphScreen(r);
+        StringBuilder sink = new StringBuilder();
+        s.gfxOut = sink;
+        s.gfxSupportedCheck = () -> false;          // terminal does NOT support kitty graphics
+        assertEquals(Screen.Result.Kind.STAY, s.onKey(new KeyStroke('g', false, false)).kind());
+        renderOk(s, 120, 40);
+        assertEquals(0, sink.length(), "unsupported terminal must emit no graphics escapes");
+    }
+
+    @Test
+    void gOnSupportedTerminalEmitsImageAndToggleOffDeletes() throws Exception {
+        NodeRegistry r = new NodeRegistry("self");
+        r.observeSend("hermes", "h1", 1000);
+        r.observeRecv("worker1", "h2", 1000);
+        GraphScreen s = new GraphScreen(r);
+        StringBuilder sink = new StringBuilder();
+        s.gfxOut = sink;
+        s.gfxSupportedCheck = () -> true;
+        s.onKey(new KeyStroke('g', false, false));  // enable gfx
+        renderOk(s, 120, 40);
+        assertTrue(sink.toString().contains("a=T,f=100,i=1"), "gfx mode emits a kitty image");
+
+        sink.setLength(0);
+        s.onKey(new KeyStroke('g', false, false));  // toggle off
+        assertTrue(sink.toString().contains("\033_Ga=d,d=I,i=1"), "toggle-off deletes the image");
+    }
+
+    @Test
+    void onCloseDeletesImageWhenGfxOn() {
+        NodeRegistry r = new NodeRegistry("self");
+        GraphScreen s = new GraphScreen(r);
+        StringBuilder sink = new StringBuilder();
+        s.gfxOut = sink;
+        s.gfxSupportedCheck = () -> true;
+        s.onKey(new KeyStroke('g', false, false));  // enable gfx
+        s.onClose();
+        assertTrue(sink.toString().contains("\033_Ga=d,d=I,i=1"), "onClose removes the image in gfx mode");
+    }
+
     private void renderOk(GraphScreen s, int cols, int rows) throws Exception {
         DefaultVirtualTerminal vt = new DefaultVirtualTerminal(new com.googlecode.lanterna.TerminalSize(cols, rows));
         TerminalScreen ts = new TerminalScreen(vt);

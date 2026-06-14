@@ -14,6 +14,8 @@ import de.caluga.morpheus.core.NodeStatus;
 import de.caluga.morpheus.core.StatusPinger;
 import de.caluga.morpheus.tui.Screen;
 import de.caluga.morpheus.tui.widget.BrailleCanvas;
+import de.caluga.morpheus.tui.widget.GraphImageRenderer;
+import de.caluga.morpheus.tui.widget.KittyGraphics;
 import de.caluga.morpheus.tui.widget.TopicPalette;
 
 import java.util.LinkedHashMap;
@@ -54,6 +56,11 @@ public class GraphScreen implements Screen {
     private volatile boolean seeded = false;
     private boolean paused = false;
     private boolean showHosts = false;
+    private boolean gfx = false;
+    private String gfxHint = null;
+    private final GraphImageRenderer imageRenderer = new GraphImageRenderer();
+    java.util.function.BooleanSupplier gfxSupportedCheck = KittyGraphics::supported;  // test seam
+    Appendable gfxOut = System.out;                                                   // test seam
 
     public GraphScreen(MorpheusContext ctx) {
         this.ownedCtx = ctx;
@@ -95,6 +102,7 @@ public class GraphScreen implements Screen {
 
     @Override
     public void onClose() {
+        if (gfx) KittyGraphics.delete(gfxOut);
         if (ownedCtx != null) ownedCtx.close();
     }
 
@@ -105,6 +113,18 @@ public class GraphScreen implements Screen {
         if (c != null && c == 'q') return Result.quit();
         if (c != null && c == 'p') { paused = !paused; return Result.stay(); }
         if (c != null && c == 'h') { showHosts = !showHosts; return Result.stay(); }
+        if (c != null && c == 'g') {
+            if (gfx) {
+                gfx = false;
+                KittyGraphics.delete(gfxOut);
+            } else if (gfxSupportedCheck.getAsBoolean()) {
+                gfx = true;
+                gfxHint = null;
+            } else {
+                gfxHint = "Kitty-Grafik in diesem Terminal nicht erkannt";
+            }
+            return Result.stay();
+        }
         if (key.getKeyType() == KeyType.Escape) return Result.pop();
         return Result.stay();
     }
@@ -162,53 +182,54 @@ public class GraphScreen implements Screen {
             }
         }
 
-        // advance + draw shots on the canvas
-        BrailleCanvas canvas = new BrailleCanvas(cCols, cRows);
+        // advance shots once (shared by both renderers); collect the live ones + the active-topic legend
         Map<String, TextColor> legend = new LinkedHashMap<>();
-        java.util.List<Shot> followUps = new java.util.ArrayList<>();
-        java.util.Iterator<Shot> it = shots.iterator();
-        while (it.hasNext()) {
-            Shot s = it.next();
-            if (!paused) s.progress += s.speed;
-            if (s.progress >= 1.0) {
-                it.remove();
-                if (s.followUp != null) followUps.add(s.followUp);   // start the reply leg on arrival
-                continue;
-            }
-            canvas.line((int) s.x0, (int) s.y0, (int) s.x1, (int) s.y1, TextColor.ANSI.BLACK_BRIGHT);
-            double px = s.x0 + (s.x1 - s.x0) * s.progress;
-            double py = s.y0 + (s.y1 - s.y0) * s.progress;
-            canvas.plot((int) px, (int) py, s.color);
-            legend.putIfAbsent(s.topic, TopicPalette.colorFor(s.topic));
-        }
-        shots.addAll(followUps);
-        canvas.render(g, 1, canvasTop);
+        List<Shot> live = advanceShots(legend);
 
-        // node markers + labels (text fans outward: right-half nodes anchor their label to the left)
-        int centerCol = 1 + cCols / 2;
-        for (NodeRegistry.Node n : nodes) {
-            double[] p = pos.get(n.id);
-            if (p == null) continue;
-            int cx = 1 + (int) (p[0] / 2);
-            int cy = Math.max(canvasTop, Math.min(canvasBottom - 1, canvasTop + (int) (p[1] / 4)));
-            boolean idle = registry.isIdle(n.id, now, IDLE_MS);
-            String info = shortId(n.id) + " ↑" + n.sendCount + " ↓" + n.recvCount;
-            String marker = idle ? "○" : "●";
-            String label;
-            int lx;
-            if (cx > centerCol) {                       // right half: text left of the node, marker at the node
-                label = info + " " + marker;
-                lx = cx - (label.length() - 1);
-            } else {                                    // left half: marker at the node, text to the right
-                label = marker + " " + info;
-                lx = cx;
+        if (gfx) {
+            try {
+                drawGfx(cCols, cRows, canvasTop, nodes, pos, live);
+            } catch (Throwable t) {
+                gfx = false;                 // any failure → fall back to Braille
+                KittyGraphics.delete(gfxOut);
             }
-            lx = Math.max(2, Math.min(lx, width - 2));
-            g.setForegroundColor(idle ? TextColor.ANSI.BLACK_BRIGHT : TextColor.ANSI.GREEN_BRIGHT);
-            g.putString(lx, cy, trunc(label, Math.max(1, width - lx)));
-            if (showHosts && n.host != null && !n.host.isEmpty() && cy + 1 <= canvasBottom - 1) {
-                g.setForegroundColor(TextColor.ANSI.BLACK_BRIGHT);
-                g.putString(lx, cy + 1, trunc(n.host, Math.max(1, width - lx)));
+        }
+        if (!gfx) {
+            // Braille middle: render the live shots to the canvas, then node labels via Lanterna (unchanged)
+            BrailleCanvas canvas = new BrailleCanvas(cCols, cRows);
+            for (Shot s : live) {
+                canvas.line((int) s.x0, (int) s.y0, (int) s.x1, (int) s.y1, TextColor.ANSI.BLACK_BRIGHT);
+                double px = s.x0 + (s.x1 - s.x0) * s.progress;
+                double py = s.y0 + (s.y1 - s.y0) * s.progress;
+                canvas.plot((int) px, (int) py, s.color);
+            }
+            canvas.render(g, 1, canvasTop);
+
+            int centerCol = 1 + cCols / 2;
+            for (NodeRegistry.Node n : nodes) {
+                double[] p = pos.get(n.id);
+                if (p == null) continue;
+                int cx = 1 + (int) (p[0] / 2);
+                int cy = Math.max(canvasTop, Math.min(canvasBottom - 1, canvasTop + (int) (p[1] / 4)));
+                boolean idle = registry.isIdle(n.id, now, IDLE_MS);
+                String info = shortId(n.id) + " ↑" + n.sendCount + " ↓" + n.recvCount;
+                String marker = idle ? "○" : "●";
+                String label;
+                int lx;
+                if (cx > centerCol) {
+                    label = info + " " + marker;
+                    lx = cx - (label.length() - 1);
+                } else {
+                    label = marker + " " + info;
+                    lx = cx;
+                }
+                lx = Math.max(2, Math.min(lx, width - 2));
+                g.setForegroundColor(idle ? TextColor.ANSI.BLACK_BRIGHT : TextColor.ANSI.GREEN_BRIGHT);
+                g.putString(lx, cy, trunc(label, Math.max(1, width - lx)));
+                if (showHosts && n.host != null && !n.host.isEmpty() && cy + 1 <= canvasBottom - 1) {
+                    g.setForegroundColor(TextColor.ANSI.BLACK_BRIGHT);
+                    g.putString(lx, cy + 1, trunc(n.host, Math.max(1, width - lx)));
+                }
             }
         }
 
@@ -233,7 +254,61 @@ public class GraphScreen implements Screen {
         }
 
         g.setForegroundColor(TextColor.ANSI.DEFAULT);
-        g.putString(2, height - 1, "[p] " + (paused ? "weiter" : "pause") + "   [h] hosts   [esc] zurück   [q] quit");
+        g.putString(2, height - 1,
+                "[p] " + (paused ? "weiter" : "pause") + "   [h] hosts   [g] grafik   [esc] zurück   [q] quit");
+        if (gfxHint != null) {
+            g.setForegroundColor(TextColor.ANSI.YELLOW);
+            g.putString(2, height - 2, trunc(gfxHint, width - 3));
+        }
+    }
+
+    /** Advances every shot once; removes finished ones (queuing their reply leg), records the active-topic
+     *  legend, and returns the shots still in flight. Shared by the Braille and gfx renderers. */
+    private List<Shot> advanceShots(Map<String, TextColor> legend) {
+        List<Shot> liveShots = new java.util.ArrayList<>();
+        List<Shot> followUps = new java.util.ArrayList<>();
+        java.util.Iterator<Shot> it = shots.iterator();
+        while (it.hasNext()) {
+            Shot s = it.next();
+            if (!paused) s.progress += s.speed;
+            if (s.progress >= 1.0) {
+                it.remove();
+                if (s.followUp != null) followUps.add(s.followUp);
+                continue;
+            }
+            legend.putIfAbsent(s.topic, TopicPalette.colorFor(s.topic));
+            liveShots.add(s);
+        }
+        shots.addAll(followUps);
+        return liveShots;
+    }
+
+    /** gfx middle: render nodes + live shots to a PNG and place it as a Kitty image owning the middle region.
+     *  Coordinates are the Braille subpixel space (cCols*2 x cRows*4) scaled x4 into pixels. */
+    private void drawGfx(int cCols, int cRows, int canvasTop, List<NodeRegistry.Node> nodes,
+                         Map<String, double[]> pos, List<Shot> live) {
+        final double scale = 4.0;
+        int pxW = cCols * 2 * (int) scale;
+        int pxH = cRows * 4 * (int) scale;
+        long now = System.currentTimeMillis();
+
+        List<GraphImageRenderer.NodeView> nv = new java.util.ArrayList<>();
+        for (NodeRegistry.Node n : nodes) {
+            double[] p = pos.get(n.id);
+            if (p == null) continue;
+            boolean idle = registry.isIdle(n.id, now, IDLE_MS);
+            String label = shortId(n.id) + " ↑" + n.sendCount + " ↓" + n.recvCount;
+            String host = showHosts ? n.host : null;
+            nv.add(new GraphImageRenderer.NodeView(p[0] * scale, p[1] * scale, label, host, idle));
+        }
+        List<GraphImageRenderer.ShotView> sv = new java.util.ArrayList<>();
+        for (Shot s : live) {
+            sv.add(new GraphImageRenderer.ShotView(
+                    s.x0 * scale, s.y0 * scale, s.x1 * scale, s.y1 * scale, s.progress, s.color));
+        }
+        byte[] png = imageRenderer.render(pxW, pxH, nv, sv);
+        // the Braille canvas renders at Lanterna (col 1, row canvasTop); the image occupies the same region.
+        KittyGraphics.emit(png, cCols, cRows, canvasTop + 1, 2, gfxOut);
     }
 
     /** Places nodes on an ellipse filling the canvas; the angle is stable (by first-seen index),
