@@ -25,6 +25,8 @@ public class GraphScreen implements Screen {
 
     private static final int SHOT_CAP = 20;
     private static final long IDLE_MS = 15_000;
+    private static final int FRAME_MS = 33;        // ~30 fps while the graph is open (animation)
+    private static final double SHOT_SPEED = 0.34; // one leg ≈ 3 frames (~100ms) → round-trip ≤ ~230ms
 
     private static final class Shot {
         final double x0, y0, x1, y1;
@@ -86,6 +88,9 @@ public class GraphScreen implements Screen {
     }
 
     @Override
+    public int frameIntervalMs() { return FRAME_MS; }
+
+    @Override
     public void onClose() {
         if (ownedCtx != null) ownedCtx.close();
     }
@@ -137,12 +142,12 @@ public class GraphScreen implements Screen {
                 if (f.kind() == FlowEvent.Kind.ANSWER) {
                     // request leg, then the reply leg back, sequentially
                     TextColor c = TopicPalette.colorFor(f.topic());
-                    Shot reply = new Shot(to[0], to[1], from[0], from[1], c, f.topic(), 0.06, null);
-                    shots.add(new Shot(from[0], from[1], to[0], to[1], c, f.topic(), 0.06, reply));
+                    Shot reply = new Shot(to[0], to[1], from[0], from[1], c, f.topic(), SHOT_SPEED,null);
+                    shots.add(new Shot(from[0], from[1], to[0], to[1], c, f.topic(), SHOT_SPEED,reply));
                 } else if (f.kind() == FlowEvent.Kind.TIMEOUT) {
-                    shots.add(new Shot(from[0], from[1], to[0], to[1], TextColor.ANSI.RED_BRIGHT, f.topic(), 0.06, null));
+                    shots.add(new Shot(from[0], from[1], to[0], to[1], TextColor.ANSI.RED_BRIGHT, f.topic(), SHOT_SPEED,null));
                 } else {
-                    shots.add(new Shot(from[0], from[1], to[0], to[1], TopicPalette.colorFor(f.topic()), f.topic(), 0.06, null));
+                    shots.add(new Shot(from[0], from[1], to[0], to[1], TopicPalette.colorFor(f.topic()), f.topic(), SHOT_SPEED,null));
                 }
             }
         }

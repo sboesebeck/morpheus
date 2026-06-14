@@ -43,7 +43,7 @@ public class MorpheusTui {
                         break;
                     }
                     if (tr.kind() == Screen.Result.Kind.STAY) {
-                        try { Thread.sleep(100); } catch (InterruptedException ignored) {}
+                        try { Thread.sleep(stack.top().frameIntervalMs()); } catch (InterruptedException ignored) {}
                         continue;
                     }
                     if (tr.kind() == Screen.Result.Kind.POP || tr.kind() == Screen.Result.Kind.REPLACE) {
