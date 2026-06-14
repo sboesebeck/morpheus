@@ -48,6 +48,7 @@ public class GraphScreen implements Screen {
     private volatile List<NodeStatus> pendingSeed;
     private volatile boolean seeded = false;
     private boolean paused = false;
+    private boolean showHosts = false;
 
     public GraphScreen(MorpheusContext ctx) {
         this.ownedCtx = ctx;
@@ -95,6 +96,7 @@ public class GraphScreen implements Screen {
         Character c = key.getCharacter();
         if (c != null && c == 'q') return Result.quit();
         if (c != null && c == 'p') { paused = !paused; return Result.stay(); }
+        if (c != null && c == 'h') { showHosts = !showHosts; return Result.stay(); }
         if (key.getKeyType() == KeyType.Escape) return Result.pop();
         return Result.stay();
     }
@@ -175,8 +177,7 @@ public class GraphScreen implements Screen {
             int cx = 1 + (int) (p[0] / 2);
             int cy = Math.max(canvasTop, Math.min(canvasBottom - 1, canvasTop + (int) (p[1] / 4)));
             boolean idle = registry.isIdle(n.id, now, IDLE_MS);
-            g.setForegroundColor(idle ? TextColor.ANSI.BLACK_BRIGHT : TextColor.ANSI.GREEN_BRIGHT);
-            String info = n.id + " ↑" + n.sendCount + " ↓" + n.recvCount;
+            String info = shortId(n.id) + " ↑" + n.sendCount + " ↓" + n.recvCount;
             String marker = idle ? "○" : "●";
             String label;
             int lx;
@@ -188,7 +189,12 @@ public class GraphScreen implements Screen {
                 lx = cx;
             }
             lx = Math.max(2, Math.min(lx, width - 2));
+            g.setForegroundColor(idle ? TextColor.ANSI.BLACK_BRIGHT : TextColor.ANSI.GREEN_BRIGHT);
             g.putString(lx, cy, trunc(label, Math.max(1, width - lx)));
+            if (showHosts && n.host != null && !n.host.isEmpty() && cy + 1 <= canvasBottom - 1) {
+                g.setForegroundColor(TextColor.ANSI.BLACK_BRIGHT);
+                g.putString(lx, cy + 1, trunc(n.host, Math.max(1, width - lx)));
+            }
         }
 
         // title + stats
@@ -212,7 +218,7 @@ public class GraphScreen implements Screen {
         }
 
         g.setForegroundColor(TextColor.ANSI.DEFAULT);
-        g.putString(2, height - 1, "[p] " + (paused ? "weiter" : "pause") + "   [esc] zurück   [q] quit");
+        g.putString(2, height - 1, "[p] " + (paused ? "weiter" : "pause") + "   [h] hosts   [esc] zurück   [q] quit");
     }
 
     /** Places nodes on an ellipse filling the canvas; the angle is stable (by first-seen index),
@@ -239,6 +245,13 @@ public class GraphScreen implements Screen {
         }
         radiusFrac.keySet().retainAll(pos.keySet());    // forget radii of nodes no longer present
         return pos;
+    }
+
+    /** Shortens an auto-generated sender id (UUID / object id) to head…tail; keeps short readable names as-is. */
+    private String shortId(String id) {
+        if (id == null) return "?";
+        if (id.length() <= 16) return id;
+        return id.substring(0, 6) + "…" + id.substring(id.length() - 4);
     }
 
     private String trunc(String s, int max) {
