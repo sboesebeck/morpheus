@@ -67,4 +67,23 @@ public class LauncherScreenTest {
         s.draw(ts.newTextGraphics()); // must not throw
         ts.stopScreen();
     }
+
+    @Test
+    void cursorStartsOnDefaultConnection() throws Exception {
+        MorpheusContext ctx = ctxWithConnections();
+        ctx.getConfig().setDefaultConnection("beta");
+        LauncherScreen s = new LauncherScreen(ctx);
+        assertEquals("beta", s.selectedConnection());
+    }
+
+    @Test
+    void spaceTogglesDefaultConnection() throws Exception {
+        MorpheusContext ctx = ctxWithConnections();
+        LauncherScreen s = new LauncherScreen(ctx);
+        String sel = s.selectedConnection();
+        s.onKey(new KeyStroke(' ', false, false));
+        assertEquals(sel, ctx.getConfig().getDefaultConnection());
+        s.onKey(new KeyStroke(' ', false, false));   // toggle off
+        assertNull(ctx.getConfig().getDefaultConnection());
+    }
 }

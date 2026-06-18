@@ -36,6 +36,22 @@ public class ConfigurationManager {
     public void setMessagingOverride(String messaging) { this.messagingOverride = messaging; }
     public void setVerbose(boolean verbose) { this.verbose = verbose; }
 
+    /** The connection name marked as default (morpheus.defaultConnection), or null if none is set. */
+    public String getDefaultConnection() {
+        String v = properties.getProperty("morpheus.defaultConnection");
+        return (v == null || v.isBlank()) ? null : v;
+    }
+
+    /** Marks the given connection as default (or clears it when null/blank) and persists. */
+    public void setDefaultConnection(String name) throws Exception {
+        if (name == null || name.isBlank()) {
+            properties.remove("morpheus.defaultConnection");
+        } else {
+            properties.setProperty("morpheus.defaultConnection", name);
+        }
+        save();
+    }
+
     private void loadConfiguration() {
         File configFile = new File(configFilePath);
 
