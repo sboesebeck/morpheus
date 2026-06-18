@@ -7,6 +7,7 @@ import java.io.FileWriter;
 import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 public class ConfigurationManagerTest {
 
@@ -70,6 +71,24 @@ public class ConfigurationManagerTest {
         ConfigurationManager cm = new ConfigurationManager(path);
         cm.setMessagingOverride("single");
         assertEquals("single", cm.getMessagingImplementation());
+    }
+
+    @Test
+    void setDefaultConnectionPersistsAndClears() throws Exception {
+        String path = writeConfig("""
+            morphium.prod.database=p
+            morphium.dev.database=d
+            """);
+        ConfigurationManager cm = new ConfigurationManager(path);
+        assertNull(cm.getDefaultConnection());
+
+        cm.setDefaultConnection("prod");
+        assertEquals("prod", cm.getDefaultConnection());
+        assertEquals("prod", new ConfigurationManager(path).getDefaultConnection(), "must persist to disk");
+
+        cm.setDefaultConnection(null);
+        assertNull(cm.getDefaultConnection());
+        assertNull(new ConfigurationManager(path).getDefaultConnection(), "clearing must persist");
     }
 
     @Test

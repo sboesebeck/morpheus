@@ -36,6 +36,11 @@ public class LauncherScreen implements Screen {
         this.ctx = ctx;
         this.store = new ConnectionStore(ctx.getConfig());
         this.connections = new ListBox<>(new ArrayList<>(store.list()));
+        String def = ctx.getConfig().getDefaultConnection();
+        if (def != null) {
+            int idx = connections.items().indexOf(def);
+            if (idx >= 0) connections.select(idx);
+        }
     }
 
     // ── test seams ──
@@ -74,6 +79,13 @@ public class LauncherScreen implements Screen {
                 if (c == 'd' && active == Column.CONNECTIONS && connections.selected() != null) {
                     return Result.push(new ConfirmDeleteScreen(ctx, connections.selected()));
                 }
+                if (c == ' ' && active == Column.CONNECTIONS && connections.selected() != null) {
+                    try {
+                        String selName = connections.selected();
+                        String cur = ctx.getConfig().getDefaultConnection();
+                        ctx.getConfig().setDefaultConnection(selName.equals(cur) ? null : selName);
+                    } catch (Exception ignored) { }
+                }
             }
             default -> { }
         }
@@ -100,14 +112,14 @@ public class LauncherScreen implements Screen {
         g.setForegroundColor(ThemeStyle.color("c3"));
         g.putString(2, top, "Verbindungen");
         g.setForegroundColor(TextColor.ANSI.DEFAULT);
-        drawList(g, connections, 2, top + 1, active == Column.CONNECTIONS);
+        drawList(g, connections, 2, top + 1, active == Column.CONNECTIONS, ctx.getConfig().getDefaultConnection());
 
         // View column
         int viewCol = 30;
         g.setForegroundColor(ThemeStyle.color("c3"));
         g.putString(viewCol, top, "Start-Ansicht");
         g.setForegroundColor(TextColor.ANSI.DEFAULT);
-        drawList(g, views, viewCol, top + 1, active == Column.VIEWS);
+        drawList(g, views, viewCol, top + 1, active == Column.VIEWS, null);
 
         // Details of highlighted connection
         String sel = connections.selected();
@@ -144,7 +156,7 @@ public class LauncherScreen implements Screen {
         g.setForegroundColor(TextColor.ANSI.GREEN_BRIGHT);
         g.putString(2, fy, "[⏎] starten  ");
         g.setForegroundColor(TextColor.ANSI.CYAN);
-        g.putString(15, fy, "[a] neu  [e] edit  [d] löschen  [t] test  [q] quit");
+        g.putString(15, fy, "[a] neu  [e] edit  [d] löschen  [t] test  [␣] default  [q] quit");
         g.setForegroundColor(TextColor.ANSI.DEFAULT);
     }
 
@@ -183,7 +195,7 @@ public class LauncherScreen implements Screen {
         };
     }
 
-    private void drawList(TextGraphics g, ListBox<String> box, int x, int y, boolean activeCol) {
+    private void drawList(TextGraphics g, ListBox<String> box, int x, int y, boolean activeCol, String starName) {
         List<String> items = box.items();
         for (int i = 0; i < items.size(); i++) {
             boolean sel = i == box.selectedIndex();
@@ -191,7 +203,9 @@ public class LauncherScreen implements Screen {
             if (sel && activeCol) g.setForegroundColor(TextColor.ANSI.GREEN_BRIGHT);
             else if (sel) g.setForegroundColor(ThemeStyle.color("c3"));
             else g.setForegroundColor(TextColor.ANSI.DEFAULT);
-            g.putString(x, y + i, marker + items.get(i));
+            String text = items.get(i);
+            if (starName != null && text.equals(starName)) text = text + " *";
+            g.putString(x, y + i, marker + text);
         }
         g.setForegroundColor(TextColor.ANSI.DEFAULT);
     }

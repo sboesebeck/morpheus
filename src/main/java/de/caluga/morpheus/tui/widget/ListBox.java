@@ -20,6 +20,9 @@ public class ListBox<T> {
     public void up()   { if (index > 0) index--; }
     public void down() { if (index >= 0 && index < items.size() - 1) index++; }
 
+    /** Positions the cursor at the given index, clamped to the valid range; no-op when empty. */
+    public void select(int i) { if (!items.isEmpty()) index = Math.max(0, Math.min(i, items.size() - 1)); }
+
     public T selected() {
         return index < 0 ? null : items.get(index);
     }

@@ -34,8 +34,7 @@ public class ConfigCommands implements Callable<Integer> {
 
     /** Persists the default connection used when -c is not given. Extracted for testability. */
     public static void setDefaultConnection(ConfigurationManager cm, String name) throws Exception {
-        cm.setProperty("morpheus.defaultConnection", name);
-        cm.save();
+        cm.setDefaultConnection(name);
     }
 
     // ── input helpers ─────────────────────────────────────────────────────────
