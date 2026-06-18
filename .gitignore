@@ -18,3 +18,8 @@ settings.gradle.kts
 bin/main
 openPMD-visualization.ipynb
 cp.csv
+
+# AI assistant / workflow artifacts — kept local, never tracked/pushed
+CLAUDE.md
+AGENTS.md
+docs/superpowers/
