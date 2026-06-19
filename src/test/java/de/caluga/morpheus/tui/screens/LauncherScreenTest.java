@@ -77,6 +77,19 @@ public class LauncherScreenTest {
     }
 
     @Test
+    void defaultStaysSelectedAfterFirstDraw() throws Exception {
+        MorpheusContext ctx = ctxWithConnections();
+        ctx.getConfig().setDefaultConnection("beta");
+        LauncherScreen s = new LauncherScreen(ctx);
+        DefaultVirtualTerminal vt = new DefaultVirtualTerminal();
+        TerminalScreen ts = new TerminalScreen(vt);
+        ts.startScreen();
+        s.draw(ts.newTextGraphics());   // first draw rebuilds the list; the default must survive setItems()
+        ts.stopScreen();
+        assertEquals("beta", s.selectedConnection());
+    }
+
+    @Test
     void spaceTogglesDefaultConnection() throws Exception {
         MorpheusContext ctx = ctxWithConnections();
         LauncherScreen s = new LauncherScreen(ctx);
