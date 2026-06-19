@@ -27,7 +27,9 @@ public class GraphScreen implements Screen {
 
     private static final int SHOT_CAP = 20;
     private static final long IDLE_MS = 15_000;
-    private static final int FRAME_MS = 33;          // ~30 fps while the graph is open (animation)
+    private static final int FRAME_MS = 33;          // ~30 fps for the cheap Braille renderer
+    private static final int GFX_FRAME_MS = 33;      // ~30 fps for the Kitty image too (zlib encode is cheap; matches the shot-speed tuning)
+    private static final long TRAIL_MS = 2500;       // how long a recently used connection lingers as a fading grey line
     private static final double SHOT_SPEED = 0.16;   // one leg ≈ 6 frames (~200ms) → round-trip ~450ms
     private static final int SPAWN_PER_FRAME = 3;     // spread bursts over frames so shots don't pulse 0↔cap
     private static final int MAX_PENDING = 300;       // flood guard for the spawn queue
@@ -56,8 +58,13 @@ public class GraphScreen implements Screen {
     private volatile boolean seeded = false;
     private boolean paused = false;
     private boolean showHosts = false;
+    private boolean pulse = false;             // [b]: pulse whole chords (grey→colour→grey) instead of moving dots
     private boolean gfx = false;
+    private int gfxFrame = 0;                  // double-buffer frame counter for the Kitty renderer
+    private long lastGfxEmit = 0;              // wall-clock throttle: fixed 20 fps, decoupled from the loop rate
     private String gfxHint = null;
+    private record Chord(String a, String b) {}                              // an unordered node pair
+    private final Map<Chord, Long> chordSeen = new java.util.HashMap<>();    // pair → last time a message used it (for grey trails)
     private final GraphImageRenderer imageRenderer = new GraphImageRenderer();
     java.util.function.BooleanSupplier gfxSupportedCheck = KittyGraphics::supported;  // test seam
     Appendable gfxOut = System.out;                                                   // test seam
@@ -98,7 +105,12 @@ public class GraphScreen implements Screen {
     }
 
     @Override
-    public int frameIntervalMs() { return FRAME_MS; }
+    public int frameIntervalMs() { return gfx ? GFX_FRAME_MS : FRAME_MS; }
+
+    /** Normalises a directed flow into an unordered chord key. */
+    private static Chord chordKey(String a, String b) {
+        return a.compareTo(b) <= 0 ? new Chord(a, b) : new Chord(b, a);
+    }
 
     @Override
     public void onClose() {
@@ -113,6 +125,7 @@ public class GraphScreen implements Screen {
         if (c != null && c == 'q') return Result.quit();
         if (c != null && c == 'p') { paused = !paused; return Result.stay(); }
         if (c != null && c == 'h') { showHosts = !showHosts; return Result.stay(); }
+        if (c != null && c == 'b') { pulse = !pulse; return Result.stay(); }
         if (c != null && c == 'g') {
             if (gfx) {
                 gfx = false;
@@ -120,6 +133,7 @@ public class GraphScreen implements Screen {
             } else if (gfxSupportedCheck.getAsBoolean()) {
                 gfx = true;
                 gfxHint = null;
+                lastGfxEmit = 0;             // force an immediate first frame, bypassing the throttle
             } else {
                 gfxHint = "Kitty-Grafik in diesem Terminal nicht erkannt";
             }
@@ -169,6 +183,7 @@ public class GraphScreen implements Screen {
                 double[] from = pos.get(f.from());
                 double[] to = pos.get(f.to());
                 if (from == null || to == null) continue;         // a node not placed yet; drop
+                chordSeen.put(chordKey(f.from(), f.to()), now);   // refresh this connection's grey-trail timer
                 if (f.kind() == FlowEvent.Kind.ANSWER) {
                     // request leg, then the reply leg back, sequentially
                     TextColor c = TopicPalette.colorFor(f.topic());
@@ -186,9 +201,22 @@ public class GraphScreen implements Screen {
         Map<String, TextColor> legend = new LinkedHashMap<>();
         List<Shot> live = advanceShots(legend);
 
+        // fading grey trails of recently used connections (subpixel coords; each entry: {x0,y0,x1,y1,alpha})
+        List<double[]> trails = new java.util.ArrayList<>();
+        java.util.Iterator<Map.Entry<Chord, Long>> ti = chordSeen.entrySet().iterator();
+        while (ti.hasNext()) {
+            Map.Entry<Chord, Long> e = ti.next();
+            long age = now - e.getValue();
+            if (age >= TRAIL_MS) { ti.remove(); continue; }
+            double[] pa = pos.get(e.getKey().a());
+            double[] pb = pos.get(e.getKey().b());
+            if (pa == null || pb == null) continue;            // a node not placed (yet/anymore)
+            trails.add(new double[]{pa[0], pa[1], pb[0], pb[1], 1.0 - (double) age / TRAIL_MS});
+        }
+
         if (gfx) {
             try {
-                drawGfx(cCols, cRows, canvasTop, nodes, pos, live);
+                drawGfx(cCols, cRows, canvasTop, nodes, pos, live, trails);
             } catch (Throwable t) {
                 gfx = false;                 // any failure → fall back to Braille
                 KittyGraphics.delete(gfxOut);
@@ -197,11 +225,24 @@ public class GraphScreen implements Screen {
         if (!gfx) {
             // Braille middle: render the live shots to the canvas, then node labels via Lanterna (unchanged)
             BrailleCanvas canvas = new BrailleCanvas(cCols, cRows);
+            if (pulse) {
+                // grey trails of recently used connections, fading out (drawn first, under the live pulses)
+                for (double[] tr : trails) {
+                    if (tr[4] > 0.15) canvas.line((int) tr[0], (int) tr[1], (int) tr[2], (int) tr[3], TextColor.ANSI.BLACK_BRIGHT);
+                }
+            }
             for (Shot s : live) {
-                canvas.line((int) s.x0, (int) s.y0, (int) s.x1, (int) s.y1, TextColor.ANSI.BLACK_BRIGHT);
-                double px = s.x0 + (s.x1 - s.x0) * s.progress;
-                double py = s.y0 + (s.y1 - s.y0) * s.progress;
-                canvas.plot((int) px, (int) py, s.color);
+                if (pulse) {
+                    // whole chord lights up around mid-flight, then dims back to grey
+                    double t = Math.sin(Math.max(0, Math.min(1, s.progress)) * Math.PI);
+                    canvas.line((int) s.x0, (int) s.y0, (int) s.x1, (int) s.y1,
+                            t > 0.35 ? s.color : TextColor.ANSI.BLACK_BRIGHT);
+                } else {
+                    canvas.line((int) s.x0, (int) s.y0, (int) s.x1, (int) s.y1, TextColor.ANSI.BLACK_BRIGHT);
+                    double px = s.x0 + (s.x1 - s.x0) * s.progress;
+                    double py = s.y0 + (s.y1 - s.y0) * s.progress;
+                    canvas.plot((int) px, (int) py, s.color);
+                }
             }
             canvas.render(g, 1, canvasTop);
 
@@ -254,8 +295,9 @@ public class GraphScreen implements Screen {
         }
 
         g.setForegroundColor(TextColor.ANSI.DEFAULT);
-        g.putString(2, height - 1,
-                "[p] " + (paused ? "weiter" : "pause") + "   [h] hosts   [g] grafik   [esc] zurück   [q] quit");
+        g.putString(2, height - 1, trunc(
+                "[p] " + (paused ? "weiter" : "pause") + "   [h] hosts   [g] grafik   [b] "
+                        + (pulse ? "kugel" : "puls") + "   [esc] zurück   [q] quit", width - 3));
         if (gfxHint != null) {
             g.setForegroundColor(TextColor.ANSI.YELLOW);
             g.putString(2, height - 2, trunc(gfxHint, width - 3));
@@ -286,11 +328,16 @@ public class GraphScreen implements Screen {
     /** gfx middle: render nodes + live shots to a PNG and place it as a Kitty image owning the middle region.
      *  Coordinates are the Braille subpixel space (cCols*2 x cRows*4) scaled x4 into pixels. */
     private void drawGfx(int cCols, int cRows, int canvasTop, List<NodeRegistry.Node> nodes,
-                         Map<String, double[]> pos, List<Shot> live) {
-        final double scale = 4.0;
-        int pxW = cCols * 2 * (int) scale;
-        int pxH = cRows * 4 * (int) scale;
+                         Map<String, double[]> pos, List<Shot> live, List<double[]> trails) {
         long now = System.currentTimeMillis();
+        // Throttle the expensive PNG render + escape write to the gfx frame budget, independent of how often the
+        // run loop calls draw(). Without this, every keystroke triggers a full image emit and input feels laggy.
+        if (now - lastGfxEmit < GFX_FRAME_MS) return;
+        lastGfxEmit = now;
+
+        final double scale = 4.0;
+        int pxW = (int) (cCols * 2 * scale);
+        int pxH = (int) (cRows * 4 * scale);
 
         List<GraphImageRenderer.NodeView> nv = new java.util.ArrayList<>();
         for (NodeRegistry.Node n : nodes) {
@@ -306,9 +353,13 @@ public class GraphScreen implements Screen {
             sv.add(new GraphImageRenderer.ShotView(
                     s.x0 * scale, s.y0 * scale, s.x1 * scale, s.y1 * scale, s.progress, s.color));
         }
-        byte[] png = imageRenderer.render(pxW, pxH, nv, sv);
+        List<GraphImageRenderer.ChordView> tv = new java.util.ArrayList<>();
+        for (double[] tr : trails) {
+            tv.add(new GraphImageRenderer.ChordView(tr[0] * scale, tr[1] * scale, tr[2] * scale, tr[3] * scale, tr[4]));
+        }
+        byte[] frame = imageRenderer.render(pxW, pxH, nv, sv, tv, pulse);
         // the Braille canvas renders at Lanterna (col 1, row canvasTop); the image occupies the same region.
-        KittyGraphics.emit(png, cCols, cRows, canvasTop + 1, 2, gfxOut);
+        KittyGraphics.emit(frame, pxW, pxH, cCols, cRows, canvasTop + 1, 2, gfxFrame++, gfxOut);
     }
 
     /** Places nodes on an ellipse filling the canvas; the angle is stable (by first-seen index),

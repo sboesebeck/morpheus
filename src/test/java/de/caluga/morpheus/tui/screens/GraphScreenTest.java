@@ -18,7 +18,19 @@ public class GraphScreenTest {
         assertEquals(Screen.Result.Kind.POP, s.onKey(new KeyStroke(KeyType.Escape)).kind());
         assertEquals(Screen.Result.Kind.STAY, s.onKey(new KeyStroke('p', false, false)).kind());
         assertEquals(Screen.Result.Kind.STAY, s.onKey(new KeyStroke('h', false, false)).kind());
+        assertEquals(Screen.Result.Kind.STAY, s.onKey(new KeyStroke('b', false, false)).kind());   // pulse toggle
         assertEquals(Screen.Result.Kind.QUIT, s.onKey(new KeyStroke('q', false, false)).kind());
+    }
+
+    @Test
+    void pulseModeRendersWithoutError() throws Exception {
+        NodeRegistry r = new NodeRegistry("self");
+        r.observeSend("hermes", "h1", 1000);
+        r.observeRecv("worker2", "h3", 1000);
+        GraphScreen s = new GraphScreen(r);
+        s.onKey(new KeyStroke('b', false, false));   // switch to pulse (line-flash) mode
+        renderOk(s, 120, 40);
+        renderOk(s, 40, 12);
     }
 
     @Test
@@ -65,7 +77,7 @@ public class GraphScreenTest {
         s.gfxSupportedCheck = () -> true;
         s.onKey(new KeyStroke('g', false, false));  // enable gfx
         renderOk(s, 120, 40);
-        assertTrue(sink.toString().contains("a=T,f=100,i=1"), "gfx mode emits a kitty image");
+        assertTrue(sink.toString().contains("a=T,f=24,o=z,"), "gfx mode emits a kitty image");
 
         sink.setLength(0);
         s.onKey(new KeyStroke('g', false, false));  // toggle off
