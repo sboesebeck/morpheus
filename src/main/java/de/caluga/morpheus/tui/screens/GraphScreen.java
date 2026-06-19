@@ -61,7 +61,10 @@ public class GraphScreen implements Screen {
     private boolean pulse = false;             // [b]: pulse whole chords (grey→colour→grey) instead of moving dots
     private boolean gfx = false;
     private int gfxFrame = 0;                  // double-buffer frame counter for the Kitty renderer
-    private long lastGfxEmit = 0;              // wall-clock throttle: fixed 20 fps, decoupled from the loop rate
+    private long lastGfxEmit = 0;              // wall-clock throttle: fixed 30 fps, decoupled from the loop rate
+    private boolean showStats = false;         // [m]: overlay per-frame perf metrics (encode/transmit/size)
+    private double lastEncodeMs = 0, lastTxMs = 0;
+    private int pxWlast = 0, pxHlast = 0;
     private String gfxHint = null;
     private record Chord(String a, String b) {}                              // an unordered node pair
     private final Map<Chord, Long> chordSeen = new java.util.HashMap<>();    // pair → last time a message used it (for grey trails)
@@ -126,6 +129,7 @@ public class GraphScreen implements Screen {
         if (c != null && c == 'p') { paused = !paused; return Result.stay(); }
         if (c != null && c == 'h') { showHosts = !showHosts; return Result.stay(); }
         if (c != null && c == 'b') { pulse = !pulse; return Result.stay(); }
+        if (c != null && c == 'm') { showStats = !showStats; return Result.stay(); }
         if (c != null && c == 'g') {
             if (gfx) {
                 gfx = false;
@@ -278,6 +282,8 @@ public class GraphScreen implements Screen {
         g.setForegroundColor(TextColor.ANSI.CYAN);
         g.putString(2, 0, trunc("Message Flow" + (seeded ? "" : "   (Knoten werden entdeckt …)"), width - 3));
         String stats = registry.nodeCount() + " nodes · " + registry.topicCount() + " topics · " + shots.size() + " shots";
+        if (gfx && showStats) stats += " · enc " + Math.round(lastEncodeMs) + "ms tx " + Math.round(lastTxMs)
+                + "ms · " + pxWlast + "×" + pxHlast;
         g.setForegroundColor(TextColor.ANSI.YELLOW);
         g.putString(Math.max(2, width - stats.length() - 2), 0, stats);
 
@@ -297,7 +303,7 @@ public class GraphScreen implements Screen {
         g.setForegroundColor(TextColor.ANSI.DEFAULT);
         g.putString(2, height - 1, trunc(
                 "[p] " + (paused ? "weiter" : "pause") + "   [h] hosts   [g] grafik   [b] "
-                        + (pulse ? "kugel" : "puls") + "   [esc] zurück   [q] quit", width - 3));
+                        + (pulse ? "kugel" : "puls") + "   [m] stats   [esc] zurück   [q] quit", width - 3));
         if (gfxHint != null) {
             g.setForegroundColor(TextColor.ANSI.YELLOW);
             g.putString(2, height - 2, trunc(gfxHint, width - 3));
@@ -338,6 +344,8 @@ public class GraphScreen implements Screen {
         final double scale = 4.0;
         int pxW = (int) (cCols * 2 * scale);
         int pxH = (int) (cRows * 4 * scale);
+        pxWlast = pxW;
+        pxHlast = pxH;
 
         List<GraphImageRenderer.NodeView> nv = new java.util.ArrayList<>();
         for (NodeRegistry.Node n : nodes) {
@@ -357,9 +365,14 @@ public class GraphScreen implements Screen {
         for (double[] tr : trails) {
             tv.add(new GraphImageRenderer.ChordView(tr[0] * scale, tr[1] * scale, tr[2] * scale, tr[3] * scale, tr[4]));
         }
+        long t0 = System.nanoTime();
         byte[] frame = imageRenderer.render(pxW, pxH, nv, sv, tv, pulse);
+        long t1 = System.nanoTime();
         // the Braille canvas renders at Lanterna (col 1, row canvasTop); the image occupies the same region.
         KittyGraphics.emit(frame, pxW, pxH, cCols, cRows, canvasTop + 1, 2, gfxFrame++, gfxOut);
+        long t2 = System.nanoTime();
+        lastEncodeMs = (t1 - t0) / 1_000_000.0;
+        lastTxMs = (t2 - t1) / 1_000_000.0;
     }
 
     /** Places nodes on an ellipse filling the canvas; the angle is stable (by first-seen index),
