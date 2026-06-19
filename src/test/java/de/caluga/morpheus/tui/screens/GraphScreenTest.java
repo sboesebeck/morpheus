@@ -19,6 +19,7 @@ public class GraphScreenTest {
         assertEquals(Screen.Result.Kind.STAY, s.onKey(new KeyStroke('p', false, false)).kind());
         assertEquals(Screen.Result.Kind.STAY, s.onKey(new KeyStroke('h', false, false)).kind());
         assertEquals(Screen.Result.Kind.STAY, s.onKey(new KeyStroke('b', false, false)).kind());   // pulse toggle
+        assertEquals(Screen.Result.Kind.STAY, s.onKey(new KeyStroke('m', false, false)).kind());   // metrics toggle
         assertEquals(Screen.Result.Kind.QUIT, s.onKey(new KeyStroke('q', false, false)).kind());
     }
 
