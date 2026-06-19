@@ -54,6 +54,15 @@ public class MorpheusTui {
                     continue;
                 }
                 Screen.Result r = stack.top().onKey(key);
+                // Drain any further buffered keystrokes that don't change the screen before the next (possibly
+                // expensive) render. Otherwise held/burst keys are consumed one-per-frame and lag badly behind
+                // a slow renderer (e.g. the Kitty graphics view). Stop at the first navigation result so it is
+                // applied against the correct screen.
+                while (r.kind() == Screen.Result.Kind.STAY) {
+                    KeyStroke next = lanternaScreen.pollInput();
+                    if (next == null) break;
+                    r = stack.top().onKey(next);
+                }
                 if (r.kind() == Screen.Result.Kind.QUIT) {
                     break;
                 }
