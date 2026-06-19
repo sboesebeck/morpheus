@@ -96,7 +96,14 @@ public class LauncherScreen implements Screen {
     public void draw(TextGraphics g) {
         java.util.List<String> names = new java.util.ArrayList<>(store.list());
         if (names.size() != lastConnCount) {
+            String keep = connections.selected();      // preserve the highlight across refreshes (setItems resets to 0)
             connections.setItems(names);
+            int idx = keep != null ? names.indexOf(keep) : -1;
+            if (idx < 0) {                             // first build or selection gone → land on the default connection
+                String def = ctx.getConfig().getDefaultConnection();
+                idx = def != null ? names.indexOf(def) : -1;
+            }
+            if (idx >= 0) connections.select(idx);
             lastConnCount = names.size();
         }
 
