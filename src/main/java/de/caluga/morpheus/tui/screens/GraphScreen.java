@@ -119,6 +119,17 @@ public class GraphScreen implements Screen {
         this.seeded = true;
     }
 
+    /** Test seam: drive the spawn path with an injected tracker + deriver, no backend. */
+    GraphScreen(NodeRegistry registry, MessageTracker tracker, FlowDeriver deriver) {
+        this.ownedCtx = null;
+        this.tracker = tracker;
+        this.deriver = deriver;
+        this.registry = registry;
+        this.seeded = true;
+    }
+
+    int shotCount() { return shots.size(); }   // test seam
+
     @Override
     public int frameIntervalMs() { return gfx ? GFX_FRAME_MS : FRAME_MS; }
 
@@ -186,6 +197,17 @@ public class GraphScreen implements Screen {
             pendingSeed = null;
         }
 
+        // Derive this frame's flows BEFORE computing positions: derive() registers newly-seen
+        // recipient/answerer nodes, so a beam toward a node first discovered by its own flow
+        // still finds a ring position below instead of being dropped.
+        if (deriver != null && tracker != null && !paused) {
+            // Queue all of this frame's flows; bursty change-stream batches must not all pop at once.
+            for (FlowEvent f : deriver.derive(tracker.getMessagesNewestFirst(), now)) {
+                if (filter.acceptsFlow(f)) pending.addLast(f);   // hard filter: only relevant flows become beams
+            }
+            while (pending.size() > MAX_PENDING) pending.pollFirst();   // flood guard: drop oldest
+        }
+
         List<NodeRegistry.Node> nodes = registry.nodes();
 
         int canvasTop = 1;
@@ -194,13 +216,8 @@ public class GraphScreen implements Screen {
         int cRows = Math.max(1, canvasBottom - canvasTop);
         Map<String, double[]> pos = ringPositions(nodes, cCols * 2.0, cRows * 4.0, now);
 
-        // spawn shots from new flows
+        // spawn shots from the queued flows (every endpoint is now placed in pos)
         if (deriver != null && tracker != null && !paused) {
-            // Queue all of this frame's flows; bursty change-stream batches must not all pop at once.
-            for (FlowEvent f : deriver.derive(tracker.getMessagesNewestFirst(), now)) {
-                if (filter.acceptsFlow(f)) pending.addLast(f);   // hard filter: only relevant flows become beams
-            }
-            while (pending.size() > MAX_PENDING) pending.pollFirst();   // flood guard: drop oldest
             // Spawn only a few per frame (saturation cap still applies) so the population stays steady.
             int budget = spawnPerFrame();
             while (budget-- > 0 && shots.size() < shotCap() && !pending.isEmpty()) {

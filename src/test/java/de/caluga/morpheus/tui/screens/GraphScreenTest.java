@@ -4,9 +4,16 @@ import com.googlecode.lanterna.input.KeyStroke;
 import com.googlecode.lanterna.input.KeyType;
 import com.googlecode.lanterna.screen.TerminalScreen;
 import com.googlecode.lanterna.terminal.virtual.DefaultVirtualTerminal;
+import de.caluga.morpheus.core.FlowDeriver;
+import de.caluga.morpheus.core.MessageInfo;
+import de.caluga.morpheus.core.MessageTracker;
 import de.caluga.morpheus.core.NodeRegistry;
 import de.caluga.morpheus.tui.Screen;
+import de.caluga.morphium.driver.MorphiumId;
+import de.caluga.morphium.messaging.Msg;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -208,6 +215,59 @@ public class GraphScreenTest {
         assertTrue(label.contains("hermes"), "label shows the sender id");
         assertTrue(label.contains("worker-03.prod.genios.de"), "label also shows the hostname");
         renderOk(s, 120, 40);                                       // wide picker renders fine
+    }
+
+    @Test
+    void flowToFreshlyDiscoveredNodeStillSpawns() throws Exception {
+        // Apollo is already known; the answerer it talks to is discovered only by this very flow.
+        NodeRegistry reg = new NodeRegistry("self");
+        reg.observeSend("apollo", "apollo-host", 1);
+        Msg msg = new Msg("orders", "m", "v", 1000);
+        msg.setMsgId(new MorphiumId());
+        msg.setSender("apollo");
+        msg.setTimestamp(1000);
+        MessageInfo m = new MessageInfo(msg, "orders");
+        m.recipient = "";
+        m.isExclusive = true;           // directed/exclusive request…
+        m.answeredBy = "worker9";       // …answered by a node not yet in the registry
+        m.answeredByHost = "wh9";
+        MessageTracker tracker = new MessageTracker(10) {
+            @Override public List<MessageInfo> getMessagesNewestFirst() { return List.of(m); }
+        };
+        GraphScreen s = new GraphScreen(reg, tracker, new FlowDeriver("self", reg));
+        renderOk(s, 120, 40);
+        assertTrue(s.shotCount() > 0,
+                "a directed message to a node first discovered by this flow must still produce a beam");
+    }
+
+    private MessageInfo answeredExclusive(String sender, String topic, String answeredBy) {
+        Msg msg = new Msg(topic, "m", "v", 1000);
+        msg.setMsgId(new MorphiumId());
+        msg.setSender(sender);
+        msg.setTimestamp(1000);
+        MessageInfo m = new MessageInfo(msg, topic);
+        m.recipient = "";
+        m.isExclusive = true;
+        m.answeredBy = answeredBy;
+        m.answeredByHost = answeredBy + "-host";
+        return m;
+    }
+
+    @Test
+    void nodeFilterKeepsNonMatchingFlowsOutOfTheShotPool() throws Exception {
+        NodeRegistry reg = new NodeRegistry("self");
+        reg.observeSend("apollo", "ah", 1);
+        reg.observeSend("hermes", "hh", 1);
+        reg.observeRecv("w1", "w1h", 1);
+        MessageInfo apolloMsg = answeredExclusive("apollo", "orders", "w1");
+        MessageInfo hermesMsg = answeredExclusive("hermes", "news", "w1");
+        MessageTracker tracker = new MessageTracker(10) {
+            @Override public List<MessageInfo> getMessagesNewestFirst() { return List.of(apolloMsg, hermesMsg); }
+        };
+        GraphScreen s = new GraphScreen(reg, tracker, new FlowDeriver("self", reg));
+        s.filter.nodes.add("apollo");        // focus apollo only
+        renderOk(s, 120, 40);
+        assertEquals(1, s.shotCount(), "only the apollo flow may occupy a shot slot; hermes must not enter the pool");
     }
 
     private void renderOk(GraphScreen s, int cols, int rows) throws Exception {
