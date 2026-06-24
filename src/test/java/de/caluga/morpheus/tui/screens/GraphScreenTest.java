@@ -182,6 +182,22 @@ public class GraphScreenTest {
     }
 
     @Test
+    void pickerSearchFiltersAndTabSelectsAllMatches() {
+        NodeRegistry r = new NodeRegistry("self");
+        r.markListener("a", "h", "orders.created", 1000);
+        r.markListener("b", "h", "orders.shipped", 1000);
+        r.markListener("c", "h", "auth.login", 1000);
+        GraphScreen s = new GraphScreen(r);
+        s.onKey(new KeyStroke('t', false, false));                 // open topic picker (3 topics)
+        for (char ch : "orders".toCharArray()) s.onKey(new KeyStroke(ch, false, false));   // type query
+        s.onKey(new KeyStroke(KeyType.Tab));                       // select all matches
+        s.onKey(new KeyStroke(KeyType.Enter));                     // commit
+        assertTrue(s.filter.topics.contains("orders.created"));
+        assertTrue(s.filter.topics.contains("orders.shipped"));
+        assertFalse(s.filter.topics.contains("auth.login"), "non-matching topic stays unselected");
+    }
+
+    @Test
     void nodePickerLabelShowsIdAndHost() throws Exception {
         NodeRegistry r = new NodeRegistry("self");
         r.observeSend("hermes", "worker-03.prod.genios.de", 1000);

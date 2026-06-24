@@ -66,6 +66,7 @@ public class GraphScreen implements Screen {
     private final java.util.List<String> pickerItems = new java.util.ArrayList<>();
     final java.util.Map<String, String> pickerLabels = new java.util.HashMap<>();   // item key -> display text (test-visible)
     private final java.util.Set<String> pickerSelection = new java.util.LinkedHashSet<>();
+    private String pickerQuery = "";    // live substring search within the open picker
     private int pickerCursor = 0;
     private boolean paused = false;
     private boolean showHosts = false;
@@ -347,6 +348,7 @@ public class GraphScreen implements Screen {
         pickerItems.clear();
         pickerLabels.clear();
         pickerSelection.clear();
+        pickerQuery = "";
         if (which == Overlay.TOPICS) {
             pickerItems.addAll(registry.topicNames());
             java.util.Collections.sort(pickerItems);
@@ -363,7 +365,19 @@ public class GraphScreen implements Screen {
         pickerCursor = 0;
     }
 
-    /** Picker key handling: ↑/↓ move, space toggles, enter commits into the filter, esc discards. */
+    /** The picker items matching the current search query (case-insensitive substring on the label). */
+    private java.util.List<String> visibleItems() {
+        if (pickerQuery.isEmpty()) return pickerItems;
+        String q = pickerQuery.toLowerCase();
+        java.util.List<String> out = new java.util.ArrayList<>();
+        for (String it : pickerItems) {
+            if (pickerLabels.getOrDefault(it, it).toLowerCase().contains(q)) out.add(it);
+        }
+        return out;
+    }
+
+    /** Picker key handling: type to search, ↑/↓ move, space toggles the current item, tab toggles all
+     *  matches, backspace edits the query, enter commits into the filter, esc discards. */
     private Result onPickerKey(KeyStroke key) {
         if (key.getKeyType() == KeyType.Escape) { overlay = Overlay.NONE; return Result.stay(); }
         if (key.getKeyType() == KeyType.Enter) {
@@ -373,57 +387,79 @@ public class GraphScreen implements Screen {
             overlay = Overlay.NONE;
             return Result.stay();
         }
+        java.util.List<String> vis = visibleItems();
         if (key.getKeyType() == KeyType.ArrowUp) { if (pickerCursor > 0) pickerCursor--; return Result.stay(); }
-        if (key.getKeyType() == KeyType.ArrowDown) { if (pickerCursor < pickerItems.size() - 1) pickerCursor++; return Result.stay(); }
-        Character ch = key.getCharacter();
-        if (ch != null && ch == ' ' && !pickerItems.isEmpty()) {
-            String item = pickerItems.get(pickerCursor);
-            if (!pickerSelection.remove(item)) pickerSelection.add(item);
+        if (key.getKeyType() == KeyType.ArrowDown) { if (pickerCursor < vis.size() - 1) pickerCursor++; return Result.stay(); }
+        if (key.getKeyType() == KeyType.Backspace) {
+            if (!pickerQuery.isEmpty()) { pickerQuery = pickerQuery.substring(0, pickerQuery.length() - 1); pickerCursor = 0; }
             return Result.stay();
+        }
+        if (key.getKeyType() == KeyType.Tab) {
+            // toggle every visible match at once: select all unless they're already all selected
+            boolean allSelected = !vis.isEmpty() && pickerSelection.containsAll(vis);
+            for (String it : vis) {
+                if (allSelected) pickerSelection.remove(it); else pickerSelection.add(it);
+            }
+            return Result.stay();
+        }
+        Character ch = key.getCharacter();
+        if (ch != null) {
+            if (ch == ' ') {
+                if (pickerCursor < vis.size()) {
+                    String item = vis.get(pickerCursor);
+                    if (!pickerSelection.remove(item)) pickerSelection.add(item);
+                }
+            } else if (!Character.isISOControl(ch)) {
+                pickerQuery += ch;     // append to the search query
+                pickerCursor = 0;
+            }
         }
         return Result.stay();
     }
 
-    /** Draws the picker as a centered overlay box on top of the live graph. */
+    /** Draws the picker as a centered overlay box on top of the live graph: title, search line,
+     *  the matching items (checkboxes), and a key hint. */
     private void drawPicker(TextGraphics g, int width, int height) {
+        java.util.List<String> vis = visibleItems();
         String title = overlay == Overlay.TOPICS ? "Topics" : "Knoten";
         // size the box to the widest entry (id + host gets wide), clamped to the terminal
-        int contentW = title.length() + 4;
-        for (String it : pickerItems) contentW = Math.max(contentW, pickerLabels.getOrDefault(it, it).length() + 6);
-        int boxW = Math.min(width - 6, Math.max(24, contentW));
-        int rows = Math.min(Math.max(1, pickerItems.size()), Math.max(3, height - 8));
-        int boxH = rows + 4;
+        int contentW = ("Suche: " + pickerQuery).length() + 4;
+        for (String it : vis) contentW = Math.max(contentW, pickerLabels.getOrDefault(it, it).length() + 6);
+        int boxW = Math.min(width - 6, Math.max(28, contentW));
+        int rows = Math.min(Math.max(1, vis.size()), Math.max(3, height - 10));
+        int boxH = rows + 4;   // title, search, items…, hint
         int x0 = (width - boxW) / 2;
         int y0 = (height - boxH) / 2;
 
-        // clear the region behind the box, then frame it
+        // clear the region behind the box
         for (int y = y0; y < y0 + boxH; y++) {
             g.setForegroundColor(TextColor.ANSI.DEFAULT);
             g.putString(x0, y, " ".repeat(Math.max(0, boxW)));
         }
         g.setForegroundColor(TextColor.ANSI.CYAN);
-        g.putString(x0, y0, trunc("┌─ " + title + " " + "─".repeat(Math.max(0, boxW)), boxW));
-        g.putString(x0, y0 + boxH - 2, "└" + "─".repeat(Math.max(0, boxW - 1)));
+        g.putString(x0, y0, trunc("┌─ " + title + " (" + vis.size() + ") " + "─".repeat(Math.max(0, boxW)), boxW));
+        g.setForegroundColor(TextColor.ANSI.DEFAULT);
+        g.putString(x0 + 1, y0 + 1, trunc("Suche: " + pickerQuery + "▌", boxW - 2));
 
-        if (pickerItems.isEmpty()) {
-            g.setForegroundColor(TextColor.ANSI.DEFAULT);
-            g.putString(x0 + 2, y0 + 2, trunc("(noch nichts entdeckt)", boxW - 4));
+        if (vis.isEmpty()) {
+            g.setForegroundColor(TextColor.ANSI.BLACK_BRIGHT);
+            g.putString(x0 + 2, y0 + 3, trunc(pickerItems.isEmpty() ? "(noch nichts entdeckt)" : "(keine Treffer)", boxW - 4));
         } else {
             // scroll window so the cursor stays visible
-            int first = Math.max(0, Math.min(pickerCursor - rows / 2, pickerItems.size() - rows));
+            int first = Math.max(0, Math.min(pickerCursor - rows / 2, vis.size() - rows));
             for (int i = 0; i < rows; i++) {
                 int idx = first + i;
-                if (idx >= pickerItems.size()) break;
-                String item = pickerItems.get(idx);
+                if (idx >= vis.size()) break;
+                String item = vis.get(idx);
                 boolean sel = pickerSelection.contains(item);
                 boolean cur = idx == pickerCursor;
                 String line = (cur ? "▸ " : "  ") + (sel ? "[x] " : "[ ] ") + pickerLabels.getOrDefault(item, item);
                 g.setForegroundColor(cur ? TextColor.ANSI.GREEN_BRIGHT : TextColor.ANSI.DEFAULT);
-                g.putString(x0 + 1, y0 + 1 + i, trunc(line, boxW - 2));
+                g.putString(x0 + 1, y0 + 2 + i, trunc(line, boxW - 2));
             }
         }
         g.setForegroundColor(TextColor.ANSI.BLACK_BRIGHT);
-        g.putString(x0 + 1, y0 + boxH - 1, trunc("↑↓ space enter esc", boxW - 2));
+        g.putString(x0 + 1, y0 + boxH - 1, trunc("tippen=suche  ↑↓  space  tab=alle  enter  esc", boxW - 2));
     }
 
     /** Advances every shot once; removes finished ones (queuing their reply leg), records the active-topic
@@ -505,15 +541,20 @@ public class GraphScreen implements Screen {
         double radX = Math.max(4, cw / 2.0 * 0.88);
         double radY = Math.max(4, ch / 2.0 * 0.88);
 
-        int parkedCount = 0;
-        for (NodeRegistry.Node nd : nodes) if (!inFocus(nd.id, now)) parkedCount++;
+        int focusCount = 0;
+        for (NodeRegistry.Node nd : nodes) if (inFocus(nd.id, now)) focusCount++;
+        int parkedCount = n - focusCount;
+        int focusIdx = 0;
         int parkIdx = 0;
 
         for (int i = 0; i < n; i++) {
             NodeRegistry.Node nd = nodes.get(i);
             double tx, ty;
             if (inFocus(nd.id, now)) {
-                double a = 2 * Math.PI * i / n - Math.PI / 2;
+                // spread the focus nodes evenly over the ring by their own count, so parking a node
+                // re-distributes the rest instead of leaving a gap (the easing makes it slide smoothly)
+                double a = 2 * Math.PI * focusIdx / Math.max(1, focusCount) - Math.PI / 2;
+                focusIdx++;
                 // sender-ness: 0 (pure receiver → rim) … 1 (pure sender → centre)
                 double centrality = nd.sendCount / (double) (nd.sendCount + nd.recvCount + 1);
                 double frac = 1.0 - centrality * 0.7;       // a pure sender settles at ~0.3 of the radius
