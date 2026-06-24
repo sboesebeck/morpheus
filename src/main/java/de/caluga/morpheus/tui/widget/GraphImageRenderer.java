@@ -26,7 +26,7 @@ public final class GraphImageRenderer {
         System.setProperty("java.awt.headless", "true");
     }
 
-    public record NodeView(double x, double y, String label, String host, boolean idle) {}
+    public record NodeView(double x, double y, String label, String host, boolean idle, boolean dimmed) {}
 
     public record ShotView(double x0, double y0, double x1, double y1, double progress, TextColor color) {}
 
@@ -83,11 +83,22 @@ public final class GraphImageRenderer {
         // nodes + labels
         g.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 13));
         for (NodeView nd : nodes) {
-            Color core = nd.idle() ? new Color(95, 110, 95) : new Color(60, 230, 140);
-            glow(g, nd.x(), nd.y(), 13, new Color(core.getRed(), core.getGreen(), core.getBlue(), 80));
+            Color core;
+            Color text;
+            if (nd.dimmed()) {
+                core = new Color(70, 78, 85);          // muted slate: present but pushed to the background
+                text = new Color(105, 112, 120);
+            } else if (nd.idle()) {
+                core = new Color(95, 110, 95);
+                text = new Color(140, 150, 140);
+            } else {
+                core = new Color(60, 230, 140);
+                text = new Color(190, 255, 215);
+            }
+            glow(g, nd.x(), nd.y(), 13, new Color(core.getRed(), core.getGreen(), core.getBlue(), nd.dimmed() ? 40 : 80));
             g.setColor(core);
             g.fillOval((int) nd.x() - 5, (int) nd.y() - 5, 10, 10);
-            g.setColor(nd.idle() ? new Color(140, 150, 140) : new Color(190, 255, 215));
+            g.setColor(text);
             g.drawString(nd.label(), (int) nd.x() + 9, (int) nd.y() + 4);
             if (nd.host() != null && !nd.host().isEmpty()) {
                 g.setColor(new Color(110, 120, 110));

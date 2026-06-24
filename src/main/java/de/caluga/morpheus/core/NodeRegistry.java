@@ -104,4 +104,9 @@ public class NodeRegistry {
     public int topicCount() {
         return topicListeners.size();
     }
+
+    /** Known topic names in insertion-ish order (a copy). */
+    public List<String> topicNames() {
+        return new ArrayList<>(topicListeners.keySet());
+    }
 }

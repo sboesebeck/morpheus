@@ -29,8 +29,8 @@ public class GraphImageRendererTest {
     void rendersSceneToZlibRgbFrame() throws Exception {
         GraphImageRenderer r = new GraphImageRenderer();
         List<GraphImageRenderer.NodeView> nodes = List.of(
-                new GraphImageRenderer.NodeView(60, 50, "hermes ↑5 ↓0", null, false),
-                new GraphImageRenderer.NodeView(160, 80, "w1 ↑0 ↓5", "host-1", true));
+                new GraphImageRenderer.NodeView(60, 50, "hermes ↑5 ↓0", null, false, false),
+                new GraphImageRenderer.NodeView(160, 80, "w1 ↑0 ↓5", "host-1", true, false));
         List<GraphImageRenderer.ShotView> shots = List.of(
                 new GraphImageRenderer.ShotView(60, 50, 160, 80, 0.5, TextColor.ANSI.GREEN_BRIGHT),
                 new GraphImageRenderer.ShotView(160, 80, 60, 50, 0.2, TextColor.ANSI.RED_BRIGHT));
@@ -44,7 +44,7 @@ public class GraphImageRendererTest {
     void pulseModeWithTrailsRendersToZlibRgbFrame() throws Exception {
         GraphImageRenderer r = new GraphImageRenderer();
         List<GraphImageRenderer.NodeView> nodes = List.of(
-                new GraphImageRenderer.NodeView(60, 50, "hermes ↑5 ↓0", null, false));
+                new GraphImageRenderer.NodeView(60, 50, "hermes ↑5 ↓0", null, false, false));
         List<GraphImageRenderer.ShotView> shots = List.of(
                 new GraphImageRenderer.ShotView(60, 50, 160, 80, 0.5, TextColor.ANSI.GREEN_BRIGHT),
                 new GraphImageRenderer.ShotView(160, 80, 60, 50, 0.0, TextColor.ANSI.RED_BRIGHT));   // t=0 edge
@@ -54,6 +54,17 @@ public class GraphImageRendererTest {
         byte[] z = r.render(240, 140, nodes, shots, trails, true);
         assertTrue(z.length > 0);
         assertEquals(240 * 140 * 3, inflatedLength(z), "inflates to w*h*3 raw RGB bytes");
+    }
+
+    @Test
+    void dimmedNodesRenderWithoutError() throws Exception {
+        GraphImageRenderer r = new GraphImageRenderer();
+        List<GraphImageRenderer.NodeView> nodes = List.of(
+                new GraphImageRenderer.NodeView(10, 10, "hermes ↑1 ↓0", null, false, false),
+                new GraphImageRenderer.NodeView(40, 30, "worker ↑0 ↓1", null, false, true));   // dimmed
+        byte[] z = r.render(80, 60, nodes, List.of(), List.of(), false);
+        assertNotNull(z);
+        assertEquals(80 * 60 * 3, inflatedLength(z));
     }
 
     @Test

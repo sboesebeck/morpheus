@@ -97,6 +97,103 @@ public class GraphScreenTest {
         assertTrue(sink.toString().contains("\033_Ga=d,d=I,i=1"), "onClose removes the image in gfx mode");
     }
 
+    @Test
+    void clearAndCapKeysReturnStay() {
+        GraphScreen s = new GraphScreen(new NodeRegistry("self"));
+        assertEquals(Screen.Result.Kind.STAY, s.onKey(new KeyStroke('c', false, false)).kind());   // clear filter
+        assertEquals(Screen.Result.Kind.STAY, s.onKey(new KeyStroke('+', false, false)).kind());   // cap up
+        assertEquals(Screen.Result.Kind.STAY, s.onKey(new KeyStroke('-', false, false)).kind());   // cap down
+    }
+
+    @Test
+    void capPresetsStepAndClamp() {
+        GraphScreen s = new GraphScreen(new NodeRegistry("self"));
+        assertEquals(20, s.shotCap());                 // default preset
+        s.onKey(new KeyStroke('-', false, false));
+        assertEquals(10, s.shotCap());                 // one down
+        s.onKey(new KeyStroke('-', false, false));
+        assertEquals(10, s.shotCap());                 // clamped at the low end
+        for (int i = 0; i < 9; i++) s.onKey(new KeyStroke('+', false, false));
+        assertEquals(160, s.shotCap());                // clamped at the high end
+    }
+
+    @Test
+    void clearKeyEmptiesFilter() {
+        GraphScreen s = new GraphScreen(new NodeRegistry("self"));
+        s.filter.topics.add("orders");
+        s.filter.nodes.add("hermes");
+        s.onKey(new KeyStroke('c', false, false));
+        assertTrue(s.filter.isEmpty());
+    }
+
+    @Test
+    void rendersWithActiveFilterWithoutError() throws Exception {
+        NodeRegistry r = new NodeRegistry("self");
+        r.observeSend("hermes", "h1", 1000);
+        r.observeRecv("worker1", "h2", 1000);
+        r.markListener("worker1", "h2", "orders", 1000);
+        GraphScreen s = new GraphScreen(r);
+        s.filter.topics.add("orders");                 // worker1 bright, hermes dimmed
+        renderOk(s, 120, 40);
+        s.onKey(new KeyStroke('g', false, false));     // gfx path must dim too (unsupported here -> stays braille)
+        renderOk(s, 120, 40);
+    }
+
+    @Test
+    void topicPickerSelectsAndAppliesFilter() {
+        NodeRegistry r = new NodeRegistry("self");
+        r.markListener("worker1", "h1", "orders", 1000);
+        GraphScreen s = new GraphScreen(r);
+        assertEquals(Screen.Result.Kind.STAY, s.onKey(new KeyStroke('t', false, false)).kind());  // open topic picker
+        s.onKey(new KeyStroke(' ', false, false));                  // space toggles selection
+        s.onKey(new KeyStroke(KeyType.Enter));                      // commit
+        assertTrue(s.filter.topics.contains("orders"));
+    }
+
+    @Test
+    void pickerEscapeDiscardsSelection() {
+        NodeRegistry r = new NodeRegistry("self");
+        r.markListener("worker1", "h1", "orders", 1000);
+        GraphScreen s = new GraphScreen(r);
+        s.onKey(new KeyStroke('t', false, false));
+        s.onKey(new KeyStroke(' ', false, false));                  // tentatively select "orders"
+        s.onKey(new KeyStroke(KeyType.Escape));                     // discard
+        assertTrue(s.filter.topics.isEmpty());
+    }
+
+    @Test
+    void nodePickerSelectsNode() {
+        NodeRegistry r = new NodeRegistry("self");
+        r.observeSend("hermes", "h1", 1000);
+        GraphScreen s = new GraphScreen(r);
+        s.onKey(new KeyStroke('n', false, false));                 // open node picker
+        s.onKey(new KeyStroke(' ', false, false));
+        s.onKey(new KeyStroke(KeyType.Enter));
+        assertTrue(s.filter.nodes.contains("hermes"));
+    }
+
+    @Test
+    void pickerRendersWithoutError() throws Exception {
+        NodeRegistry r = new NodeRegistry("self");
+        r.markListener("worker1", "h1", "orders", 1000);
+        GraphScreen s = new GraphScreen(r);
+        s.onKey(new KeyStroke('t', false, false));                 // overlay open
+        renderOk(s, 120, 40);
+    }
+
+    @Test
+    void nodePickerLabelShowsIdAndHost() throws Exception {
+        NodeRegistry r = new NodeRegistry("self");
+        r.observeSend("hermes", "worker-03.prod.genios.de", 1000);
+        GraphScreen s = new GraphScreen(r);
+        s.onKey(new KeyStroke('n', false, false));                 // open node picker
+        String label = s.pickerLabels.get("hermes");
+        assertNotNull(label);
+        assertTrue(label.contains("hermes"), "label shows the sender id");
+        assertTrue(label.contains("worker-03.prod.genios.de"), "label also shows the hostname");
+        renderOk(s, 120, 40);                                       // wide picker renders fine
+    }
+
     private void renderOk(GraphScreen s, int cols, int rows) throws Exception {
         DefaultVirtualTerminal vt = new DefaultVirtualTerminal(new com.googlecode.lanterna.TerminalSize(cols, rows));
         TerminalScreen ts = new TerminalScreen(vt);

@@ -7,6 +7,7 @@ import com.googlecode.lanterna.input.KeyType;
 import de.caluga.morpheus.cli.MorpheusContext;
 import de.caluga.morpheus.core.FlowEvent;
 import de.caluga.morpheus.core.FlowDeriver;
+import de.caluga.morpheus.core.GraphFilter;
 import de.caluga.morpheus.core.MessageFeed;
 import de.caluga.morpheus.core.MessageTracker;
 import de.caluga.morpheus.core.NodeRegistry;
@@ -21,18 +22,19 @@ import de.caluga.morpheus.tui.widget.TopicPalette;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /** Live message-flow graph: nodes on a ring, messages as topic-coloured shots on a Braille canvas. */
 public class GraphScreen implements Screen {
 
-    private static final int SHOT_CAP = 20;
     private static final long IDLE_MS = 15_000;
+    private static final long ACTIVE_LAYOUT_MS = 8_000;   // a beam keeps a node in the focus area this long after it lands
     private static final int FRAME_MS = 33;          // ~30 fps for the cheap Braille renderer
     private static final int GFX_FRAME_MS = 33;      // ~30 fps for the Kitty image too (zlib encode is cheap; matches the shot-speed tuning)
     private static final long TRAIL_MS = 2500;       // how long a recently used connection lingers as a fading grey line
     private static final double SHOT_SPEED = 0.16;   // one leg ≈ 6 frames (~200ms) → round-trip ~450ms
-    private static final int SPAWN_PER_FRAME = 3;     // spread bursts over frames so shots don't pulse 0↔cap
     private static final int MAX_PENDING = 300;       // flood guard for the spawn queue
+    private static final int[] CAP_PRESETS = {10, 20, 40, 80, 160};   // [+]/[-] step through these
 
     private static final class Shot {
         final double x0, y0, x1, y1;
@@ -53,9 +55,18 @@ public class GraphScreen implements Screen {
     private final NodeRegistry registry;
     private final java.util.List<Shot> shots = new java.util.ArrayList<>();
     private final java.util.ArrayDeque<FlowEvent> pending = new java.util.ArrayDeque<>();   // flow events waiting to be spawned (rate-limited)
-    private final Map<String, Double> radiusFrac = new java.util.HashMap<>();   // per-node eased ring-radius fraction (senders drift inward)
+    private final Map<String, double[]> posEased = new java.util.HashMap<>();   // per-node eased on-screen position (subpixel)
+    private final Map<String, Long> lastBeamMs = new java.util.HashMap<>();     // last time a passed-through beam touched a node
     private volatile List<NodeStatus> pendingSeed;
     private volatile boolean seeded = false;
+    final GraphFilter filter = new GraphFilter();   // package-visible: tests set topics/nodes directly
+    private int capIndex = 1;                        // default preset -> 20
+    private enum Overlay { NONE, TOPICS, NODES }
+    private Overlay overlay = Overlay.NONE;
+    private final java.util.List<String> pickerItems = new java.util.ArrayList<>();
+    final java.util.Map<String, String> pickerLabels = new java.util.HashMap<>();   // item key -> display text (test-visible)
+    private final java.util.Set<String> pickerSelection = new java.util.LinkedHashSet<>();
+    private int pickerCursor = 0;
     private boolean paused = false;
     private boolean showHosts = false;
     private boolean pulse = false;             // [b]: pulse whole chords (grey→colour→grey) instead of moving dots
@@ -110,6 +121,9 @@ public class GraphScreen implements Screen {
     @Override
     public int frameIntervalMs() { return gfx ? GFX_FRAME_MS : FRAME_MS; }
 
+    int shotCap() { return CAP_PRESETS[capIndex]; }
+    int spawnPerFrame() { return Math.max(3, shotCap() / 8); }   // big caps fill in promptly
+
     /** Normalises a directed flow into an unordered chord key. */
     private static Chord chordKey(String a, String b) {
         return a.compareTo(b) <= 0 ? new Chord(a, b) : new Chord(b, a);
@@ -124,8 +138,14 @@ public class GraphScreen implements Screen {
     @Override
     public Result onKey(KeyStroke key) {
         if (key == null) return Result.stay();
+        if (overlay != Overlay.NONE) return onPickerKey(key);
         Character c = key.getCharacter();
         if (c != null && c == 'q') return Result.quit();
+        if (c != null && c == 't') { openPicker(Overlay.TOPICS); return Result.stay(); }
+        if (c != null && c == 'n') { openPicker(Overlay.NODES); return Result.stay(); }
+        if (c != null && c == 'c') { filter.clear(); return Result.stay(); }
+        if (c != null && c == '+') { if (capIndex < CAP_PRESETS.length - 1) capIndex++; return Result.stay(); }
+        if (c != null && c == '-') { if (capIndex > 0) capIndex--; return Result.stay(); }
         if (c != null && c == 'p') { paused = !paused; return Result.stay(); }
         if (c != null && c == 'h') { showHosts = !showHosts; return Result.stay(); }
         if (c != null && c == 'b') { pulse = !pulse; return Result.stay(); }
@@ -171,23 +191,25 @@ public class GraphScreen implements Screen {
         int canvasBottom = height - 3;
         int cCols = Math.max(1, width - 2);
         int cRows = Math.max(1, canvasBottom - canvasTop);
-        Map<String, double[]> pos = ringPositions(nodes, cCols * 2.0, cRows * 4.0);
+        Map<String, double[]> pos = ringPositions(nodes, cCols * 2.0, cRows * 4.0, now);
 
         // spawn shots from new flows
         if (deriver != null && tracker != null && !paused) {
             // Queue all of this frame's flows; bursty change-stream batches must not all pop at once.
             for (FlowEvent f : deriver.derive(tracker.getMessagesNewestFirst(), now)) {
-                pending.addLast(f);
+                if (filter.acceptsFlow(f)) pending.addLast(f);   // hard filter: only relevant flows become beams
             }
             while (pending.size() > MAX_PENDING) pending.pollFirst();   // flood guard: drop oldest
             // Spawn only a few per frame (saturation cap still applies) so the population stays steady.
-            int budget = SPAWN_PER_FRAME;
-            while (budget-- > 0 && shots.size() < SHOT_CAP && !pending.isEmpty()) {
+            int budget = spawnPerFrame();
+            while (budget-- > 0 && shots.size() < shotCap() && !pending.isEmpty()) {
                 FlowEvent f = pending.pollFirst();
                 double[] from = pos.get(f.from());
                 double[] to = pos.get(f.to());
                 if (from == null || to == null) continue;         // a node not placed yet; drop
                 chordSeen.put(chordKey(f.from(), f.to()), now);   // refresh this connection's grey-trail timer
+                lastBeamMs.put(f.from(), now);                    // both endpoints are active → keep them in focus
+                lastBeamMs.put(f.to(), now);
                 if (f.kind() == FlowEvent.Kind.ANSWER) {
                     // request leg, then the reply leg back, sequentially
                     TextColor c = TopicPalette.colorFor(f.topic());
@@ -269,7 +291,8 @@ public class GraphScreen implements Screen {
                     lx = cx;
                 }
                 lx = Math.max(2, Math.min(lx, width - 2));
-                g.setForegroundColor(idle ? TextColor.ANSI.BLACK_BRIGHT : TextColor.ANSI.GREEN_BRIGHT);
+                boolean bright = inFocus(n.id, now);
+                g.setForegroundColor(!bright || idle ? TextColor.ANSI.BLACK_BRIGHT : TextColor.ANSI.GREEN_BRIGHT);
                 g.putString(lx, cy, trunc(label, Math.max(1, width - lx)));
                 if (showHosts && n.host != null && !n.host.isEmpty() && cy + 1 <= canvasBottom - 1) {
                     g.setForegroundColor(TextColor.ANSI.BLACK_BRIGHT);
@@ -281,7 +304,13 @@ public class GraphScreen implements Screen {
         // title + stats
         g.setForegroundColor(TextColor.ANSI.CYAN);
         g.putString(2, 0, trunc("Message Flow" + (seeded ? "" : "   (Knoten werden entdeckt …)"), width - 3));
-        String stats = registry.nodeCount() + " nodes · " + registry.topicCount() + " topics · " + shots.size() + " shots";
+        String stats = registry.nodeCount() + " nodes · " + registry.topicCount() + " topics · "
+                + shots.size() + "/" + shotCap() + " shots";
+        if (!filter.isEmpty()) {
+            String tf = filter.topics.isEmpty() ? "" : "topic=" + String.join(",", filter.topics);
+            String nf = filter.nodes.isEmpty() ? "" : "node=" + String.join(",", filter.nodes);
+            stats = (tf + (tf.isEmpty() || nf.isEmpty() ? "" : " ") + nf) + " · " + stats;
+        }
         if (gfx && showStats) stats += " · enc " + Math.round(lastEncodeMs) + "ms tx " + Math.round(lastTxMs)
                 + "ms · " + pxWlast + "×" + pxHlast;
         g.setForegroundColor(TextColor.ANSI.YELLOW);
@@ -302,12 +331,99 @@ public class GraphScreen implements Screen {
 
         g.setForegroundColor(TextColor.ANSI.DEFAULT);
         g.putString(2, height - 1, trunc(
-                "[p] " + (paused ? "weiter" : "pause") + "   [h] hosts   [g] grafik   [b] "
-                        + (pulse ? "kugel" : "puls") + "   [m] stats   [esc] zurück   [q] quit", width - 3));
+                "[p] " + (paused ? "weiter" : "pause") + "   [t] topic   [n] knoten   [c] filter   [+/-] cap   [h] hosts   [g] grafik   [b] "
+                        + (pulse ? "kugel" : "puls") + "   [esc] zurück   [q] quit", width - 3));
         if (gfxHint != null) {
             g.setForegroundColor(TextColor.ANSI.YELLOW);
             g.putString(2, height - 2, trunc(gfxHint, width - 3));
         }
+
+        if (overlay != Overlay.NONE) drawPicker(g, width, height);
+    }
+
+    /** Opens the topic or node picker, pre-selecting the currently active filter on that axis. */
+    private void openPicker(Overlay which) {
+        overlay = which;
+        pickerItems.clear();
+        pickerLabels.clear();
+        pickerSelection.clear();
+        if (which == Overlay.TOPICS) {
+            pickerItems.addAll(registry.topicNames());
+            java.util.Collections.sort(pickerItems);
+            for (String t : pickerItems) pickerLabels.put(t, t);
+            pickerSelection.addAll(filter.topics);
+        } else {
+            for (NodeRegistry.Node n : registry.nodes()) {
+                pickerItems.add(n.id);
+                String host = n.host != null && !n.host.isEmpty() ? "  " + n.host : "";
+                pickerLabels.put(n.id, shortId(n.id) + host);   // sender id (shortened) + hostname
+            }
+            pickerSelection.addAll(filter.nodes);
+        }
+        pickerCursor = 0;
+    }
+
+    /** Picker key handling: ↑/↓ move, space toggles, enter commits into the filter, esc discards. */
+    private Result onPickerKey(KeyStroke key) {
+        if (key.getKeyType() == KeyType.Escape) { overlay = Overlay.NONE; return Result.stay(); }
+        if (key.getKeyType() == KeyType.Enter) {
+            Set<String> target = overlay == Overlay.TOPICS ? filter.topics : filter.nodes;
+            target.clear();
+            target.addAll(pickerSelection);
+            overlay = Overlay.NONE;
+            return Result.stay();
+        }
+        if (key.getKeyType() == KeyType.ArrowUp) { if (pickerCursor > 0) pickerCursor--; return Result.stay(); }
+        if (key.getKeyType() == KeyType.ArrowDown) { if (pickerCursor < pickerItems.size() - 1) pickerCursor++; return Result.stay(); }
+        Character ch = key.getCharacter();
+        if (ch != null && ch == ' ' && !pickerItems.isEmpty()) {
+            String item = pickerItems.get(pickerCursor);
+            if (!pickerSelection.remove(item)) pickerSelection.add(item);
+            return Result.stay();
+        }
+        return Result.stay();
+    }
+
+    /** Draws the picker as a centered overlay box on top of the live graph. */
+    private void drawPicker(TextGraphics g, int width, int height) {
+        String title = overlay == Overlay.TOPICS ? "Topics" : "Knoten";
+        // size the box to the widest entry (id + host gets wide), clamped to the terminal
+        int contentW = title.length() + 4;
+        for (String it : pickerItems) contentW = Math.max(contentW, pickerLabels.getOrDefault(it, it).length() + 6);
+        int boxW = Math.min(width - 6, Math.max(24, contentW));
+        int rows = Math.min(Math.max(1, pickerItems.size()), Math.max(3, height - 8));
+        int boxH = rows + 4;
+        int x0 = (width - boxW) / 2;
+        int y0 = (height - boxH) / 2;
+
+        // clear the region behind the box, then frame it
+        for (int y = y0; y < y0 + boxH; y++) {
+            g.setForegroundColor(TextColor.ANSI.DEFAULT);
+            g.putString(x0, y, " ".repeat(Math.max(0, boxW)));
+        }
+        g.setForegroundColor(TextColor.ANSI.CYAN);
+        g.putString(x0, y0, trunc("┌─ " + title + " " + "─".repeat(Math.max(0, boxW)), boxW));
+        g.putString(x0, y0 + boxH - 2, "└" + "─".repeat(Math.max(0, boxW - 1)));
+
+        if (pickerItems.isEmpty()) {
+            g.setForegroundColor(TextColor.ANSI.DEFAULT);
+            g.putString(x0 + 2, y0 + 2, trunc("(noch nichts entdeckt)", boxW - 4));
+        } else {
+            // scroll window so the cursor stays visible
+            int first = Math.max(0, Math.min(pickerCursor - rows / 2, pickerItems.size() - rows));
+            for (int i = 0; i < rows; i++) {
+                int idx = first + i;
+                if (idx >= pickerItems.size()) break;
+                String item = pickerItems.get(idx);
+                boolean sel = pickerSelection.contains(item);
+                boolean cur = idx == pickerCursor;
+                String line = (cur ? "▸ " : "  ") + (sel ? "[x] " : "[ ] ") + pickerLabels.getOrDefault(item, item);
+                g.setForegroundColor(cur ? TextColor.ANSI.GREEN_BRIGHT : TextColor.ANSI.DEFAULT);
+                g.putString(x0 + 1, y0 + 1 + i, trunc(line, boxW - 2));
+            }
+        }
+        g.setForegroundColor(TextColor.ANSI.BLACK_BRIGHT);
+        g.putString(x0 + 1, y0 + boxH - 1, trunc("↑↓ space enter esc", boxW - 2));
     }
 
     /** Advances every shot once; removes finished ones (queuing their reply leg), records the active-topic
@@ -352,9 +468,10 @@ public class GraphScreen implements Screen {
             double[] p = pos.get(n.id);
             if (p == null) continue;
             boolean idle = registry.isIdle(n.id, now, IDLE_MS);
+            boolean dimmed = !inFocus(n.id, now);
             String label = shortId(n.id) + " ↑" + n.sendCount + " ↓" + n.recvCount;
             String host = showHosts ? n.host : null;
-            nv.add(new GraphImageRenderer.NodeView(p[0] * scale, p[1] * scale, label, host, idle));
+            nv.add(new GraphImageRenderer.NodeView(p[0] * scale, p[1] * scale, label, host, idle, dimmed));
         }
         List<GraphImageRenderer.ShotView> sv = new java.util.ArrayList<>();
         for (Shot s : live) {
@@ -375,10 +492,11 @@ public class GraphScreen implements Screen {
         lastTxMs = (t2 - t1) / 1_000_000.0;
     }
 
-    /** Places nodes on an ellipse filling the canvas; the angle is stable (by first-seen index),
-     *  the radius eases inward with the node's "sender-ness" so request hubs drift to the middle and
-     *  their shots stop crossing over rim nodes. Braille subpixel coordinates cw x ch. */
-    private Map<String, double[]> ringPositions(List<NodeRegistry.Node> nodes, double cw, double ch) {
+    /** Lays out the nodes and eases each one toward its target position (subpixel cw x ch).
+     *  Focus nodes sit on an ellipse — stable angle by first-seen index, radius eased inward with
+     *  "sender-ness" so request hubs drift to the middle. Out-of-focus nodes are parked at the far
+     *  left, stacked vertically, until a beam touches them again (then they slide back into the ring). */
+    private Map<String, double[]> ringPositions(List<NodeRegistry.Node> nodes, double cw, double ch, long now) {
         Map<String, double[]> pos = new LinkedHashMap<>();
         int n = nodes.size();
         if (n == 0) return pos;
@@ -386,19 +504,46 @@ public class GraphScreen implements Screen {
         double cy = ch / 2.0;
         double radX = Math.max(4, cw / 2.0 * 0.88);
         double radY = Math.max(4, ch / 2.0 * 0.88);
+
+        int parkedCount = 0;
+        for (NodeRegistry.Node nd : nodes) if (!inFocus(nd.id, now)) parkedCount++;
+        int parkIdx = 0;
+
         for (int i = 0; i < n; i++) {
             NodeRegistry.Node nd = nodes.get(i);
-            double a = 2 * Math.PI * i / n - Math.PI / 2;
-            // sender-ness: 0 (pure receiver → rim) … 1 (pure sender → centre)
-            double centrality = nd.sendCount / (double) (nd.sendCount + nd.recvCount + 1);
-            double target = 1.0 - centrality * 0.7;     // a pure sender settles at ~0.3 of the radius
-            double cur = radiusFrac.getOrDefault(nd.id, 1.0);
-            cur += (target - cur) * 0.12;               // ease toward the target each frame
-            radiusFrac.put(nd.id, cur);
-            pos.put(nd.id, new double[]{cx + radX * cur * Math.cos(a), cy + radY * cur * Math.sin(a)});
+            double tx, ty;
+            if (inFocus(nd.id, now)) {
+                double a = 2 * Math.PI * i / n - Math.PI / 2;
+                // sender-ness: 0 (pure receiver → rim) … 1 (pure sender → centre)
+                double centrality = nd.sendCount / (double) (nd.sendCount + nd.recvCount + 1);
+                double frac = 1.0 - centrality * 0.7;       // a pure sender settles at ~0.3 of the radius
+                tx = cx + radX * frac * Math.cos(a);
+                ty = cy + radY * frac * Math.sin(a);
+            } else {
+                // parked at the far-left rim, spread over the canvas height
+                tx = 2;
+                double slots = Math.max(1, parkedCount);
+                ty = ch * (parkIdx + 0.5) / slots;
+                parkIdx++;
+            }
+            double[] cur = posEased.get(nd.id);
+            if (cur == null) cur = new double[]{tx, ty};    // first sight: appear at the target, no slide-in
+            cur[0] += (tx - cur[0]) * 0.12;                 // ease toward the target each frame
+            cur[1] += (ty - cur[1]) * 0.12;
+            posEased.put(nd.id, cur);
+            pos.put(nd.id, new double[]{cur[0], cur[1]});
         }
-        radiusFrac.keySet().retainAll(pos.keySet());    // forget radii of nodes no longer present
+        posEased.keySet().retainAll(pos.keySet());          // forget positions of nodes no longer present
         return pos;
+    }
+
+    /** Whether a node belongs in the central ring right now: no filter, or it statically matches the
+     *  filter (node set / topic listener), or a passed-through beam touched it within ACTIVE_LAYOUT_MS.
+     *  Drives both the layout (ring vs. parked-left) and the node colour (bright vs. dimmed). */
+    private boolean inFocus(String id, long now) {
+        if (filter.isEmpty() || filter.isHighlighted(id, registry)) return true;
+        Long t = lastBeamMs.get(id);
+        return t != null && now - t < ACTIVE_LAYOUT_MS;
     }
 
     /** Shortens an auto-generated sender id (UUID / object id) to head…tail; keeps short readable names as-is. */
