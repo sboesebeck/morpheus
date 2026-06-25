@@ -3,12 +3,21 @@ package de.caluga.morpheus.tui.screens;
 import com.googlecode.lanterna.TextColor;
 import com.googlecode.lanterna.graphics.TextGraphics;
 import com.googlecode.lanterna.input.KeyStroke;
+import com.googlecode.lanterna.input.KeyType;
 import de.caluga.morpheus.cli.MorpheusContext;
 import de.caluga.morpheus.core.MessageFeed;
+import de.caluga.morpheus.core.MessageFilter;
 import de.caluga.morpheus.core.MessageInfo;
 import de.caluga.morpheus.core.MessageStats;
 import de.caluga.morpheus.core.MessageTracker;
 import de.caluga.morpheus.tui.Screen;
+import de.caluga.morpheus.tui.widget.PickerOverlay;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 
 /** Live message table rendered on Lanterna; same core/ data as the CLI monitor. */
@@ -16,6 +25,10 @@ public class MessagesScreen implements Screen {
 
     private final MessageTracker tracker;
     private MorpheusContext ownedCtx;
+    private final MessageFilter filter = new MessageFilter();
+    private enum Axis { TOPIC, SENDER, HOST }
+    private Axis pickerAxis;
+    private PickerOverlay picker;            // null = closed
 
     /** Production: connect a feed (ctx must already be connected by the launcher). */
     public MessagesScreen(MorpheusContext ctx) {
@@ -42,12 +55,68 @@ public class MessagesScreen implements Screen {
         if (ownedCtx != null) ownedCtx.close();
     }
 
+    MessageFilter filter() { return filter; }
+
+    /** Number of rows that would render for a terminal of `termRows` height, after filtering. */
+    int visibleRowCount(int termRows) {
+        int dataStart = 7;
+        int maxRows = Math.max(0, termRows - dataStart - 1);
+        int n = 0;
+        for (MessageInfo info : tracker.getMessagesNewestFirst()) {
+            if (!filter.accepts(info)) continue;
+            if (n >= maxRows) break;
+            n++;
+        }
+        return n;
+    }
+
     @Override
     public Result onKey(KeyStroke key) {
         if (key == null) return Result.stay();
-        if (key.getCharacter() != null && key.getCharacter() == 'q') return Result.quit();
-        if (key.getKeyType() == com.googlecode.lanterna.input.KeyType.Escape) return Result.pop();
+        if (picker != null) {
+            PickerOverlay.Outcome o = picker.onKey(key);
+            if (o == PickerOverlay.Outcome.COMMIT) { commitPicker(); picker = null; }
+            else if (o == PickerOverlay.Outcome.CANCEL) { picker = null; }
+            return Result.stay();
+        }
+        Character c = key.getCharacter();
+        if (c != null && c == 'q') return Result.quit();
+        if (c != null && c == 't') { openPicker(Axis.TOPIC); return Result.stay(); }
+        if (c != null && c == 's') { openPicker(Axis.SENDER); return Result.stay(); }
+        if (c != null && c == 'o') { openPicker(Axis.HOST); return Result.stay(); }
+        if (c != null && c == 'c') { filter.clear(); return Result.stay(); }
+        if (key.getKeyType() == KeyType.Escape) return Result.pop();
         return Result.stay();
+    }
+
+    /** Builds the picker for an axis from the distinct values seen in the stats. */
+    private void openPicker(Axis axis) {
+        pickerAxis = axis;
+        List<String> items = new ArrayList<>();
+        Map<String, String> labels = new HashMap<>();
+        Set<String> initial = new LinkedHashSet<>();
+        MessageStats stats = tracker.getStats();
+        if (axis == Axis.TOPIC) {
+            for (MessageStats.TopicAggregate a : stats.getTopicStats(Integer.MAX_VALUE)) items.add(a.topic());
+            initial.addAll(filter.topics);
+        } else if (axis == Axis.SENDER) {
+            for (MessageStats.NamedCount nc : stats.getTopSenders(Integer.MAX_VALUE)) items.add(nc.name());
+            initial.addAll(filter.senders);
+        } else {
+            for (MessageStats.NamedCount nc : stats.getTopHosts(Integer.MAX_VALUE)) items.add(nc.name());
+            initial.addAll(filter.hosts);
+        }
+        java.util.Collections.sort(items);
+        for (String it : items) labels.put(it, it);
+        String title = axis == Axis.TOPIC ? "Topic" : axis == Axis.SENDER ? "Sender" : "Host";
+        picker = new PickerOverlay(title, items, labels, initial);
+    }
+
+    private void commitPicker() {
+        Set<String> target = pickerAxis == Axis.TOPIC ? filter.topics
+                : pickerAxis == Axis.SENDER ? filter.senders : filter.hosts;
+        target.clear();
+        target.addAll(picker.selection());
     }
 
     @Override
@@ -115,6 +184,7 @@ public class MessagesScreen implements Screen {
         int maxRows = Math.max(0, height - dataStart - 1);
         int n = 0;
         for (MessageInfo info : messages) {
+            if (!filter.accepts(info)) continue;
             if (n >= maxRows) break;
             n++;
             TextColor base = info.isTimedOut ? TextColor.ANSI.RED
@@ -123,7 +193,8 @@ public class MessagesScreen implements Screen {
         }
 
         g.setForegroundColor(TextColor.ANSI.DEFAULT);
-        g.putString(2, height - 1, "[esc] zurück  [q] quit");
+        g.putString(2, height - 1, trunc(statusLine(), width - 3));
+        if (picker != null) picker.draw(g);
     }
 
     /** V5 → yellow, V6 → green (independent of the row's base color). */
@@ -242,6 +313,35 @@ public class MessagesScreen implements Screen {
         }
         if (info.rtt != null) return "ans-only";
         return "";
+    }
+
+    /** Compact one-line summary of active filters + key hints. */
+    private String statusLine() {
+        StringBuilder sb = new StringBuilder();
+        if (!filter.isEmpty()) {
+            sb.append("Filter:");
+            if (!filter.topics.isEmpty())  sb.append(" topic[").append(filter.topics.size()).append("]");
+            if (!filter.senders.isEmpty()) sb.append(" sender[").append(filter.senders.size()).append("]");
+            if (!filter.hosts.isEmpty())   sb.append(" host[").append(filter.hosts.size()).append("]");
+            sb.append(triLabel("ans", filter.answered));
+            sb.append(triLabel("timeout", filter.timedOut));
+            sb.append(triLabel("excl", filter.exclusive));
+            sb.append(triLabel("del", filter.deleted));
+            if (filter.bodyRegex != null && !filter.bodyRegex.isEmpty()) {
+                sb.append(filter.regexValid() ? "  /" + filter.bodyRegex + "/" : "  /" + filter.bodyRegex + "/⚠");
+            }
+            sb.append("   ");
+        }
+        sb.append("[t]opic [s]ender h[o]st  [a]ns [x]excl [e]xpire [d]el  [/]regex  [c]lear  [esc] zurück  [q]uit");
+        return sb.toString();
+    }
+
+    private String triLabel(String name, MessageFilter.TriState t) {
+        return switch (t) {
+            case NONE -> "";
+            case ONLY -> " " + name + ":nur";
+            case EXCLUDE -> " ⊘" + name;
+        };
     }
 
     private String trunc(String s, int max) {

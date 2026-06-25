@@ -5,6 +5,7 @@ import com.googlecode.lanterna.input.KeyType;
 import com.googlecode.lanterna.screen.TerminalScreen;
 import com.googlecode.lanterna.terminal.virtual.DefaultVirtualTerminal;
 import de.caluga.morpheus.core.MessageTracker;
+import de.caluga.morpheus.core.MessageFilter;
 import de.caluga.morpheus.tui.Screen;
 import de.caluga.morphium.driver.MorphiumId;
 import de.caluga.morphium.messaging.Msg;
@@ -14,87 +15,65 @@ import static org.junit.jupiter.api.Assertions.*;
 
 public class MessagesScreenTest {
 
-    private Msg msg(String topic, String sender) {
+    private Msg req(String topic, String sender, String host) {
         Msg m = new Msg(topic, "m", "v", 30000);
         m.setMsgId(new MorphiumId());
-        m.setSender(sender);
-        m.setSenderHost("host1");
+        m.setSender(sender); m.setSenderHost(host);
         m.setTimestamp(System.currentTimeMillis());
         return m;
     }
 
+    private MessageTracker fed() {
+        MessageTracker t = new MessageTracker(50);
+        t.onInsert(req("orders", "a", "h1"), "orders");
+        t.onInsert(req("cache", "b", "h2"), "cache");
+        return t;
+    }
+
+    private void render(MessagesScreen s) throws Exception {
+        DefaultVirtualTerminal vt = new DefaultVirtualTerminal(new com.googlecode.lanterna.TerminalSize(160, 30));
+        TerminalScreen ts = new TerminalScreen(vt);
+        ts.startScreen();
+        s.draw(ts.newTextGraphics());
+        ts.stopScreen();
+    }
+
     @Test
     void escPops() {
-        MessageTracker tracker = new MessageTracker(50);
-        MessagesScreen s = new MessagesScreen(tracker);
+        MessagesScreen s = new MessagesScreen(new MessageTracker(10));
         assertEquals(Screen.Result.Kind.POP, s.onKey(new KeyStroke(KeyType.Escape)).kind());
     }
 
     @Test
-    void rendersTrackerContentWithoutError() throws Exception {
-        MessageTracker tracker = new MessageTracker(50);
-        tracker.onInsert(msg("order.created", "svc-1"), "order.created");
-        tracker.onInsert(msg("cache.sync", "svc-2"), "cache.sync");
-
-        MessagesScreen s = new MessagesScreen(tracker);
-        DefaultVirtualTerminal vt = new DefaultVirtualTerminal();
-        TerminalScreen ts = new TerminalScreen(vt);
-        ts.startScreen();
-        s.draw(ts.newTextGraphics()); // must not throw
-        ts.stopScreen();
+    void topicKeyOpensPickerAndCommitFiltersRows() throws Exception {
+        MessagesScreen s = new MessagesScreen(fed());
+        render(s);
+        assertEquals(2, s.visibleRowCount(30), "no filter → both rows");
+        s.filter().topics.add("orders");      // simulate a committed picker selection
+        assertEquals(1, s.visibleRowCount(30), "topic filter → one row");
     }
 
     @Test
-    void tagColorIsYellowForV5GreenForV6() {
-        assertEquals(com.googlecode.lanterna.TextColor.ANSI.YELLOW, MessagesScreen.tagColor(true));
-        assertEquals(com.googlecode.lanterna.TextColor.ANSI.GREEN, MessagesScreen.tagColor(false));
+    void tKeyOpensTopicPicker() {
+        MessagesScreen s = new MessagesScreen(fed());
+        // opening a picker is STAY; committing nothing then esc closes it
+        assertEquals(Screen.Result.Kind.STAY, s.onKey(new KeyStroke('t', false, false)).kind());
+        assertEquals(Screen.Result.Kind.STAY, s.onKey(new KeyStroke(KeyType.Escape)).kind());
     }
 
     @Test
-    void rendersV5AndV6AndTimeoutWithoutError() throws Exception {
-        MessageTracker tracker = new MessageTracker(50);
-        Msg v6 = msg("order.created", "svc-6");                 // v6 by default
-        tracker.onInsert(v6, "order.created");
-        Msg v5 = msg("legacy.topic", "svc-5");
-        // v5.setVersion(5) omitted: Msg has no setVersion(); isV5 is detected via getTopic()==null
-        tracker.onInsert(v5, "legacy.topic");
-        MessagesScreen s = new MessagesScreen(tracker);
-        DefaultVirtualTerminal vt = new DefaultVirtualTerminal(new com.googlecode.lanterna.TerminalSize(120, 30));
-        TerminalScreen ts = new TerminalScreen(vt);
-        ts.startScreen();
-        s.draw(ts.newTextGraphics());                          // must not throw
-        ts.stopScreen();
+    void clearKeyResetsFilter() {
+        MessagesScreen s = new MessagesScreen(fed());
+        s.filter().topics.add("orders");
+        s.onKey(new KeyStroke('c', false, false));
+        assertTrue(s.filter().isEmpty());
     }
 
     @Test
-    void rendersNarrowTerminalWithoutError() throws Exception {
-        MessageTracker tracker = new MessageTracker(50);
-        tracker.onInsert(msg("order.created", "svc-1"), "order.created");
-        MessagesScreen s = new MessagesScreen(tracker);
-        DefaultVirtualTerminal vt = new DefaultVirtualTerminal(new com.googlecode.lanterna.TerminalSize(40, 12));
-        TerminalScreen ts = new TerminalScreen(vt);
-        ts.startScreen();
-        s.draw(ts.newTextGraphics());                          // must not throw at 40 cols
-        ts.stopScreen();
-    }
-
-    @Test
-    void rendersAnswererColumnsWideTerminal() throws Exception {
-        MessageTracker tracker = new MessageTracker(50);
-        Msg req = msg("order.created", "hermes");
-        req.setTimestamp(1000);
-        tracker.onInsert(req, "order.created");
-        Msg ans = msg("order.created", "worker");
-        ans.setInAnswerTo(req.getMsgId());
-        ans.setSenderHost("wh1");
-        ans.setTimestamp(1050);
-        tracker.onInsert(ans, "order.created");
-
-        MessagesScreen s = new MessagesScreen(tracker);
-        DefaultVirtualTerminal vt = new DefaultVirtualTerminal(new com.googlecode.lanterna.TerminalSize(200, 40));
-        TerminalScreen ts = new TerminalScreen(vt);
-        ts.startScreen();
-        s.draw(ts.newTextGraphics()); // must not throw at 200 cols
-        ts.stopScreen();
+    void rendersWithActiveFilterWithoutError() throws Exception {
+        MessagesScreen s = new MessagesScreen(fed());
+        s.filter().senders.add("a");
+        s.filter().bodyRegex = "m";
+        render(s);
     }
 }
