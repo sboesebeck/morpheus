@@ -1,5 +1,7 @@
 package de.caluga.morpheus.tui.screens;
 
+import com.googlecode.lanterna.TerminalSize;
+import com.googlecode.lanterna.TextColor;
 import com.googlecode.lanterna.input.KeyStroke;
 import com.googlecode.lanterna.input.KeyType;
 import com.googlecode.lanterna.screen.TerminalScreen;
@@ -21,6 +23,11 @@ public class MessagesScreenTest {
         m.setSender(sender); m.setSenderHost(host);
         m.setTimestamp(System.currentTimeMillis());
         return m;
+    }
+
+    /** Convenience wrapper used by the render regression tests. */
+    private Msg msg(String topic, String sender) {
+        return req(topic, sender, "host1");
     }
 
     private MessageTracker fed() {
@@ -75,5 +82,75 @@ public class MessagesScreenTest {
         s.filter().senders.add("a");
         s.filter().bodyRegex = "m";
         render(s);
+    }
+
+    // --- Render regression tests restored from master (commit e4f5049) ---
+
+    @Test
+    void rendersTrackerContentWithoutError() throws Exception {
+        MessageTracker tracker = new MessageTracker(50);
+        tracker.onInsert(msg("order.created", "svc-1"), "order.created");
+        tracker.onInsert(msg("cache.sync", "svc-2"), "cache.sync");
+
+        MessagesScreen s = new MessagesScreen(tracker);
+        DefaultVirtualTerminal vt = new DefaultVirtualTerminal();
+        TerminalScreen ts = new TerminalScreen(vt);
+        ts.startScreen();
+        s.draw(ts.newTextGraphics()); // must not throw
+        ts.stopScreen();
+    }
+
+    @Test
+    void tagColorIsYellowForV5GreenForV6() {
+        assertEquals(TextColor.ANSI.YELLOW, MessagesScreen.tagColor(true));
+        assertEquals(TextColor.ANSI.GREEN, MessagesScreen.tagColor(false));
+    }
+
+    @Test
+    void rendersV5AndV6AndTimeoutWithoutError() throws Exception {
+        MessageTracker tracker = new MessageTracker(50);
+        Msg v6 = msg("order.created", "svc-6");                 // v6 by default
+        tracker.onInsert(v6, "order.created");
+        Msg v5 = msg("legacy.topic", "svc-5");
+        // v5.setVersion(5) omitted: Msg has no setVersion(); isV5 is detected via getTopic()==null
+        tracker.onInsert(v5, "legacy.topic");
+        MessagesScreen s = new MessagesScreen(tracker);
+        DefaultVirtualTerminal vt = new DefaultVirtualTerminal(new TerminalSize(120, 30));
+        TerminalScreen ts = new TerminalScreen(vt);
+        ts.startScreen();
+        s.draw(ts.newTextGraphics());                          // must not throw
+        ts.stopScreen();
+    }
+
+    @Test
+    void rendersNarrowTerminalWithoutError() throws Exception {
+        MessageTracker tracker = new MessageTracker(50);
+        tracker.onInsert(msg("order.created", "svc-1"), "order.created");
+        MessagesScreen s = new MessagesScreen(tracker);
+        DefaultVirtualTerminal vt = new DefaultVirtualTerminal(new TerminalSize(40, 12));
+        TerminalScreen ts = new TerminalScreen(vt);
+        ts.startScreen();
+        s.draw(ts.newTextGraphics());                          // must not throw at 40 cols
+        ts.stopScreen();
+    }
+
+    @Test
+    void rendersAnswererColumnsWideTerminal() throws Exception {
+        MessageTracker tracker = new MessageTracker(50);
+        Msg request = msg("order.created", "hermes");
+        request.setTimestamp(1000);
+        tracker.onInsert(request, "order.created");
+        Msg ans = msg("order.created", "worker");
+        ans.setInAnswerTo(request.getMsgId());
+        ans.setSenderHost("wh1");
+        ans.setTimestamp(1050);
+        tracker.onInsert(ans, "order.created");
+
+        MessagesScreen s = new MessagesScreen(tracker);
+        DefaultVirtualTerminal vt = new DefaultVirtualTerminal(new TerminalSize(200, 40));
+        TerminalScreen ts = new TerminalScreen(vt);
+        ts.startScreen();
+        s.draw(ts.newTextGraphics()); // must not throw at 200 cols
+        ts.stopScreen();
     }
 }
