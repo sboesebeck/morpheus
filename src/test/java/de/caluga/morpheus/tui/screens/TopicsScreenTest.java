@@ -160,4 +160,45 @@ public class TopicsScreenTest {
         s.onKey(new KeyStroke('S', false, false));                            // desc→asc
         assertEquals("apple", s.buildRows().get(0).topic());
     }
+
+    private void renderAt(TopicsScreen s, int cols, int rows) throws Exception {
+        DefaultVirtualTerminal vt = new DefaultVirtualTerminal(new com.googlecode.lanterna.TerminalSize(cols, rows));
+        TerminalScreen ts = new TerminalScreen(vt);
+        ts.startScreen();
+        s.draw(ts.newTextGraphics());
+        ts.stopScreen();
+    }
+
+    private TopicsScreen withTopics(int n) {
+        MessageTracker t = new MessageTracker(200);
+        for (int i = 0; i < n; i++) {
+            String name = "topic-" + String.format("%02d", i);
+            t.onInsert(req(name), name);
+        }
+        return new TopicsScreen(t, new NodeRegistry("self"));
+    }
+
+    @Test
+    void scrollFollowsSelectionDownward() throws Exception {
+        TopicsScreen s = withTopics(12);
+        renderAt(s, 80, 10);                       // visibleRows = 10 - 3 = 7
+        assertEquals(0, s.scrollOffset());
+        for (int i = 0; i < 11; i++) s.onKey(new KeyStroke(KeyType.ArrowDown));
+        renderAt(s, 80, 10);
+        assertEquals(11, s.selectedIndex());
+        assertEquals(5, s.scrollOffset(), "viewport scrolled so the last row is visible (11-7+1)");
+    }
+
+    @Test
+    void pageDownThenPageUpMovesByVisibleRows() throws Exception {
+        TopicsScreen s = withTopics(30);
+        renderAt(s, 80, 10);                       // visibleRows = 7
+        s.onKey(new KeyStroke(KeyType.PageDown));
+        renderAt(s, 80, 10);
+        assertEquals(7, s.selectedIndex());
+        s.onKey(new KeyStroke(KeyType.PageUp));
+        renderAt(s, 80, 10);
+        assertEquals(0, s.selectedIndex());
+        assertEquals(0, s.scrollOffset());
+    }
 }

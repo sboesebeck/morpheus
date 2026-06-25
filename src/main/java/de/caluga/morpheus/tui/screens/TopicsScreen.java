@@ -39,6 +39,8 @@ public class TopicsScreen implements Screen {
     private int intervalIndex = 1;                     // default 10s
     private int rowCount = 0;                          // last rendered row count (for clamping)
     private int selected = 0;
+    private int scroll = 0;          // index of the first visible row
+    private int visibleRows = 1;     // data rows that fit, set during draw
 
     enum SortKey { TOPIC, MESSAGES, ANSWERS, RTT, TIMEOUTS, LISTENERS }
     private SortKey sortKey = SortKey.MESSAGES;
@@ -72,6 +74,7 @@ public class TopicsScreen implements Screen {
 
     int currentIntervalMs() { return INTERVAL_PRESETS[intervalIndex]; }   // test seam
     int selectedIndex() { return selected; }                             // test seam
+    int scrollOffset() { return scroll; }                               // test seam
     SortKey sortKey() { return sortKey; }                                // test seam
     boolean sortDescending() { return sortDesc; }                        // test seam
 
@@ -122,6 +125,8 @@ public class TopicsScreen implements Screen {
         if (c != null && c == 'S') { sortDesc = !sortDesc; return Result.stay(); }
         if (key.getKeyType() == KeyType.ArrowDown) { if (selected < rowCount - 1) selected++; return Result.stay(); }
         if (key.getKeyType() == KeyType.ArrowUp) { if (selected > 0) selected--; return Result.stay(); }
+        if (key.getKeyType() == KeyType.PageDown) { selected = Math.min(Math.max(0, rowCount - 1), selected + visibleRows); return Result.stay(); }
+        if (key.getKeyType() == KeyType.PageUp)   { selected = Math.max(0, selected - visibleRows); return Result.stay(); }
         if (key.getKeyType() == KeyType.Enter) {
             List<Row> rows = buildRows();
             if (selected >= 0 && selected < rows.size()) {
@@ -184,6 +189,7 @@ public class TopicsScreen implements Screen {
         List<Row> rows = buildRows();
         rowCount = rows.size();
         if (selected >= rowCount) selected = Math.max(0, rowCount - 1);
+        if (selected < 0) selected = 0;
 
         String arrow = sortDesc ? "▼" : "▲";
         g.setForegroundColor(TextColor.ANSI.CYAN);
@@ -196,8 +202,16 @@ public class TopicsScreen implements Screen {
                 hdr("Listener", SortKey.LISTENERS, arrow)));
 
         int row = 2;
-        int maxRows = g.getSize().getRows() - 3;
-        for (int i = 0; i < rows.size() && row - 2 < maxRows; i++) {
+        int maxRows = Math.max(1, g.getSize().getRows() - 3);
+        visibleRows = maxRows;
+        // keep the selected row inside the window
+        if (selected < scroll) scroll = selected;
+        else if (selected >= scroll + visibleRows) scroll = selected - visibleRows + 1;
+        int maxScroll = Math.max(0, rowCount - visibleRows);
+        if (scroll > maxScroll) scroll = maxScroll;
+        if (scroll < 0) scroll = 0;
+
+        for (int i = scroll; i < rows.size() && row - 2 < maxRows; i++) {
             Row r = rows.get(i);
             String rtt = r.avgRtt() > 0 ? r.avgRtt() + "ms" : "—";
             TextColor rowColor = i == selected ? TextColor.ANSI.GREEN_BRIGHT
@@ -222,10 +236,15 @@ public class TopicsScreen implements Screen {
         }
 
         g.setForegroundColor(TextColor.ANSI.DEFAULT);
-        g.putString(2, g.getSize().getRows() - 1, trunc(
-                "Intervall " + currentIntervalMs() / 1000 + "s" + (pinging ? "  pingt …" : "")
-                        + "   [↑↓] wählen   [enter] listener   [+/-] intervall   [r] ping   [esc] zurück   [q] quit",
-                width - 3));
+        g.putString(2, g.getSize().getRows() - 1, trunc(statusLine(), width - 3));
+    }
+
+    private String statusLine() {
+        String pos = rowCount == 0 ? "0/0"
+                : (scroll + 1) + "–" + Math.min(rowCount, scroll + visibleRows) + "/" + rowCount;
+        String base = "Intervall " + currentIntervalMs() / 1000 + "s" + (pinging ? "  pingt …" : "");
+        return base + "   " + pos
+                + "   [↑↓/PgUp/Dn] wählen   [enter] listener   [+/-] intervall   [r] ping   [esc] zurück   [q] quit";
     }
 
     private String hdr(String label, SortKey key, String arrow) {
