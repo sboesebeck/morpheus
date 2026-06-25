@@ -33,7 +33,7 @@ public class PickerOverlay {
     }
 
     public Set<String> selection() { return selection; }
-    String labelOf(String id) { return labels.getOrDefault(id, id); }
+    public String labelOf(String id) { return labels.getOrDefault(id, id); }
 
     /** Items matching the current query (case-insensitive substring on the label). */
     List<String> visibleItems() {

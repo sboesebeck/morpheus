@@ -62,12 +62,8 @@ public class GraphScreen implements Screen {
     final GraphFilter filter = new GraphFilter();   // package-visible: tests set topics/nodes directly
     private int capIndex = 1;                        // default preset -> 20
     private enum Overlay { NONE, TOPICS, NODES }
-    private Overlay overlay = Overlay.NONE;
-    private final java.util.List<String> pickerItems = new java.util.ArrayList<>();
-    final java.util.Map<String, String> pickerLabels = new java.util.HashMap<>();   // item key -> display text (test-visible)
-    private final java.util.Set<String> pickerSelection = new java.util.LinkedHashSet<>();
-    private String pickerQuery = "";    // live substring search within the open picker
-    private int pickerCursor = 0;
+    private Overlay pickerKind = Overlay.NONE;
+    private de.caluga.morpheus.tui.widget.PickerOverlay picker;   // null = closed
     private boolean paused = false;
     private boolean showHosts = false;
     private boolean pulse = false;             // [b]: pulse whole chords (grey→colour→grey) instead of moving dots
@@ -150,7 +146,18 @@ public class GraphScreen implements Screen {
     @Override
     public Result onKey(KeyStroke key) {
         if (key == null) return Result.stay();
-        if (overlay != Overlay.NONE) return onPickerKey(key);
+        if (picker != null) {
+            de.caluga.morpheus.tui.widget.PickerOverlay.Outcome o = picker.onKey(key);
+            if (o == de.caluga.morpheus.tui.widget.PickerOverlay.Outcome.COMMIT) {
+                Set<String> target = pickerKind == Overlay.TOPICS ? filter.topics : filter.nodes;
+                target.clear();
+                target.addAll(picker.selection());
+                picker = null;
+            } else if (o == de.caluga.morpheus.tui.widget.PickerOverlay.Outcome.CANCEL) {
+                picker = null;
+            }
+            return Result.stay();
+        }
         Character c = key.getCharacter();
         if (c != null && c == 'q') return Result.quit();
         if (c != null && c == 't') { openPicker(Overlay.TOPICS); return Result.stay(); }
@@ -356,128 +363,34 @@ public class GraphScreen implements Screen {
             g.putString(2, height - 2, trunc(gfxHint, width - 3));
         }
 
-        if (overlay != Overlay.NONE) drawPicker(g, width, height);
+        if (picker != null) picker.draw(g);
     }
 
     /** Opens the topic or node picker, pre-selecting the currently active filter on that axis. */
     private void openPicker(Overlay which) {
-        overlay = which;
-        pickerItems.clear();
-        pickerLabels.clear();
-        pickerSelection.clear();
-        pickerQuery = "";
+        pickerKind = which;
+        java.util.List<String> items = new java.util.ArrayList<>();
+        java.util.Map<String, String> labels = new java.util.HashMap<>();
+        java.util.Set<String> initial = new java.util.LinkedHashSet<>();
         if (which == Overlay.TOPICS) {
-            pickerItems.addAll(registry.topicNames());
-            java.util.Collections.sort(pickerItems);
-            for (String t : pickerItems) pickerLabels.put(t, t);
-            pickerSelection.addAll(filter.topics);
+            items.addAll(registry.topicNames());
+            java.util.Collections.sort(items);
+            for (String t : items) labels.put(t, t);
+            initial.addAll(filter.topics);
         } else {
             for (NodeRegistry.Node n : registry.nodes()) {
-                pickerItems.add(n.id);
+                items.add(n.id);
                 String host = n.host != null && !n.host.isEmpty() ? "  " + n.host : "";
-                pickerLabels.put(n.id, shortId(n.id) + host);   // sender id (shortened) + hostname
+                labels.put(n.id, shortId(n.id) + host);
             }
-            pickerSelection.addAll(filter.nodes);
+            initial.addAll(filter.nodes);
         }
-        pickerCursor = 0;
+        picker = new de.caluga.morpheus.tui.widget.PickerOverlay(
+                which == Overlay.TOPICS ? "Topics" : "Knoten", items, labels, initial);
     }
 
-    /** The picker items matching the current search query (case-insensitive substring on the label). */
-    private java.util.List<String> visibleItems() {
-        if (pickerQuery.isEmpty()) return pickerItems;
-        String q = pickerQuery.toLowerCase();
-        java.util.List<String> out = new java.util.ArrayList<>();
-        for (String it : pickerItems) {
-            if (pickerLabels.getOrDefault(it, it).toLowerCase().contains(q)) out.add(it);
-        }
-        return out;
-    }
-
-    /** Picker key handling: type to search, ↑/↓ move, space toggles the current item, tab toggles all
-     *  matches, backspace edits the query, enter commits into the filter, esc discards. */
-    private Result onPickerKey(KeyStroke key) {
-        if (key.getKeyType() == KeyType.Escape) { overlay = Overlay.NONE; return Result.stay(); }
-        if (key.getKeyType() == KeyType.Enter) {
-            Set<String> target = overlay == Overlay.TOPICS ? filter.topics : filter.nodes;
-            target.clear();
-            target.addAll(pickerSelection);
-            overlay = Overlay.NONE;
-            return Result.stay();
-        }
-        java.util.List<String> vis = visibleItems();
-        if (key.getKeyType() == KeyType.ArrowUp) { if (pickerCursor > 0) pickerCursor--; return Result.stay(); }
-        if (key.getKeyType() == KeyType.ArrowDown) { if (pickerCursor < vis.size() - 1) pickerCursor++; return Result.stay(); }
-        if (key.getKeyType() == KeyType.Backspace) {
-            if (!pickerQuery.isEmpty()) { pickerQuery = pickerQuery.substring(0, pickerQuery.length() - 1); pickerCursor = 0; }
-            return Result.stay();
-        }
-        if (key.getKeyType() == KeyType.Tab) {
-            // toggle every visible match at once: select all unless they're already all selected
-            boolean allSelected = !vis.isEmpty() && pickerSelection.containsAll(vis);
-            for (String it : vis) {
-                if (allSelected) pickerSelection.remove(it); else pickerSelection.add(it);
-            }
-            return Result.stay();
-        }
-        Character ch = key.getCharacter();
-        if (ch != null) {
-            if (ch == ' ') {
-                if (pickerCursor < vis.size()) {
-                    String item = vis.get(pickerCursor);
-                    if (!pickerSelection.remove(item)) pickerSelection.add(item);
-                }
-            } else if (!Character.isISOControl(ch)) {
-                pickerQuery += ch;     // append to the search query
-                pickerCursor = 0;
-            }
-        }
-        return Result.stay();
-    }
-
-    /** Draws the picker as a centered overlay box on top of the live graph: title, search line,
-     *  the matching items (checkboxes), and a key hint. */
-    private void drawPicker(TextGraphics g, int width, int height) {
-        java.util.List<String> vis = visibleItems();
-        String title = overlay == Overlay.TOPICS ? "Topics" : "Knoten";
-        // size the box to the widest entry (id + host gets wide), clamped to the terminal
-        int contentW = ("Suche: " + pickerQuery).length() + 4;
-        for (String it : vis) contentW = Math.max(contentW, pickerLabels.getOrDefault(it, it).length() + 6);
-        int boxW = Math.min(width - 6, Math.max(28, contentW));
-        int rows = Math.min(Math.max(1, vis.size()), Math.max(3, height - 10));
-        int boxH = rows + 4;   // title, search, items…, hint
-        int x0 = (width - boxW) / 2;
-        int y0 = (height - boxH) / 2;
-
-        // clear the region behind the box
-        for (int y = y0; y < y0 + boxH; y++) {
-            g.setForegroundColor(TextColor.ANSI.DEFAULT);
-            g.putString(x0, y, " ".repeat(Math.max(0, boxW)));
-        }
-        g.setForegroundColor(TextColor.ANSI.CYAN);
-        g.putString(x0, y0, trunc("┌─ " + title + " (" + vis.size() + ") " + "─".repeat(Math.max(0, boxW)), boxW));
-        g.setForegroundColor(TextColor.ANSI.DEFAULT);
-        g.putString(x0 + 1, y0 + 1, trunc("Suche: " + pickerQuery + "▌", boxW - 2));
-
-        if (vis.isEmpty()) {
-            g.setForegroundColor(TextColor.ANSI.BLACK_BRIGHT);
-            g.putString(x0 + 2, y0 + 3, trunc(pickerItems.isEmpty() ? "(noch nichts entdeckt)" : "(keine Treffer)", boxW - 4));
-        } else {
-            // scroll window so the cursor stays visible
-            int first = Math.max(0, Math.min(pickerCursor - rows / 2, vis.size() - rows));
-            for (int i = 0; i < rows; i++) {
-                int idx = first + i;
-                if (idx >= vis.size()) break;
-                String item = vis.get(idx);
-                boolean sel = pickerSelection.contains(item);
-                boolean cur = idx == pickerCursor;
-                String line = (cur ? "▸ " : "  ") + (sel ? "[x] " : "[ ] ") + pickerLabels.getOrDefault(item, item);
-                g.setForegroundColor(cur ? TextColor.ANSI.GREEN_BRIGHT : TextColor.ANSI.DEFAULT);
-                g.putString(x0 + 1, y0 + 2 + i, trunc(line, boxW - 2));
-            }
-        }
-        g.setForegroundColor(TextColor.ANSI.BLACK_BRIGHT);
-        g.putString(x0 + 1, y0 + boxH - 1, trunc("tippen=suche  ↑↓  space  tab=alle  enter  esc", boxW - 2));
-    }
+    /** Test seam: returns the display label for the given item id from the open picker, or null when closed. */
+    String pickerLabel(String id) { return picker == null ? null : picker.labelOf(id); }
 
     /** Advances every shot once; removes finished ones (queuing their reply leg), records the active-topic
      *  legend, and returns the shots still in flight. Shared by the Braille and gfx renderers. */
