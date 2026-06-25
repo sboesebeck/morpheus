@@ -125,4 +125,39 @@ public class TopicsScreenTest {
         s.onKey(new KeyStroke(KeyType.ArrowDown));
         assertEquals(1, s.selectedIndex(), "clamped at the last row");
     }
+
+    @Test
+    void defaultSortIsMessagesDescending() {
+        MessageTracker t = new MessageTracker(50);
+        t.onInsert(req("low"), "low");
+        t.onInsert(req("high"), "high");
+        t.onInsert(req("high"), "high");                 // high = 2 messages
+        TopicsScreen s = new TopicsScreen(t, new NodeRegistry("self"));
+        assertEquals(TopicsScreen.SortKey.MESSAGES, s.sortKey());
+        assertTrue(s.sortDescending());
+        assertEquals("high", s.buildRows().get(0).topic());
+    }
+
+    @Test
+    void sKeyCyclesSortColumnSShiftReversesDirection() {
+        TopicsScreen s = new TopicsScreen(new MessageTracker(10), new NodeRegistry("self"));
+        assertEquals(TopicsScreen.SortKey.MESSAGES, s.sortKey());
+        s.onKey(new KeyStroke('s', false, false));
+        assertEquals(TopicsScreen.SortKey.ANSWERS, s.sortKey());
+        assertTrue(s.sortDescending());
+        s.onKey(new KeyStroke('S', false, false));
+        assertFalse(s.sortDescending());
+    }
+
+    @Test
+    void cycleToTopicSortsAlphabetically() {
+        MessageTracker t = new MessageTracker(50);
+        t.onInsert(req("banana"), "banana");
+        t.onInsert(req("apple"), "apple");
+        TopicsScreen s = new TopicsScreen(t, new NodeRegistry("self"));
+        for (int i = 0; i < 5; i++) s.onKey(new KeyStroke('s', false, false)); // MESSAGES→…→TOPIC
+        assertEquals(TopicsScreen.SortKey.TOPIC, s.sortKey());
+        s.onKey(new KeyStroke('S', false, false));                            // desc→asc
+        assertEquals("apple", s.buildRows().get(0).topic());
+    }
 }
