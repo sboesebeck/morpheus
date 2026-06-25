@@ -210,7 +210,7 @@ public class GraphScreenTest {
         r.observeSend("hermes", "worker-03.prod.genios.de", 1000);
         GraphScreen s = new GraphScreen(r);
         s.onKey(new KeyStroke('n', false, false));                 // open node picker
-        String label = s.pickerLabels.get("hermes");
+        String label = s.pickerLabel("hermes");
         assertNotNull(label);
         assertTrue(label.contains("hermes"), "label shows the sender id");
         assertTrue(label.contains("worker-03.prod.genios.de"), "label also shows the hostname");
