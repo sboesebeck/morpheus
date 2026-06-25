@@ -27,6 +27,9 @@ public class MessageInfo {
     public boolean isV5;
     public boolean answerIsV5;
     public boolean isDeleted;
+    public String body;
+
+    static final int MAX_BODY_CAPTURE = 2048;
 
     public MessageInfo(Msg msg, String topic) {
         this.id = msg.getMsgId();
@@ -43,6 +46,17 @@ public class MessageInfo {
         this.isDeleteAfterProcessing = msg.isDeleteAfterProcessing();
         this.deleteAfterProcessingTime = msg.getDeleteAfterProcessingTime();
         this.isV5 = detectV5(msg);
+        this.body = captureBody(msg);
+    }
+
+    /** Joins msg text + value + mapValue into a single searchable string, capped to MAX_BODY_CAPTURE. */
+    static String captureBody(Msg msg) {
+        StringBuilder sb = new StringBuilder();
+        try { if (msg.getMsg() != null) sb.append(msg.getMsg()); } catch (Exception ignored) {}
+        try { if (msg.getValue() != null) { if (sb.length() > 0) sb.append(' '); sb.append(msg.getValue()); } } catch (Exception ignored) {}
+        try { if (msg.getMapValue() != null && !msg.getMapValue().isEmpty()) { if (sb.length() > 0) sb.append(' '); sb.append(msg.getMapValue()); } } catch (Exception ignored) {}
+        String s = sb.toString();
+        return s.length() > MAX_BODY_CAPTURE ? s.substring(0, MAX_BODY_CAPTURE) : s;
     }
 
     static boolean detectV5(Msg msg) {
