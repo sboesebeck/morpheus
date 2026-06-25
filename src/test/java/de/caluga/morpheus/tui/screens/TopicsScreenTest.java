@@ -125,4 +125,126 @@ public class TopicsScreenTest {
         s.onKey(new KeyStroke(KeyType.ArrowDown));
         assertEquals(1, s.selectedIndex(), "clamped at the last row");
     }
+
+    @Test
+    void defaultSortIsMessagesDescending() {
+        MessageTracker t = new MessageTracker(50);
+        t.onInsert(req("low"), "low");
+        t.onInsert(req("high"), "high");
+        t.onInsert(req("high"), "high");                 // high = 2 messages
+        TopicsScreen s = new TopicsScreen(t, new NodeRegistry("self"));
+        assertEquals(TopicsScreen.SortKey.MESSAGES, s.sortKey());
+        assertTrue(s.sortDescending());
+        assertEquals("high", s.buildRows().get(0).topic());
+    }
+
+    @Test
+    void sKeyCyclesSortColumnSShiftReversesDirection() {
+        TopicsScreen s = new TopicsScreen(new MessageTracker(10), new NodeRegistry("self"));
+        assertEquals(TopicsScreen.SortKey.MESSAGES, s.sortKey());
+        s.onKey(new KeyStroke('s', false, false));
+        assertEquals(TopicsScreen.SortKey.ANSWERS, s.sortKey());
+        assertTrue(s.sortDescending());
+        s.onKey(new KeyStroke('S', false, false));
+        assertFalse(s.sortDescending());
+    }
+
+    @Test
+    void cycleToTopicSortsAlphabetically() {
+        MessageTracker t = new MessageTracker(50);
+        t.onInsert(req("banana"), "banana");
+        t.onInsert(req("apple"), "apple");
+        TopicsScreen s = new TopicsScreen(t, new NodeRegistry("self"));
+        for (int i = 0; i < 5; i++) s.onKey(new KeyStroke('s', false, false)); // MESSAGES→…→TOPIC
+        assertEquals(TopicsScreen.SortKey.TOPIC, s.sortKey());
+        s.onKey(new KeyStroke('S', false, false));                            // desc→asc
+        assertEquals("apple", s.buildRows().get(0).topic());
+    }
+
+    private void renderAt(TopicsScreen s, int cols, int rows) throws Exception {
+        DefaultVirtualTerminal vt = new DefaultVirtualTerminal(new com.googlecode.lanterna.TerminalSize(cols, rows));
+        TerminalScreen ts = new TerminalScreen(vt);
+        ts.startScreen();
+        s.draw(ts.newTextGraphics());
+        ts.stopScreen();
+    }
+
+    private TopicsScreen withTopics(int n) {
+        MessageTracker t = new MessageTracker(200);
+        for (int i = 0; i < n; i++) {
+            String name = "topic-" + String.format("%02d", i);
+            t.onInsert(req(name), name);
+        }
+        return new TopicsScreen(t, new NodeRegistry("self"));
+    }
+
+    @Test
+    void scrollFollowsSelectionDownward() throws Exception {
+        TopicsScreen s = withTopics(12);
+        renderAt(s, 80, 10);                       // visibleRows = 10 - 3 = 7
+        assertEquals(0, s.scrollOffset());
+        for (int i = 0; i < 11; i++) s.onKey(new KeyStroke(KeyType.ArrowDown));
+        renderAt(s, 80, 10);
+        assertEquals(11, s.selectedIndex());
+        assertEquals(5, s.scrollOffset(), "viewport scrolled so the last row is visible (11-7+1)");
+    }
+
+    @Test
+    void pageDownThenPageUpMovesByVisibleRows() throws Exception {
+        TopicsScreen s = withTopics(30);
+        renderAt(s, 80, 10);                       // visibleRows = 7
+        s.onKey(new KeyStroke(KeyType.PageDown));
+        renderAt(s, 80, 10);
+        assertEquals(7, s.selectedIndex());
+        s.onKey(new KeyStroke(KeyType.PageUp));
+        renderAt(s, 80, 10);
+        assertEquals(0, s.selectedIndex());
+        assertEquals(0, s.scrollOffset());
+    }
+
+    @Test
+    void slashFiltersTopicsBySubstring() {
+        MessageTracker t = new MessageTracker(50);
+        t.onInsert(req("order.created"), "order.created");
+        t.onInsert(req("order.shipped"), "order.shipped");
+        t.onInsert(req("cache.sync"), "cache.sync");
+        TopicsScreen s = new TopicsScreen(t, new NodeRegistry("self"));
+        s.onKey(new KeyStroke('/', false, false));
+        assertTrue(s.searchEditing());
+        s.onKey(new KeyStroke('o', false, false));
+        s.onKey(new KeyStroke('r', false, false));
+        s.onKey(new KeyStroke('d', false, false));
+        assertEquals(2, s.buildRows().size());
+        assertTrue(s.buildRows().stream().allMatch(r -> r.topic().contains("ord")));
+    }
+
+    @Test
+    void enterKeepsFilterEscapeClearsIt() {
+        MessageTracker t = new MessageTracker(50);
+        t.onInsert(req("order.created"), "order.created");
+        t.onInsert(req("cache.sync"), "cache.sync");
+        TopicsScreen s = new TopicsScreen(t, new NodeRegistry("self"));
+        s.onKey(new KeyStroke('/', false, false));
+        s.onKey(new KeyStroke('o', false, false));
+        s.onKey(new KeyStroke(KeyType.Enter));
+        assertFalse(s.searchEditing());
+        assertEquals("o", s.searchQuery());
+        assertEquals(1, s.buildRows().size());          // still filtered after Enter
+        s.onKey(new KeyStroke('/', false, false));
+        s.onKey(new KeyStroke(KeyType.Escape));
+        assertFalse(s.searchEditing());
+        assertEquals("", s.searchQuery());
+        assertEquals(2, s.buildRows().size());          // cleared
+    }
+
+    @Test
+    void editingKeysGoToQueryNotCommands() {
+        TopicsScreen s = new TopicsScreen(new MessageTracker(10), new NodeRegistry("self"));
+        s.onKey(new KeyStroke('/', false, false));
+        Screen.Result r = s.onKey(new KeyStroke('q', false, false));  // must NOT quit
+        assertEquals(Screen.Result.Kind.STAY, r.kind());
+        assertEquals("q", s.searchQuery());
+        s.onKey(new KeyStroke(KeyType.Backspace));
+        assertEquals("", s.searchQuery());
+    }
 }

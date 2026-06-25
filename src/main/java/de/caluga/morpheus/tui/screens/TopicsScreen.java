@@ -14,6 +14,7 @@ import de.caluga.morpheus.core.StatusPinger;
 import de.caluga.morpheus.tui.Screen;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -38,6 +39,14 @@ public class TopicsScreen implements Screen {
     private int intervalIndex = 1;                     // default 10s
     private int rowCount = 0;                          // last rendered row count (for clamping)
     private int selected = 0;
+    private int scroll = 0;          // index of the first visible row
+    private int visibleRows = 1;     // data rows that fit, set during draw
+
+    enum SortKey { TOPIC, MESSAGES, ANSWERS, RTT, TIMEOUTS, LISTENERS }
+    private SortKey sortKey = SortKey.MESSAGES;
+    private boolean sortDesc = true;
+    private boolean searchEditing = false;
+    private String searchQuery = "";
 
     /** One topic row: stream counters + listener count from the ping. */
     record Row(String topic, long messages, long answers, long avgRtt, long timeouts, int listeners) {
@@ -67,6 +76,11 @@ public class TopicsScreen implements Screen {
 
     int currentIntervalMs() { return INTERVAL_PRESETS[intervalIndex]; }   // test seam
     int selectedIndex() { return selected; }                             // test seam
+    int scrollOffset() { return scroll; }                               // test seam
+    SortKey sortKey() { return sortKey; }                                // test seam
+    boolean sortDescending() { return sortDesc; }                        // test seam
+    boolean searchEditing() { return searchEditing; }                    // test seam
+    String searchQuery() { return searchQuery; }                         // test seam
 
     @Override
     public void onClose() {
@@ -95,10 +109,28 @@ public class TopicsScreen implements Screen {
         intervalIndex = Math.max(0, Math.min(INTERVAL_PRESETS.length - 1, intervalIndex + dir));
     }
 
+    private void setQuery(String q) { searchQuery = q; selected = 0; scroll = 0; }
+
+    private static SortKey cycleSort(SortKey k) {
+        SortKey[] v = SortKey.values();
+        return v[(k.ordinal() + 1) % v.length];
+    }
+
     @Override
     public Result onKey(KeyStroke key) {
         if (key == null) {
             if (pinger != null && System.currentTimeMillis() - lastPing > currentIntervalMs()) refresh();
+            return Result.stay();
+        }
+        if (searchEditing) {
+            if (key.getKeyType() == KeyType.Enter)  { searchEditing = false; return Result.stay(); }
+            if (key.getKeyType() == KeyType.Escape) { searchEditing = false; setQuery(""); return Result.stay(); }
+            if (key.getKeyType() == KeyType.Backspace) {
+                if (!searchQuery.isEmpty()) setQuery(searchQuery.substring(0, searchQuery.length() - 1));
+                return Result.stay();
+            }
+            Character ch = key.getCharacter();
+            if (ch != null && !Character.isISOControl(ch)) setQuery(searchQuery + ch);
             return Result.stay();
         }
         Character c = key.getCharacter();
@@ -106,8 +138,13 @@ public class TopicsScreen implements Screen {
         if (c != null && c == 'r') { refresh(); return Result.stay(); }
         if (c != null && c == '+') { stepInterval(+1); return Result.stay(); }
         if (c != null && c == '-') { stepInterval(-1); return Result.stay(); }
+        if (c != null && c == 's') { sortKey = cycleSort(sortKey); return Result.stay(); }
+        if (c != null && c == 'S') { sortDesc = !sortDesc; return Result.stay(); }
+        if (c != null && c == '/') { searchEditing = true; return Result.stay(); }
         if (key.getKeyType() == KeyType.ArrowDown) { if (selected < rowCount - 1) selected++; return Result.stay(); }
         if (key.getKeyType() == KeyType.ArrowUp) { if (selected > 0) selected--; return Result.stay(); }
+        if (key.getKeyType() == KeyType.PageDown) { selected = Math.min(Math.max(0, rowCount - 1), selected + visibleRows); return Result.stay(); }
+        if (key.getKeyType() == KeyType.PageUp)   { selected = Math.max(0, selected - visibleRows); return Result.stay(); }
         if (key.getKeyType() == KeyType.Enter) {
             List<Row> rows = buildRows();
             if (selected >= 0 && selected < rows.size()) {
@@ -145,10 +182,20 @@ public class TopicsScreen implements Screen {
             if (a == null) rows.add(new Row(t, 0, 0, 0, 0, listeners));
             else rows.add(new Row(t, a.messages(), a.answers(), a.avgRtt(), a.timeouts(), listeners));
         }
-        rows.sort((x, y) -> {
-            int c = Long.compare(y.messages(), x.messages());
-            return c != 0 ? c : x.topic().compareTo(y.topic());
-        });
+        if (!searchQuery.isEmpty()) {
+            String q = searchQuery.toLowerCase();
+            rows.removeIf(r -> !r.topic().toLowerCase().contains(q));
+        }
+        Comparator<Row> cmp = switch (sortKey) {
+            case TOPIC     -> Comparator.comparing(Row::topic, String.CASE_INSENSITIVE_ORDER);
+            case MESSAGES  -> Comparator.comparingLong(Row::messages);
+            case ANSWERS   -> Comparator.comparingLong(Row::answers);
+            case RTT       -> Comparator.comparingLong(Row::avgRtt);
+            case TIMEOUTS  -> Comparator.comparingLong(Row::timeouts);
+            case LISTENERS -> Comparator.comparingInt(Row::listeners);
+        };
+        if (sortDesc) cmp = cmp.reversed();
+        rows.sort(cmp.thenComparing(Row::topic, String.CASE_INSENSITIVE_ORDER));
         return rows;
     }
 
@@ -164,14 +211,29 @@ public class TopicsScreen implements Screen {
         List<Row> rows = buildRows();
         rowCount = rows.size();
         if (selected >= rowCount) selected = Math.max(0, rowCount - 1);
+        if (selected < 0) selected = 0;
 
+        String arrow = sortDesc ? "▼" : "▲";
         g.setForegroundColor(TextColor.ANSI.CYAN);
         g.putString(2, 0, String.format("%-30s %8s %8s %8s %8s %9s",
-                "Topic", "Nachr.", "Antw.", "Ø-RTT", "Timeout", "Listener"));
+                hdr("Topic", SortKey.TOPIC, arrow),
+                hdr("Nachr.", SortKey.MESSAGES, arrow),
+                hdr("Antw.", SortKey.ANSWERS, arrow),
+                hdr("Ø-RTT", SortKey.RTT, arrow),
+                hdr("Timeout", SortKey.TIMEOUTS, arrow),
+                hdr("Listener", SortKey.LISTENERS, arrow)));
 
         int row = 2;
-        int maxRows = g.getSize().getRows() - 3;
-        for (int i = 0; i < rows.size() && row - 2 < maxRows; i++) {
+        int maxRows = Math.max(1, g.getSize().getRows() - 3);
+        visibleRows = maxRows;
+        // keep the selected row inside the window
+        if (selected < scroll) scroll = selected;
+        else if (selected >= scroll + visibleRows) scroll = selected - visibleRows + 1;
+        int maxScroll = Math.max(0, rowCount - visibleRows);
+        if (scroll > maxScroll) scroll = maxScroll;
+        if (scroll < 0) scroll = 0;
+
+        for (int i = scroll; i < rows.size() && row - 2 < maxRows; i++) {
             Row r = rows.get(i);
             String rtt = r.avgRtt() > 0 ? r.avgRtt() + "ms" : "—";
             TextColor rowColor = i == selected ? TextColor.ANSI.GREEN_BRIGHT
@@ -196,10 +258,22 @@ public class TopicsScreen implements Screen {
         }
 
         g.setForegroundColor(TextColor.ANSI.DEFAULT);
-        g.putString(2, g.getSize().getRows() - 1, trunc(
-                "Intervall " + currentIntervalMs() / 1000 + "s" + (pinging ? "  pingt …" : "")
-                        + "   [↑↓] wählen   [enter] listener   [+/-] intervall   [r] ping   [esc] zurück   [q] quit",
-                width - 3));
+        g.putString(2, g.getSize().getRows() - 1, trunc(statusLine(), width - 3));
+    }
+
+    private String statusLine() {
+        String pos = rowCount == 0 ? "0/0"
+                : (scroll + 1) + "–" + Math.min(rowCount, scroll + visibleRows) + "/" + rowCount;
+        String left;
+        if (searchEditing) left = "Suche: " + searchQuery + "▌";
+        else if (!searchQuery.isEmpty()) left = "Filter: /" + searchQuery + "/";
+        else left = "Intervall " + currentIntervalMs() / 1000 + "s" + (pinging ? "  pingt …" : "");
+        return left + "   " + pos
+                + "   [/]suche [s/S]sort [↑↓/PgUp/Dn] [enter]listener [+/-]intervall [r]ping [esc][q]";
+    }
+
+    private String hdr(String label, SortKey key, String arrow) {
+        return sortKey == key ? label + arrow : label;
     }
 
     private String trunc(String s, int max) {
