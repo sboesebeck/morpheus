@@ -45,6 +45,8 @@ public class TopicsScreen implements Screen {
     enum SortKey { TOPIC, MESSAGES, ANSWERS, RTT, TIMEOUTS, LISTENERS }
     private SortKey sortKey = SortKey.MESSAGES;
     private boolean sortDesc = true;
+    private boolean searchEditing = false;
+    private String searchQuery = "";
 
     /** One topic row: stream counters + listener count from the ping. */
     record Row(String topic, long messages, long answers, long avgRtt, long timeouts, int listeners) {
@@ -77,6 +79,8 @@ public class TopicsScreen implements Screen {
     int scrollOffset() { return scroll; }                               // test seam
     SortKey sortKey() { return sortKey; }                                // test seam
     boolean sortDescending() { return sortDesc; }                        // test seam
+    boolean searchEditing() { return searchEditing; }                    // test seam
+    String searchQuery() { return searchQuery; }                         // test seam
 
     @Override
     public void onClose() {
@@ -105,6 +109,8 @@ public class TopicsScreen implements Screen {
         intervalIndex = Math.max(0, Math.min(INTERVAL_PRESETS.length - 1, intervalIndex + dir));
     }
 
+    private void setQuery(String q) { searchQuery = q; selected = 0; scroll = 0; }
+
     private static SortKey cycleSort(SortKey k) {
         SortKey[] v = SortKey.values();
         return v[(k.ordinal() + 1) % v.length];
@@ -116,6 +122,17 @@ public class TopicsScreen implements Screen {
             if (pinger != null && System.currentTimeMillis() - lastPing > currentIntervalMs()) refresh();
             return Result.stay();
         }
+        if (searchEditing) {
+            if (key.getKeyType() == KeyType.Enter)  { searchEditing = false; return Result.stay(); }
+            if (key.getKeyType() == KeyType.Escape) { searchEditing = false; setQuery(""); return Result.stay(); }
+            if (key.getKeyType() == KeyType.Backspace) {
+                if (!searchQuery.isEmpty()) setQuery(searchQuery.substring(0, searchQuery.length() - 1));
+                return Result.stay();
+            }
+            Character ch = key.getCharacter();
+            if (ch != null && !Character.isISOControl(ch)) setQuery(searchQuery + ch);
+            return Result.stay();
+        }
         Character c = key.getCharacter();
         if (c != null && c == 'q') return Result.quit();
         if (c != null && c == 'r') { refresh(); return Result.stay(); }
@@ -123,6 +140,7 @@ public class TopicsScreen implements Screen {
         if (c != null && c == '-') { stepInterval(-1); return Result.stay(); }
         if (c != null && c == 's') { sortKey = cycleSort(sortKey); return Result.stay(); }
         if (c != null && c == 'S') { sortDesc = !sortDesc; return Result.stay(); }
+        if (c != null && c == '/') { searchEditing = true; return Result.stay(); }
         if (key.getKeyType() == KeyType.ArrowDown) { if (selected < rowCount - 1) selected++; return Result.stay(); }
         if (key.getKeyType() == KeyType.ArrowUp) { if (selected > 0) selected--; return Result.stay(); }
         if (key.getKeyType() == KeyType.PageDown) { selected = Math.min(Math.max(0, rowCount - 1), selected + visibleRows); return Result.stay(); }
@@ -163,6 +181,10 @@ public class TopicsScreen implements Screen {
             int listeners = registry.listenersOf(t).size();
             if (a == null) rows.add(new Row(t, 0, 0, 0, 0, listeners));
             else rows.add(new Row(t, a.messages(), a.answers(), a.avgRtt(), a.timeouts(), listeners));
+        }
+        if (!searchQuery.isEmpty()) {
+            String q = searchQuery.toLowerCase();
+            rows.removeIf(r -> !r.topic().toLowerCase().contains(q));
         }
         Comparator<Row> cmp = switch (sortKey) {
             case TOPIC     -> Comparator.comparing(Row::topic, String.CASE_INSENSITIVE_ORDER);
@@ -242,9 +264,12 @@ public class TopicsScreen implements Screen {
     private String statusLine() {
         String pos = rowCount == 0 ? "0/0"
                 : (scroll + 1) + "–" + Math.min(rowCount, scroll + visibleRows) + "/" + rowCount;
-        String base = "Intervall " + currentIntervalMs() / 1000 + "s" + (pinging ? "  pingt …" : "");
-        return base + "   " + pos
-                + "   [↑↓/PgUp/Dn] wählen   [enter] listener   [+/-] intervall   [r] ping   [esc] zurück   [q] quit";
+        String left;
+        if (searchEditing) left = "Suche: " + searchQuery + "▌";
+        else if (!searchQuery.isEmpty()) left = "Filter: /" + searchQuery + "/";
+        else left = "Intervall " + currentIntervalMs() / 1000 + "s" + (pinging ? "  pingt …" : "");
+        return left + "   " + pos
+                + "   [/]suche [s/S]sort [↑↓/PgUp/Dn] [enter]listener [+/-]intervall [r]ping [esc][q]";
     }
 
     private String hdr(String label, SortKey key, String arrow) {

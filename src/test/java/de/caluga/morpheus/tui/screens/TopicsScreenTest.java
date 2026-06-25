@@ -201,4 +201,50 @@ public class TopicsScreenTest {
         assertEquals(0, s.selectedIndex());
         assertEquals(0, s.scrollOffset());
     }
+
+    @Test
+    void slashFiltersTopicsBySubstring() {
+        MessageTracker t = new MessageTracker(50);
+        t.onInsert(req("order.created"), "order.created");
+        t.onInsert(req("order.shipped"), "order.shipped");
+        t.onInsert(req("cache.sync"), "cache.sync");
+        TopicsScreen s = new TopicsScreen(t, new NodeRegistry("self"));
+        s.onKey(new KeyStroke('/', false, false));
+        assertTrue(s.searchEditing());
+        s.onKey(new KeyStroke('o', false, false));
+        s.onKey(new KeyStroke('r', false, false));
+        s.onKey(new KeyStroke('d', false, false));
+        assertEquals(2, s.buildRows().size());
+        assertTrue(s.buildRows().stream().allMatch(r -> r.topic().contains("ord")));
+    }
+
+    @Test
+    void enterKeepsFilterEscapeClearsIt() {
+        MessageTracker t = new MessageTracker(50);
+        t.onInsert(req("order.created"), "order.created");
+        t.onInsert(req("cache.sync"), "cache.sync");
+        TopicsScreen s = new TopicsScreen(t, new NodeRegistry("self"));
+        s.onKey(new KeyStroke('/', false, false));
+        s.onKey(new KeyStroke('o', false, false));
+        s.onKey(new KeyStroke(KeyType.Enter));
+        assertFalse(s.searchEditing());
+        assertEquals("o", s.searchQuery());
+        assertEquals(1, s.buildRows().size());          // still filtered after Enter
+        s.onKey(new KeyStroke('/', false, false));
+        s.onKey(new KeyStroke(KeyType.Escape));
+        assertFalse(s.searchEditing());
+        assertEquals("", s.searchQuery());
+        assertEquals(2, s.buildRows().size());          // cleared
+    }
+
+    @Test
+    void editingKeysGoToQueryNotCommands() {
+        TopicsScreen s = new TopicsScreen(new MessageTracker(10), new NodeRegistry("self"));
+        s.onKey(new KeyStroke('/', false, false));
+        Screen.Result r = s.onKey(new KeyStroke('q', false, false));  // must NOT quit
+        assertEquals(Screen.Result.Kind.STAY, r.kind());
+        assertEquals("q", s.searchQuery());
+        s.onKey(new KeyStroke(KeyType.Backspace));
+        assertEquals("", s.searchQuery());
+    }
 }
