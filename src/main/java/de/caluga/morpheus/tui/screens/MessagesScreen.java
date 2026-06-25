@@ -29,6 +29,8 @@ public class MessagesScreen implements Screen {
     private enum Axis { TOPIC, SENDER, HOST }
     private Axis pickerAxis;
     private PickerOverlay picker;            // null = closed
+    private boolean regexEditing = false;
+    private String regexBuffer = "";
 
     /** Production: connect a feed (ctx must already be connected by the launcher). */
     public MessagesScreen(MorpheusContext ctx) {
@@ -57,6 +59,8 @@ public class MessagesScreen implements Screen {
 
     MessageFilter filter() { return filter; }
 
+    boolean regexEditing() { return regexEditing; }
+
     /** Number of rows that would render for a terminal of `termRows` height, after filtering. */
     int visibleRowCount(int termRows) {
         int dataStart = 7;
@@ -73,6 +77,21 @@ public class MessagesScreen implements Screen {
     @Override
     public Result onKey(KeyStroke key) {
         if (key == null) return Result.stay();
+        if (regexEditing) {
+            if (key.getKeyType() == KeyType.Enter) {
+                filter.bodyRegex = regexBuffer.isEmpty() ? null : regexBuffer;
+                regexEditing = false;
+                return Result.stay();
+            }
+            if (key.getKeyType() == KeyType.Escape) { regexEditing = false; regexBuffer = ""; return Result.stay(); }
+            if (key.getKeyType() == KeyType.Backspace) {
+                if (!regexBuffer.isEmpty()) regexBuffer = regexBuffer.substring(0, regexBuffer.length() - 1);
+                return Result.stay();
+            }
+            Character rc = key.getCharacter();
+            if (rc != null && !Character.isISOControl(rc)) regexBuffer += rc;
+            return Result.stay();
+        }
         if (picker != null) {
             PickerOverlay.Outcome o = picker.onKey(key);
             if (o == PickerOverlay.Outcome.COMMIT) { commitPicker(); picker = null; }
@@ -85,6 +104,11 @@ public class MessagesScreen implements Screen {
         if (c != null && c == 's') { openPicker(Axis.SENDER); return Result.stay(); }
         if (c != null && c == 'o') { openPicker(Axis.HOST); return Result.stay(); }
         if (c != null && c == 'c') { filter.clear(); return Result.stay(); }
+        if (c != null && c == 'a') { filter.cycle("answered"); return Result.stay(); }
+        if (c != null && c == 'x') { filter.cycle("exclusive"); return Result.stay(); }
+        if (c != null && c == 'e') { filter.cycle("timedOut"); return Result.stay(); }
+        if (c != null && c == 'd') { filter.cycle("deleted"); return Result.stay(); }
+        if (c != null && c == '/') { regexEditing = true; regexBuffer = filter.bodyRegex == null ? "" : filter.bodyRegex; return Result.stay(); }
         if (key.getKeyType() == KeyType.Escape) return Result.pop();
         return Result.stay();
     }
@@ -194,6 +218,10 @@ public class MessagesScreen implements Screen {
 
         g.setForegroundColor(TextColor.ANSI.DEFAULT);
         g.putString(2, height - 1, trunc(statusLine(), width - 3));
+        if (regexEditing) {
+            g.setForegroundColor(TextColor.ANSI.YELLOW);
+            g.putString(2, height - 1, trunc("Regex: " + regexBuffer + "▌   [enter] ok  [esc] abbrechen", width - 3));
+        }
         if (picker != null) picker.draw(g);
     }
 

@@ -153,4 +153,40 @@ public class MessagesScreenTest {
         s.draw(ts.newTextGraphics()); // must not throw at 200 cols
         ts.stopScreen();
     }
+
+    @Test
+    void statusKeysCycleTriStates() {
+        MessagesScreen s = new MessagesScreen(new MessageTracker(10));
+        s.onKey(new KeyStroke('a', false, false));
+        assertEquals(MessageFilter.TriState.ONLY, s.filter().answered);
+        s.onKey(new KeyStroke('e', false, false));
+        assertEquals(MessageFilter.TriState.ONLY, s.filter().timedOut);
+        s.onKey(new KeyStroke('x', false, false));
+        assertEquals(MessageFilter.TriState.ONLY, s.filter().exclusive);
+        s.onKey(new KeyStroke('d', false, false));
+        assertEquals(MessageFilter.TriState.ONLY, s.filter().deleted);
+    }
+
+    @Test
+    void slashEntersRegexAndEnterCommits() {
+        MessagesScreen s = new MessagesScreen(new MessageTracker(10));
+        s.onKey(new KeyStroke('/', false, false));
+        assertTrue(s.regexEditing());
+        s.onKey(new KeyStroke('f', false, false));
+        s.onKey(new KeyStroke('o', false, false));
+        s.onKey(new KeyStroke('o', false, false));
+        s.onKey(new KeyStroke(KeyType.Enter));
+        assertFalse(s.regexEditing());
+        assertEquals("foo", s.filter().bodyRegex);
+    }
+
+    @Test
+    void regexEscapeCancelsWithoutApplying() {
+        MessagesScreen s = new MessagesScreen(new MessageTracker(10));
+        s.onKey(new KeyStroke('/', false, false));
+        s.onKey(new KeyStroke('x', false, false));
+        s.onKey(new KeyStroke(KeyType.Escape));
+        assertFalse(s.regexEditing());
+        assertNull(s.filter().bodyRegex);
+    }
 }
