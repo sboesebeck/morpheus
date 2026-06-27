@@ -10,7 +10,7 @@
     <maven.compiler.source>21</maven.compiler.source>
     <maven.compiler.target>21</maven.compiler.target>
     <mongodbDriver.version>4.7.1</mongodbDriver.version>
-    <morphium.version>6.2.4</morphium.version>
+    <morphium.version>6.2.5</morphium.version>
     <logback.version>1.5.25</logback.version>
     <!-- <jline.version>RELEASE</jline.version> -->
   </properties>
