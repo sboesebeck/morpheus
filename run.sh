@@ -26,8 +26,8 @@ done
 needs_rebuild=0
 
 if [ "$rerun" -eq 0 ]; then
-  # If cp.csv doesn't exist, we need to build
-  if [ ! -f "$csv" ]; then
+  # If cp.csv doesn't exist or is empty (failed generation), we need to build
+  if [ ! -s "$csv" ]; then
     needs_rebuild=1
   # If --recompile flag is given, force rebuild
   elif [ "$recompile" -eq 1 ]; then
@@ -59,9 +59,16 @@ fi
 if [ "$needs_rebuild" -eq 1 ]; then
   echo "DEBUG: Refreshing dependencies..." >&2
   mvn -U dependency:list | grep ":.*:.*:compile" | sed "s/\[INFO\]    \([^:]*\):\([^:]*\):jar:\([^:]*\):compile/\1;\2;\3/" | sed -e 's/--.*$//' | sort -u >$csv
-elif [ ! -f "$csv" ]; then
+elif [ ! -s "$csv" ]; then
   # If cp.csv doesn't exist and we're in rerun mode, create it
   mvn -U dependency:list | grep ":.*:.*:compile" | sed "s/\[INFO\]    \([^:]*\):\([^:]*\):jar:\([^:]*\):compile/\1;\2;\3/" | sed -e 's/--.*$//' | sort -u >$csv
+fi
+
+# A failed mvn run leaves an empty cp.csv which would poison the cache check above
+if [ ! -s "$csv" ]; then
+  echo "ERROR: could not generate dependency list ($csv is empty) - did 'mvn dependency:list' fail?" >&2
+  rm -f "$csv"
+  exit 1
 fi
 
 # Build classpath
