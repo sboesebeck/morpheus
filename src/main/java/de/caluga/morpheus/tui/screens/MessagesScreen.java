@@ -5,6 +5,7 @@ import com.googlecode.lanterna.graphics.TextGraphics;
 import com.googlecode.lanterna.input.KeyStroke;
 import com.googlecode.lanterna.input.KeyType;
 import de.caluga.morpheus.cli.MorpheusContext;
+import de.caluga.morpheus.config.ConfigurationManager;
 import de.caluga.morpheus.core.MessageFeed;
 import de.caluga.morpheus.core.MessageFilter;
 import de.caluga.morpheus.core.MessageInfo;
@@ -12,6 +13,7 @@ import de.caluga.morpheus.core.MessageStats;
 import de.caluga.morpheus.core.MessageTracker;
 import de.caluga.morpheus.tui.Screen;
 import de.caluga.morpheus.tui.widget.PickerOverlay;
+import de.caluga.morphium.driver.MorphiumId;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
@@ -23,7 +25,11 @@ import java.util.Set;
 /** Live message table rendered on Lanterna; same core/ data as the CLI monitor. */
 public class MessagesScreen implements Screen {
 
+    static final int DEFAULT_HISTORY_CAPACITY = ConfigurationManager.DEFAULT_MESSAGE_HISTORY_SIZE;
+    private static final int[] HISTORY_PRESETS = {100, 250, 500, 1_000, 2_500, 5_000, 10_000};
+
     private final MessageTracker tracker;
+    private final ConfigurationManager config;
     private MorpheusContext ownedCtx;
     private final MessageFilter filter = new MessageFilter();
     private enum Axis { TOPIC, SENDER, HOST }
@@ -31,10 +37,19 @@ public class MessagesScreen implements Screen {
     private PickerOverlay picker;            // null = closed
     private boolean regexEditing = false;
     private String regexBuffer = "";
+    private MorphiumId selectedId;
+    private int selected = 0;
+    private int scroll = 0;
+    private int visibleRows = 1;
+    private String historyError;
+    private boolean paused = false;
+    private List<MessageInfo> pausedMessages = List.of();
+    private long pausedAtMessageCount = 0;
 
     /** Production: connect a feed (ctx must already be connected by the launcher). */
     public MessagesScreen(MorpheusContext ctx) {
-        this.tracker = new MessageTracker(100);
+        this.config = ctx.getConfig();
+        this.tracker = new MessageTracker(config.getMessageHistorySize());
         // Guard so the screen can also be constructed with an unconnected context (unit tests,
         // disabled paths): only start the feed when there is a live Morphium.
         if (ctx.getMorphium() != null) {
@@ -50,6 +65,7 @@ public class MessagesScreen implements Screen {
     /** Test seam: render a hand-fed tracker without a DB feed. */
     MessagesScreen(MessageTracker tracker) {
         this.tracker = tracker;
+        this.config = null;
     }
 
     @Override
@@ -61,13 +77,26 @@ public class MessagesScreen implements Screen {
 
     boolean regexEditing() { return regexEditing; }
 
+    int selectedIndex() { return selected; }
+
+    int scrollOffset() { return scroll; }
+
+    MorphiumId selectedMessageId() { return selectedId; }
+
+    int historyCapacity() { return tracker.getMaxMessages(); }
+
+    boolean paused() { return paused; }
+
+    long messagesSincePause() {
+        return paused ? Math.max(0, tracker.getStats().getTotalMessages() - pausedAtMessageCount) : 0;
+    }
+
     /** Number of rows that would render for a terminal of `termRows` height, after filtering. */
     int visibleRowCount(int termRows) {
         int dataStart = 7;
         int maxRows = Math.max(0, termRows - dataStart - 1);
         int n = 0;
-        for (MessageInfo info : tracker.getMessagesNewestFirst()) {
-            if (!filter.accepts(info)) continue;
+        for (MessageInfo ignored : filteredMessages()) {
             if (n >= maxRows) break;
             n++;
         }
@@ -81,6 +110,7 @@ public class MessagesScreen implements Screen {
             if (key.getKeyType() == KeyType.Enter) {
                 filter.bodyRegex = regexBuffer.isEmpty() ? null : regexBuffer;
                 regexEditing = false;
+                resetSelection();
                 return Result.stay();
             }
             if (key.getKeyType() == KeyType.Escape) { regexEditing = false; regexBuffer = ""; return Result.stay(); }
@@ -103,12 +133,24 @@ public class MessagesScreen implements Screen {
         if (c != null && c == 't') { openPicker(Axis.TOPIC); return Result.stay(); }
         if (c != null && c == 's') { openPicker(Axis.SENDER); return Result.stay(); }
         if (c != null && c == 'o') { openPicker(Axis.HOST); return Result.stay(); }
-        if (c != null && c == 'c') { filter.clear(); return Result.stay(); }
-        if (c != null && c == 'a') { filter.cycle("answered"); return Result.stay(); }
-        if (c != null && c == 'x') { filter.cycle("exclusive"); return Result.stay(); }
-        if (c != null && c == 'e') { filter.cycle("timedOut"); return Result.stay(); }
-        if (c != null && c == 'd') { filter.cycle("deleted"); return Result.stay(); }
+        if (c != null && c == 'c') { filter.clear(); resetSelection(); return Result.stay(); }
+        if (c != null && c == 'a') { filter.cycle("answered"); resetSelection(); return Result.stay(); }
+        if (c != null && c == 'x') { filter.cycle("exclusive"); resetSelection(); return Result.stay(); }
+        if (c != null && c == 'e') { filter.cycle("timedOut"); resetSelection(); return Result.stay(); }
+        if (c != null && c == 'd') { filter.cycle("deleted"); resetSelection(); return Result.stay(); }
+        if (c != null && c == '+') { stepHistory(1); return Result.stay(); }
+        if (c != null && c == '-') { stepHistory(-1); return Result.stay(); }
+        if (c != null && c == 'p') { togglePause(); return Result.stay(); }
         if (c != null && c == '/') { regexEditing = true; regexBuffer = filter.bodyRegex == null ? "" : filter.bodyRegex; return Result.stay(); }
+        if (key.getKeyType() == KeyType.ArrowDown) { navigate(1); return Result.stay(); }
+        if (key.getKeyType() == KeyType.ArrowUp) { navigate(-1); return Result.stay(); }
+        if (key.getKeyType() == KeyType.PageDown) { navigate(visibleRows); return Result.stay(); }
+        if (key.getKeyType() == KeyType.PageUp) { navigate(-visibleRows); return Result.stay(); }
+        if (key.getKeyType() == KeyType.End) { resumeLive(); return Result.stay(); }
+        if (key.getKeyType() == KeyType.Enter) {
+            MessageInfo info = selectedMessage();
+            return info == null ? Result.stay() : Result.push(new MessageDetailScreen(info));
+        }
         if (key.getKeyType() == KeyType.Escape) return Result.pop();
         return Result.stay();
     }
@@ -141,6 +183,110 @@ public class MessagesScreen implements Screen {
                 : pickerAxis == Axis.SENDER ? filter.senders : filter.hosts;
         target.clear();
         target.addAll(picker.selection());
+        resetSelection();
+    }
+
+    private List<MessageInfo> filteredMessages() {
+        List<MessageInfo> result = new ArrayList<>();
+        List<MessageInfo> source = paused ? pausedMessages : tracker.getMessagesNewestFirst();
+        for (MessageInfo info : source) {
+            if (filter.accepts(info)) result.add(info);
+        }
+        return result;
+    }
+
+    private MessageInfo selectedMessage() {
+        List<MessageInfo> messages = filteredMessages();
+        syncSelection(messages);
+        return messages.isEmpty() ? null : messages.get(selected);
+    }
+
+    private void moveSelection(int delta) {
+        List<MessageInfo> messages = filteredMessages();
+        syncSelection(messages);
+        if (messages.isEmpty()) return;
+        selected = Math.max(0, Math.min(messages.size() - 1, selected + delta));
+        selectedId = selected == 0 ? null : messages.get(selected).id;
+    }
+
+    private void navigate(int delta) {
+        if (!paused) {
+            if (delta <= 0) return;
+            pause();
+        }
+        moveSelection(delta);
+    }
+
+    private void togglePause() {
+        if (paused) resumeLive();
+        else pause();
+    }
+
+    private void pause() {
+        if (paused) return;
+        pausedMessages = tracker.getMessagesNewestFirst();
+        pausedAtMessageCount = tracker.getStats().getTotalMessages();
+        paused = true;
+        syncSelection(filteredMessages());
+    }
+
+    private void resumeLive() {
+        paused = false;
+        pausedMessages = List.of();
+        pausedAtMessageCount = 0;
+        resetSelection();
+    }
+
+    private void syncSelection(List<MessageInfo> messages) {
+        if (messages.isEmpty()) {
+            resetSelection();
+            return;
+        }
+        if (selectedId == null) {
+            selected = 0;
+            return;
+        }
+        for (int i = 0; i < messages.size(); i++) {
+            if (selectedId.equals(messages.get(i).id)) {
+                selected = i;
+                return;
+            }
+        }
+        selected = Math.min(selected, messages.size() - 1);
+        selectedId = selected == 0 ? null : messages.get(selected).id;
+    }
+
+    private void resetSelection() {
+        selectedId = null;
+        selected = 0;
+        scroll = 0;
+    }
+
+    private void stepHistory(int direction) {
+        int current = tracker.getMaxMessages();
+        int target = current;
+        if (direction > 0) {
+            for (int preset : HISTORY_PRESETS) {
+                if (preset > current) { target = preset; break; }
+            }
+        } else {
+            for (int i = HISTORY_PRESETS.length - 1; i >= 0; i--) {
+                if (HISTORY_PRESETS[i] < current) { target = HISTORY_PRESETS[i]; break; }
+            }
+        }
+        if (target == current) return;
+        tracker.setMaxMessages(target);
+        if (paused && pausedMessages.size() > target) {
+            pausedMessages = new ArrayList<>(pausedMessages.subList(0, target));
+        }
+        syncSelection(filteredMessages());
+        if (config == null) return;
+        try {
+            config.setMessageHistorySize(target);
+            historyError = null;
+        } catch (Exception ignored) {
+            historyError = "History konnte nicht gespeichert werden";
+        }
     }
 
     @Override
@@ -163,7 +309,7 @@ public class MessagesScreen implements Screen {
         g.putString(2, 1, trunc(String.format(
                 "Uptime: %ds | Messages: %d (%.1f/s) | Answers: %d | Updates: %d | Timeouts: %d | Buffer: %d/%d",
                 uptime, msgs, perSec, stats.getTotalAnswers(), stats.getTotalUpdates(),
-                stats.getTotalTimeouts(), tracker.getBufferSize(), 100), width - 3));
+                stats.getTotalTimeouts(), tracker.getBufferSize(), tracker.getMaxMessages()), width - 3));
 
         // Summary line: slowest topics (magenta)
         g.setForegroundColor(TextColor.ANSI.MAGENTA);
@@ -201,19 +347,24 @@ public class MessagesScreen implements Screen {
         g.putString(2, 6, rule);
 
         // Rows newest-first, cell-by-cell so version tags can be colored independently
-        var messages = tracker.getMessagesNewestFirst();
+        var messages = filteredMessages();
+        syncSelection(messages);
         long now = System.currentTimeMillis();
         int dataStart = 7;
         int row = dataStart;
         int maxRows = Math.max(0, height - dataStart - 1);
-        int n = 0;
-        for (MessageInfo info : messages) {
-            if (!filter.accepts(info)) continue;
-            if (n >= maxRows) break;
-            n++;
-            TextColor base = info.isTimedOut ? TextColor.ANSI.RED
-                    : (n % 2 == 0 ? TextColor.ANSI.WHITE : TextColor.ANSI.DEFAULT);
-            drawRow(g, row++, width, n, base, info, now, cSender, cHost, cTopic, cProc, cAnsBy, cAnsHost);
+        visibleRows = Math.max(1, maxRows);
+        if (selected < scroll) scroll = selected;
+        else if (selected >= scroll + visibleRows) scroll = selected - visibleRows + 1;
+        int maxScroll = Math.max(0, messages.size() - visibleRows);
+        scroll = Math.max(0, Math.min(scroll, maxScroll));
+        for (int i = scroll; i < messages.size() && row - dataStart < maxRows; i++) {
+            MessageInfo info = messages.get(i);
+            TextColor base = i == selected ? TextColor.ANSI.GREEN_BRIGHT
+                    : info.isTimedOut ? TextColor.ANSI.RED
+                    : ((i + 1) % 2 == 0 ? TextColor.ANSI.WHITE : TextColor.ANSI.DEFAULT);
+            drawRow(g, row++, width, i + 1, i == selected, base, info, now,
+                    cSender, cHost, cTopic, cProc, cAnsBy, cAnsHost);
         }
 
         g.setForegroundColor(TextColor.ANSI.DEFAULT);
@@ -231,7 +382,8 @@ public class MessagesScreen implements Screen {
     }
 
     /** Draws one message row cell-by-cell with │ separators and colored [V5]/[V6] tags. */
-    private void drawRow(TextGraphics g, int y, int width, int n, TextColor base, MessageInfo info, long now,
+    private void drawRow(TextGraphics g, int y, int width, int n, boolean selectedRow,
+                         TextColor base, MessageInfo info, long now,
                          int cSender, int cHost, int cTopic, int cProc, int cAnsBy, int cAnsHost) {
         int maxX = width - 1;
         int x = 2;
@@ -243,7 +395,7 @@ public class MessagesScreen implements Screen {
         String an = info.rtt != null ? "Y" : "";
         String rttStr = info.rtt != null ? info.rtt + "ms" : "";
 
-        x = field(g, x, y, maxX, String.valueOf(n), 4, base);
+        x = field(g, x, y, maxX, (selectedRow ? "▶" : "") + n, 4, base);
         x = sep(g, x, y, maxX);
         x = field(g, x, y, maxX, time, 7, base);
         x = sep(g, x, y, maxX);
@@ -360,7 +512,13 @@ public class MessagesScreen implements Screen {
             }
             sb.append("   ");
         }
-        sb.append("[t]opic [s]ender h[o]st  [a]ns [x]excl [e]xpire [d]el  [/]regex  [c]lear  [esc] zurück  [q]uit");
+        if (historyError != null) sb.append(historyError).append("   ");
+        if (paused) sb.append("PAUSE +").append(messagesSincePause()).append(" neu [p]live   ");
+        else sb.append("LIVE [p]pause   ");
+        String pos = filteredMessages().isEmpty() ? "0/0" : (selected + 1) + "/" + filteredMessages().size();
+        sb.append(pos).append("  hist:").append(tracker.getMaxMessages())
+                .append(" [+/-]  [↑↓/PgUp/Dn] [enter]detail  [t]opic [s]ender h[o]st  ")
+                .append("[a]ns [x]excl [e]xpire [d]el  [/]regex [c]lear [esc][q]");
         return sb.toString();
     }
 

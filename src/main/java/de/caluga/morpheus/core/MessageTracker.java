@@ -53,6 +53,8 @@ public class MessageTracker {
         }
     }
 
+    public int getMaxMessages() { return maxMessages; }
+
     public MessageStats getStats() { return stats; }
 
     /** A new message document appeared. topic is extracted by the feed (V6 'topic' / V5 'name'). */

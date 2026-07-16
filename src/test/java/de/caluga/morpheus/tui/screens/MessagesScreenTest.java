@@ -6,16 +6,23 @@ import com.googlecode.lanterna.input.KeyStroke;
 import com.googlecode.lanterna.input.KeyType;
 import com.googlecode.lanterna.screen.TerminalScreen;
 import com.googlecode.lanterna.terminal.virtual.DefaultVirtualTerminal;
+import de.caluga.morpheus.cli.MorpheusContext;
+import de.caluga.morpheus.config.ConfigurationManager;
 import de.caluga.morpheus.core.MessageTracker;
 import de.caluga.morpheus.core.MessageFilter;
 import de.caluga.morpheus.tui.Screen;
 import de.caluga.morphium.driver.MorphiumId;
 import de.caluga.morphium.messaging.Msg;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 public class MessagesScreenTest {
+
+    @TempDir Path tmp;
 
     private Msg req(String topic, String sender, String host) {
         Msg m = new Msg(topic, "m", "v", 30000);
@@ -38,7 +45,11 @@ public class MessagesScreenTest {
     }
 
     private void render(MessagesScreen s) throws Exception {
-        DefaultVirtualTerminal vt = new DefaultVirtualTerminal(new com.googlecode.lanterna.TerminalSize(160, 30));
+        render(s, 160, 30);
+    }
+
+    private void render(MessagesScreen s, int width, int height) throws Exception {
+        DefaultVirtualTerminal vt = new DefaultVirtualTerminal(new com.googlecode.lanterna.TerminalSize(width, height));
         TerminalScreen ts = new TerminalScreen(vt);
         ts.startScreen();
         s.draw(ts.newTextGraphics());
@@ -188,5 +199,126 @@ public class MessagesScreenTest {
         s.onKey(new KeyStroke(KeyType.Escape));
         assertFalse(s.regexEditing());
         assertNull(s.filter().bodyRegex);
+    }
+
+    @Test
+    void productionHistoryIsBoundedToOneThousandMessages() {
+        assertEquals(1_000, MessagesScreen.DEFAULT_HISTORY_CAPACITY);
+    }
+
+    @Test
+    void plusMinusAdjustHistoryImmediatelyAndPersist() throws Exception {
+        String path = tmp.resolve("morpheus.properties").toString();
+        ConfigurationManager config = new ConfigurationManager(path);
+        MessagesScreen s = new MessagesScreen(new MorpheusContext(config));
+
+        assertEquals(1_000, s.historyCapacity());
+        s.onKey(new KeyStroke('+', false, false));
+        assertEquals(2_500, s.historyCapacity());
+        assertEquals(2_500, new ConfigurationManager(path).getMessageHistorySize());
+
+        s.onKey(new KeyStroke('-', false, false));
+        assertEquals(1_000, s.historyCapacity());
+    }
+
+    @Test
+    void shrinkingHistoryEvictsOldestMessagesImmediately() {
+        MessageTracker tracker = new MessageTracker(1_000);
+        for (int i = 0; i < 600; i++) tracker.onInsert(msg("topic-" + i, "sender"), "topic-" + i);
+        MessagesScreen s = new MessagesScreen(tracker);
+
+        s.onKey(new KeyStroke('-', false, false));
+
+        assertEquals(500, s.historyCapacity());
+        assertEquals(500, tracker.getBufferSize());
+        assertEquals("topic-599", tracker.getMessagesNewestFirst().get(0).topic);
+        assertEquals("topic-100", tracker.getMessagesNewestFirst().get(499).topic);
+    }
+
+    @Test
+    void arrowsMoveSelectionAndEnterOpensDetail() throws Exception {
+        MessagesScreen s = new MessagesScreen(fed());
+        render(s);
+
+        assertEquals(0, s.selectedIndex());
+        assertEquals(Screen.Result.Kind.STAY, s.onKey(new KeyStroke(KeyType.ArrowDown)).kind());
+        assertTrue(s.paused());
+        assertEquals(1, s.selectedIndex());
+        MorphiumId selectedId = s.selectedMessageId();
+
+        Screen.Result detail = s.onKey(new KeyStroke(KeyType.Enter));
+        assertEquals(Screen.Result.Kind.PUSH, detail.kind());
+        assertInstanceOf(MessageDetailScreen.class, detail.next());
+        assertEquals(String.valueOf(selectedId), ((MessageDetailScreen) detail.next()).messageId());
+
+        s.onKey(new KeyStroke(KeyType.ArrowUp));
+        assertEquals(0, s.selectedIndex());
+        assertNull(s.selectedMessageId(), "first row follows the newest live message");
+    }
+
+    @Test
+    void pageKeysMoveByVisibleWindowAndAdjustScroll() throws Exception {
+        MessageTracker tracker = new MessageTracker(50);
+        for (int i = 0; i < 20; i++) tracker.onInsert(msg("topic-" + i, "sender-" + i), "topic-" + i);
+        MessagesScreen s = new MessagesScreen(tracker);
+        render(s, 120, 12);
+
+        s.onKey(new KeyStroke(KeyType.PageDown));
+        assertEquals(4, s.selectedIndex());
+        render(s, 120, 12);
+        assertTrue(s.scrollOffset() > 0);
+
+        s.onKey(new KeyStroke(KeyType.PageUp));
+        assertEquals(0, s.selectedIndex());
+        render(s, 120, 12);
+        assertEquals(0, s.scrollOffset());
+    }
+
+    @Test
+    void navigationPausesFeedAndKeepsTheVisibleSnapshotStable() throws Exception {
+        MessageTracker tracker = fed();
+        MessagesScreen s = new MessagesScreen(tracker);
+        render(s);
+        s.onKey(new KeyStroke(KeyType.ArrowDown));
+        MorphiumId selectedId = s.selectedMessageId();
+        assertTrue(s.paused());
+        assertEquals(2, s.visibleRowCount(30));
+
+        tracker.onInsert(msg("new", "new-sender"), "new");
+        render(s);
+
+        assertEquals(selectedId, s.selectedMessageId());
+        assertEquals(1, s.selectedIndex());
+        assertEquals(2, s.visibleRowCount(30));
+        assertEquals(1, s.messagesSincePause());
+    }
+
+    @Test
+    void pResumesLiveModeAndJumpsToNewestMessage() throws Exception {
+        MessageTracker tracker = fed();
+        MessagesScreen s = new MessagesScreen(tracker);
+        render(s);
+        s.onKey(new KeyStroke(KeyType.ArrowDown));
+        tracker.onInsert(msg("new", "new-sender"), "new");
+
+        s.onKey(new KeyStroke('p', false, false));
+        render(s);
+
+        assertFalse(s.paused());
+        assertEquals(0, s.selectedIndex());
+        assertNull(s.selectedMessageId());
+        assertEquals(3, s.visibleRowCount(30));
+        assertEquals(0, s.messagesSincePause());
+    }
+
+    @Test
+    void pCanPauseWithoutMovingTheCursor() throws Exception {
+        MessagesScreen s = new MessagesScreen(fed());
+        render(s);
+
+        s.onKey(new KeyStroke('p', false, false));
+
+        assertTrue(s.paused());
+        assertEquals(0, s.selectedIndex());
     }
 }

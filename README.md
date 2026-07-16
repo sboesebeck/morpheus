@@ -19,7 +19,7 @@ Morphium is a feature-rich abstraction layer for MongoDB — declarative caching
 
 - **TUI-first** — run `morpheus` with no arguments and you get an interactive launcher: pick a connection, pick a view, go. Built on [Lanterna](https://github.com/mabe02/lanterna), no X required.
 - **Live views** that share one rendering core:
-  - **messages** — top-like live monitor: every message with sender/host, topic, size, processing state, exclusivity, answer + round-trip time, V5/V6 protocol tags, timeout highlighting.
+  - **messages** — top-like live monitor with a configurable rolling message history (default 1,000): sender/host, topic, size, processing state, exclusivity, answer + round-trip time, V5/V6 protocol tags, timeout highlighting, paging, and a detail snapshot that survives database deletion until eviction.
   - **topics** — per-topic aggregates: message/answer counts, average RTT, timeouts.
   - **nodes** — sender → answerer pair distribution (counts + avg RTT), keyed by host or sender; surfaces load imbalance.
   - **status** — a *top*-style per-node health monitor: heap usage, cache hit ratio, driver connections, errors, messages sent, threads, RTT — with a per-node **drill-down** to the full status dump (JVM, cache, driver, messaging, replica-set, config).
@@ -67,6 +67,10 @@ trailing `*`, used when you don't pass `-c`).
 Common keys inside a view: `Esc` back, `q` quit. The **status** view adds
 `↑/↓` to select a node, `+`/`-` to change the ping timeout (presets
 2/5/10/15/30 s), `r` to re-ping, and `Enter` to open the selected node's detail.
+The **messages** view uses `+`/`-` to resize its rolling history immediately
+(presets from 100 to 10,000, default 1,000). Navigating into older messages
+automatically pauses the visible snapshot; `p` resumes live mode at the newest
+message while the bounded buffer continues collecting in the background.
 
 ## The CLI
 

@@ -185,6 +185,13 @@ Checks:
 
 Location: `~/.config/morpheus.properties`
 
+The Messages view history can be changed directly inside that view with `+` or
+`-` (presets from 100 to 10,000, default 1,000), or edited manually:
+
+```properties
+morpheus.messages.history=1000
+```
+
 ### Structure
 
 ```properties

@@ -97,5 +97,28 @@ public class ConfigurationManagerTest {
         ConfigurationManager cm = new ConfigurationManager(path);
         assertEquals("default", cm.getTheme());
         assertEquals("default_connection", cm.getConnection());
+        assertEquals(1_000, cm.getMessageHistorySize());
+    }
+
+    @Test
+    void messageHistoryDefaultsValidatesAndPersists() throws Exception {
+        String path = writeConfig("morpheus.messages.history=2500\n");
+        ConfigurationManager cm = new ConfigurationManager(path);
+        assertEquals(2_500, cm.getMessageHistorySize());
+
+        cm.setMessageHistorySize(5_000);
+        assertEquals(5_000, new ConfigurationManager(path).getMessageHistorySize());
+
+        cm.setMessageHistorySize(1);
+        assertEquals(ConfigurationManager.MIN_MESSAGE_HISTORY_SIZE, cm.getMessageHistorySize());
+        cm.setMessageHistorySize(Integer.MAX_VALUE);
+        assertEquals(ConfigurationManager.MAX_MESSAGE_HISTORY_SIZE, cm.getMessageHistorySize());
+    }
+
+    @Test
+    void invalidMessageHistoryFallsBackToDefault() throws Exception {
+        String path = writeConfig("morpheus.messages.history=not-a-number\n");
+        assertEquals(ConfigurationManager.DEFAULT_MESSAGE_HISTORY_SIZE,
+                new ConfigurationManager(path).getMessageHistorySize());
     }
 }

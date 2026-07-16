@@ -37,4 +37,14 @@ public class LauncherStartTest {
         LauncherScreen s = new LauncherScreen(c);
         assertTrue(s.viewFor("topics", c) instanceof TopicsScreen);
     }
+
+    @Test
+    void messagesViewUsesConfiguredHistorySize() throws Exception {
+        MorpheusContext c = ctx();
+        c.getConfig().setMessageHistorySize(2_500);
+
+        MessagesScreen messages = (MessagesScreen) LauncherScreen.viewFor("messages", c);
+
+        assertEquals(2_500, messages.historyCapacity());
+    }
 }

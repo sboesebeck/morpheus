@@ -22,14 +22,21 @@ A `top`-like live feed of every message on the bus, newest first. The line above
 the table shows uptime, throughput, and running totals
 (messages / answers / updates / timeouts / buffer fill).
 
+By default, the view keeps the newest **1,000 messages** in a rolling in-memory
+history. Use `+/-` inside the Messages view to choose and persist a preset between
+100 and 10,000 messages. The running buffer is resized immediately; shrinking it
+evicts the oldest snapshots first. A snapshot remains available after its MongoDB
+document has been deleted, including up to 2,048 characters of message/value/map
+payload captured on insert.
+
 | Column | Meaning |
 |---|---|
 | `#` | row number (newest is 1) |
-| `Time` | message timestamp (`HH:MM:SS`) |
+| `Time` | age of the message in seconds |
 | `Sender` | id of the originating node; the V5/V6 protocol is colour-tagged |
 | `Host` | host of the sender |
 | `Topic` | message name / topic |
-| `Size` | serialized message size |
+| `Size` | approximate message size |
 | `Proc` | processing / lock / answer state (e.g. `N proc`, or the lock holder) |
 | `Ex` | `X` when the message is **exclusive** (processed by exactly one node) |
 | `An` | `Y` when the message has been **answered** |
@@ -38,9 +45,16 @@ the table shows uptime, throughput, and running totals
 | `RTT` | request → answer round-trip time, in ms |
 
 Rows that **timed out** (unanswered past the threshold) are shown in **red**;
-the rest alternate shading for readability.
+the rest alternate shading for readability. The selected row is green. Selection
+is anchored to the message id, so incoming messages do not move the cursor away
+from an older message being inspected. Moving down or paging automatically pauses
+the visible snapshot, while new messages continue entering the bounded rolling
+buffer in the background. The footer shows how many arrived during the pause.
 
-**Keys:** `Esc` back, `q` quit.
+**Keys:** `↑/↓` select a message, `PgUp/PgDn` move by one visible page, `Enter`
+opens the message detail snapshot, `+/-` resize the rolling history, `Esc` goes
+back, `q` quits. `p` toggles pause/live and `End` immediately resumes live mode at
+the newest message. The existing filter keys remain available as shown in the footer.
 
 ---
 

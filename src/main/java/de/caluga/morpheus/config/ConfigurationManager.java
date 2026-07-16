@@ -13,6 +13,10 @@ import java.util.UUID;
  * Centralized configuration management for Morpheus
  */
 public class ConfigurationManager {
+    public static final int DEFAULT_MESSAGE_HISTORY_SIZE = 1_000;
+    public static final int MIN_MESSAGE_HISTORY_SIZE = 100;
+    public static final int MAX_MESSAGE_HISTORY_SIZE = 10_000;
+
     private final Properties properties;
     private final String configFilePath;
 
@@ -52,6 +56,25 @@ public class ConfigurationManager {
         save();
     }
 
+    public int getMessageHistorySize() {
+        String value = properties.getProperty("morpheus.messages.history");
+        if (value == null || value.isBlank()) return DEFAULT_MESSAGE_HISTORY_SIZE;
+        try {
+            return clampMessageHistorySize(Integer.parseInt(value.trim()));
+        } catch (NumberFormatException ignored) {
+            return DEFAULT_MESSAGE_HISTORY_SIZE;
+        }
+    }
+
+    public void setMessageHistorySize(int size) throws IOException {
+        properties.setProperty("morpheus.messages.history", String.valueOf(clampMessageHistorySize(size)));
+        save();
+    }
+
+    private static int clampMessageHistorySize(int size) {
+        return Math.max(MIN_MESSAGE_HISTORY_SIZE, Math.min(MAX_MESSAGE_HISTORY_SIZE, size));
+    }
+
     private void loadConfiguration() {
         File configFile = new File(configFilePath);
 
@@ -79,6 +102,7 @@ public class ConfigurationManager {
         properties.setProperty("theme.default.gradient1", "grey");
         properties.setProperty("theme.default.gradient2", "green");
         properties.setProperty("theme.default.gradient3", "yellow");
+        properties.setProperty("morpheus.messages.history", String.valueOf(DEFAULT_MESSAGE_HISTORY_SIZE));
 
         try {
             StringBuilder doc = new StringBuilder();

@@ -142,7 +142,9 @@ public class MessageTrackerTest {
     @Test
     void maxMessagesIsAdjustable() {
         MessageTracker tracker = new MessageTracker(5);
+        assertEquals(5, tracker.getMaxMessages());
         tracker.setMaxMessages(1);
+        assertEquals(1, tracker.getMaxMessages());
         tracker.onInsert(msg("t1", "s1", "h1"), "t1");
         tracker.onInsert(msg("t2", "s2", "h2"), "t2");
         assertEquals(1, tracker.getMessagesNewestFirst().size());

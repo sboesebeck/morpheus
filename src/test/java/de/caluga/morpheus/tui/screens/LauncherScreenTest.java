@@ -99,4 +99,5 @@ public class LauncherScreenTest {
         s.onKey(new KeyStroke(' ', false, false));   // toggle off
         assertNull(ctx.getConfig().getDefaultConnection());
     }
+
 }
