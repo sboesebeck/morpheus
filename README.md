@@ -12,6 +12,7 @@ Morphium is a feature-rich abstraction layer for MongoDB — declarative caching
 │    local                  nodes      sender → answerer pairs          │
 │                           status     per-node health (top-like)      │
 │                           graph      message-flow graph              │
+│                           latency    live latency graph / load test  │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -24,8 +25,9 @@ Morphium is a feature-rich abstraction layer for MongoDB — declarative caching
   - **nodes** — sender → answerer pair distribution (counts + avg RTT), keyed by host or sender; surfaces load imbalance.
   - **status** — a *top*-style per-node health monitor: heap usage, cache hit ratio, driver connections, errors, messages sent, threads, RTT — with a per-node **drill-down** to the full status dump (JVM, cache, driver, messaging, replica-set, config).
   - **graph** — animated message-flow graph: nodes on a ring, messages as topic-coloured shots over a Braille canvas, request→answer played sequentially, timeouts in red; optional anti-aliased raster rendering on Kitty/Ghostty/WezTerm (`g`).
-- **CLI = shortcuts for the TUI** — every live view has a same-named command that opens the TUI straight on that view: `morpheus messages -c prod`, `morpheus topics`, `morpheus nodes`, `morpheus status`.
-- **Scriptable commands** for everything that doesn't belong in an interactive UI: one-shot status `ping` (with Graphite export and filters), `send`, raw change-stream `watch`, and `config`.
+  - **latency** — live latency graph and load test: Braille RTT time series or histogram, per-responder percentile table (min/avg/p50/p90/p99, jitter, outbound/return split), interval/fixed-rate/ramp send modes with adjustable payload and sender threads, plus the standalone `pong` echo responder to point it at.
+- **CLI = shortcuts for the TUI** — every live view has a same-named command that opens the TUI straight on that view: `morpheus messages -c prod`, `morpheus topics`, `morpheus nodes`, `morpheus status`, `morpheus latency`.
+- **Scriptable commands** for everything that doesn't belong in an interactive UI: one-shot status `ping` (with Graphite export and filters), `latency --headless` (JSON/CSV/Graphite load-test reports), `pong` (latency echo responder), `send`, raw change-stream `watch`, and `config`.
 - **Connection management** with SOCKS/SSH-tunnel support, multiple named connections, a default connection, and themes — all editable in the TUI or via `config`.
 
 ## Requirements
@@ -81,6 +83,8 @@ message while the bounded buffer continues collecting in the background.
 | `nodes` | Open the TUI on the sender→answerer view |
 | `status` | Open the TUI on the per-node health monitor |
 | `graph` | Open the TUI on the animated message-flow graph |
+| `latency` | Open the TUI on the live latency graph / load test (`--headless` for scripting: `--json/--csv/--graphite`, `--max-loss`) |
+| `pong` | Latency echo responder — answers pings on the latency topic until Ctrl-C |
 | `ping` | One-shot status ping of all nodes (table; `--graphite host[:port]`, `--filter-host/-sender`, `--level`, `--keys`) |
 | `send` | Send a message to a topic |
 | `watch` | Raw change-stream debug viewer |

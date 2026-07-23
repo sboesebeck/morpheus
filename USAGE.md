@@ -324,6 +324,75 @@ Watch the MongoDB change stream in real-time:
 ./run.sh watch
 ```
 
+### Latency / Pong
+
+`latency` measures round-trip time over the message bus by sending pings and
+matching answers (`inAnswerTo`); `pong` is a standalone echo responder to
+point it at. Run with no options for the TUI (live graph/histogram, `s` to
+start/stop — see `docs/views.md`), or `--headless` to run for a fixed
+duration and print a summary.
+
+**Start a responder:**
+```bash
+./run.sh -c myconn pong --name pong-1
+```
+
+**Three target kinds:**
+- **pong topic** (default) — a `pong` process listening on `--topic`
+  (default: `morpheus_latency`). Point `latency` at the same `--topic`.
+- **existing app listener topic** — any topic your own application already
+  answers on; no `pong` process needed, just `--topic yourTopic`.
+- **status listener** (`--status`) — pings the built-in Morphium status-info
+  listener that every connected node already answers, so you can measure
+  latency against real app nodes without a dedicated responder.
+
+**Options:**
+- `--topic <name>` - Ping topic (default: `morpheus_latency`)
+- `--status` - Ping the Morphium status-info listener instead (real app nodes)
+- `--interval <ms>` - Ping interval in ms, default send mode (default: 1000)
+- `--rate <n>` - Fixed send rate in msgs/s (enables load mode)
+- `--ramp <start:step:stepSecs>` - Ramp mode, e.g. `50:50:10` (start at 50/s,
+  +50/s every 10s; aborts automatically past ~50% loss)
+- `--threads <n>` - Sender threads (default: 1) — raise this if the achieved
+  rate falls well short of `--rate`/`--ramp` on one thread
+- `--payload <bytes>` - Ping padding bytes (default: 0)
+- `--timeout <ms>` - Ping timeout ms (default: 5000)
+- `--headless` - Run without the TUI, print a summary at the end
+- `--duration <secs>` - Headless run duration in seconds (default: 60)
+- `--json` / `--csv` - Machine-readable summary instead of the themed table
+- `--graphite <host[:port]>` / `--prefix <name>` - Push per-responder
+  metrics (`avg`, `p50`, `p90`, `p99`, `loss`) to Graphite
+- `--max-loss <pct>` - Exit non-zero when total loss % exceeds this (for CI)
+
+`pong` options: `--topic <name>` (must match `latency --topic`), `--name
+<name>` (responder label, default: hostname-pid).
+
+**The `out≈`/`ret≈` split:** when the responder embeds its receive
+timestamp, the round trip is split into an outbound (sender → responder) and
+return (responder → sender) leg. These are approximate (`≈`) because they
+depend on the two hosts' wall clocks agreeing — any clock skew between
+sender and responder shows up directly in the split, including as a negative
+`ret≈`. Trust the total RTT; treat `out≈`/`ret≈` as directional only, and
+`?` means no receive timestamp was available (e.g. `--status` mode).
+
+**Headless examples:**
+```bash
+# JSON summary, 15s run against a pong responder
+./run.sh -c myconn latency --headless --interval 500 --duration 15 --json
+
+# Load test at 100 msg/s with 4 sender threads, CSV output
+./run.sh -c myconn latency --headless --rate 100 --threads 4 --duration 30 --csv
+
+# Push percentiles to Graphite
+./run.sh -c myconn latency --headless --interval 1000 --duration 60 --graphite localhost:2003
+
+# CI-friendly: fail (exit 2) if loss exceeds 5%
+./run.sh -c myconn latency --headless --rate 50 --duration 30 --json --max-loss 5
+
+# Latency against real app nodes (no dedicated pong needed)
+./run.sh -c myconn latency --headless --status --interval 1000 --duration 10 --json
+```
+
 ### Running Directly with Java
 
 ```bash

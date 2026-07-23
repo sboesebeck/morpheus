@@ -23,6 +23,12 @@
 
 # Watch MongoDB change stream
 ./run.sh watch
+
+# Latency graph / load test (TUI)
+./run.sh latency
+
+# Start a pong echo responder
+./run.sh pong --name pong-1
 ```
 
 ## Configuration Management
@@ -108,6 +114,43 @@ Global options go **before** the subcommand:
 
 # Exclude certain paths
 ./run.sh status --exclude-path '/internal/.*'
+```
+
+## Latency View Keys
+
+Inside `./run.sh latency`:
+
+```
+s   start/stop the probe
+m   cycle send mode (interval → fixed-rate → ramp)
++/- adjust the current mode's rate (interval ms / msgs-per-s / ramp step)
+P   cycle payload size (0, 1024, 10240, 102400 bytes)
+T   cycle sender threads (1, 2, 4, 8)
+h   toggle histogram vs. time-series graph
+q   quit (Esc goes back)
+```
+
+## Latency / Pong Examples
+
+```bash
+# Point a load test at a pong responder
+./run.sh pong --name pong-1 &
+./run.sh latency --headless --interval 500 --duration 15 --json
+
+# Load test at a fixed rate with multiple sender threads
+./run.sh latency --headless --rate 100 --threads 4 --duration 30 --csv
+
+# Ramp mode: 50/s, +50/s every 10s, auto-aborts on high loss
+./run.sh latency --headless --ramp 50:50:10 --duration 120 --json
+
+# Against real app nodes via the status listener (no pong needed)
+./run.sh latency --headless --status --interval 1000 --duration 10 --json
+
+# CI gate: fail if loss exceeds 5%
+./run.sh latency --headless --rate 50 --duration 30 --max-loss 5 --json
+
+# Push percentiles to Graphite
+./run.sh latency --headless --duration 60 --graphite localhost:2003 --prefix morpheus
 ```
 
 ## Send Examples
