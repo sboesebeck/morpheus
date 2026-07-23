@@ -14,12 +14,18 @@ public class PongResponder implements MessageListener<Msg> {
 
     private final String name;
     private final LongSupplier wallClock;
+    private final int payloadBytes;
     private volatile long received = 0;
     private volatile long answered = 0;
 
     public PongResponder(String name, LongSupplier wallClock) {
+        this(name, wallClock, 0);
+    }
+
+    public PongResponder(String name, LongSupplier wallClock, int payloadBytes) {
         this.name = name;
         this.wallClock = wallClock;
+        this.payloadBytes = payloadBytes;
     }
 
     public long received() { return received; }
@@ -37,6 +43,7 @@ public class PongResponder implements MessageListener<Msg> {
             if (msg.getMapValue() != null && msg.getMapValue().get("seq") != null) {
                 map.put("seq", msg.getMapValue().get("seq"));
             }
+            if (payloadBytes > 0) map.put("pad", "x".repeat(payloadBytes));
             answer.setMapValue(map);
             answered++;
             return answer;

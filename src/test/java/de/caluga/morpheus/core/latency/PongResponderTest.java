@@ -36,6 +36,24 @@ public class PongResponderTest {
     }
 
     @Test
+    void padsAnswerWhenPayloadConfigured() {
+        PongResponder pong = new PongResponder("p", () -> 1L, 2048);
+        Msg ping = new Msg("t", "ping", "v", 1000);
+        ping.setMsgId(new MorphiumId());
+        Msg answer = pong.onMessage(null, ping);
+        assertNotNull(answer);
+        assertEquals(2048, ((String) answer.getMapValue().get("pad")).length());
+    }
+
+    @Test
+    void noPadWithoutPayload() {
+        PongResponder pong = new PongResponder("p", () -> 1L);
+        Msg ping = new Msg("t", "ping", "v", 1000);
+        ping.setMsgId(new MorphiumId());
+        assertNull(pong.onMessage(null, ping).getMapValue().get("pad"));
+    }
+
+    @Test
     void pingWithoutMapValueStillAnswered() {
         PongResponder pong = new PongResponder("p", () -> 7L);
         Msg ping = new Msg("t", "ping", "v", 1000);

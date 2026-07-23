@@ -92,10 +92,13 @@ public class LatencyScreen implements Screen {
                 d.timeoutMs(), d.bufferCapacity());
     }
 
-    /** Encapsulates the send strategy so a later task (poppydb wiring, Task 8) can swap it in one
-     *  place. Currently uses sendAndAwaitAsync's per-message callback; if that turns out to block or
-     *  leak waiters, replace the body with messaging.sendMessage(msg) + a topic listener that forwards
-     *  answers (getInAnswerTo() != null) to probeRef.handleAnswer and returns null.
+    /** Send strategy: sendAndAwaitAsync's per-message callback. A swap to sendMessage + own topic
+     *  listener was considered and rejected — it would only matter if messaging itself leaked
+     *  waiters, and a latency tool measuring a fundamentally broken bus is moot anyway.
+     *  Callback semantics differ per messaging implementation: SingleCollectionMessaging keeps the
+     *  callback registered until timeout, so every answer (multiple pongs, --status with N nodes)
+     *  is delivered; MultiCollectionMessaging on morphium <= 6.2.x deregisters after the FIRST
+     *  answer per ping, so only the fastest responder is sampled there (fixed in morphium 6.3.0).
      *  Binds to the specific probe instance via probeRef (not the outer mutable field) so in-flight
      *  answers for pings sent by an OLD probe are never misdelivered to a NEW one after a restart. */
     private Consumer<Msg> wireSender(MorphiumMessaging messaging, LatencyProbe.Config cfg, LatencyProbe[] probeRef) {

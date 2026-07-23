@@ -38,6 +38,12 @@ public class LatencyCommand implements Callable<Integer> {
     Double rate;
     @Option(names = {"--ramp"}, description = "Ramp mode start:step:stepSecs, e.g. 50:50:10.")
     String ramp;
+    @Option(names = {"--ramp-abort-loss"}, defaultValue = "50.0",
+            description = "Abort ramp when a step's loss %% exceeds this (default: ${DEFAULT-VALUE}).")
+    double rampAbortLoss;
+    @Option(names = {"--buffer"}, defaultValue = "10000",
+            description = "Sample/pending buffer capacity (default: ${DEFAULT-VALUE}).")
+    int buffer;
     @Option(names = {"--threads"}, defaultValue = "1", description = "Sender threads (default: ${DEFAULT-VALUE}).")
     int threads;
     @Option(names = {"--payload"}, defaultValue = "0", description = "Ping padding bytes (default: ${DEFAULT-VALUE}).")
@@ -64,7 +70,7 @@ public class LatencyCommand implements Callable<Integer> {
      *  save for a warning) in the interactive TUI branch where the screen's own key bindings
      *  ('m', '+/-', 'P', 'T', ...) control these settings instead. */
     private static final String[] HEADLESS_ONLY_OPTIONS = {
-        "--interval", "--rate", "--ramp", "--threads", "--payload",
+        "--interval", "--rate", "--ramp", "--ramp-abort-loss", "--buffer", "--threads", "--payload",
         "--timeout", "--duration", "--json", "--csv", "--graphite", "--max-loss"
     };
 
@@ -128,8 +134,8 @@ public class LatencyCommand implements Callable<Integer> {
         return new LatencyProbe.Config(t, status, mode,
                 intervalMs != null ? intervalMs : d.intervalMs(),
                 rate != null ? rate : d.rate(),
-                rampStart, rampStep, rampStepMs, d.rampAbortLossPct(),
-                threads, payload, timeoutMs, d.bufferCapacity());
+                rampStart, rampStep, rampStepMs, rampAbortLoss,
+                threads, payload, timeoutMs, buffer);
     }
 
     private ParameterException rampParamError() {
@@ -148,8 +154,8 @@ public class LatencyCommand implements Callable<Integer> {
             if (pr.hasMatchedOption(opt)) { any = true; break; }
         }
         if (any) {
-            ctx.pr("[warning]--interval/--rate/--ramp/--threads/--payload/--timeout/--duration/--json/"
-                    + "--csv/--graphite/--max-loss are ignored without --headless[r]");
+            ctx.pr("[warning]--interval/--rate/--ramp/--ramp-abort-loss/--buffer/--threads/--payload/"
+                    + "--timeout/--duration/--json/--csv/--graphite/--max-loss are ignored without --headless[r]");
         }
     }
 

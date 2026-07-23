@@ -140,6 +140,10 @@ q   quit (Esc goes back)
 # Load test at a fixed rate with multiple sender threads
 ./run.sh latency --headless --rate 100 --threads 4 --duration 30 --csv
 
+# Symmetric load: pad pings and answers with 10 KB each
+./run.sh pong --name pong-1 --payload 10240 &
+./run.sh latency --headless --rate 100 --payload 10240 --duration 30 --json
+
 # Ramp mode: 50/s, +50/s every 10s, auto-aborts on high loss
 ./run.sh latency --headless --ramp 50:50:10 --duration 120 --json
 
