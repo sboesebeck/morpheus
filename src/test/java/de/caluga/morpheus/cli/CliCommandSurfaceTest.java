@@ -50,4 +50,31 @@ public class CliCommandSurfaceTest {
         assertTrue(subs.containsKey("graph"));
         assertEquals("graph", new GraphCommand().viewName());
     }
+
+    @Test
+    void latencyAndPongRegistered() {
+        var subs = cli().getSubcommands();
+        assertTrue(subs.containsKey("latency"), "latency must be registered");
+        assertTrue(subs.containsKey("pong"), "pong must be registered");
+        assertTrue(subs.get("latency").getCommand() instanceof LatencyCommand);
+        assertTrue(subs.get("pong").getCommand() instanceof PongCommand);
+    }
+
+    @Test
+    void latencyHeadlessOptionsPresent() {
+        var spec = cli().getSubcommands().get("latency").getCommandSpec();
+        for (String opt : new String[]{"--headless", "--topic", "--status", "--interval", "--rate",
+                "--ramp", "--threads", "--payload", "--timeout", "--duration",
+                "--json", "--csv", "--graphite", "--max-loss"}) {
+            assertTrue(spec.optionsMap().containsKey(opt), opt + " missing");
+        }
+    }
+
+    @Test
+    void pingCommandUntouched() throws Exception {
+        // guard: the latency feature must not have modified PingCommand
+        var ping = cli().getSubcommands().get("ping");
+        assertTrue(ping.getCommand() instanceof PingCommand);
+        assertTrue(ping.getCommandSpec().optionsMap().containsKey("--graphite"));
+    }
 }

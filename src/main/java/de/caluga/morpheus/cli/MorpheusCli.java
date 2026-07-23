@@ -13,6 +13,8 @@ public class MorpheusCli {
         cl.addSubcommand("status", new StatusViewCommand());
         cl.addSubcommand("graph", new GraphCommand());
         cl.addSubcommand("ping", new PingCommand());
+        cl.addSubcommand("latency", new LatencyCommand());
+        cl.addSubcommand("pong", new PongCommand());
         cl.addSubcommand("send", new SendCommand());
         cl.addSubcommand("watch", new WatchCommand());
         cl.addSubcommand("config", new ConfigCommands());
