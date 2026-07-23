@@ -100,4 +100,9 @@ public class LauncherScreenTest {
         assertNull(ctx.getConfig().getDefaultConnection());
     }
 
+    @Test
+    void latencyViewRegistered() {
+        assertInstanceOf(LatencyScreen.class, LauncherScreen.viewFor("latency", null));
+    }
+
 }
