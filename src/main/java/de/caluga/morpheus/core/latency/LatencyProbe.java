@@ -44,6 +44,16 @@ public class LatencyProbe {
     private final Map<MorphiumId, Pending> pending;
     private long seq = 0;
 
+    // scheduling state
+    private final java.util.List<Thread> threads = new java.util.ArrayList<>();
+    private final java.util.ArrayDeque<Long> sendNanos = new java.util.ArrayDeque<>();
+    private final java.util.List<Long> rampStepSeqs = new java.util.ArrayList<>();
+    private volatile boolean running = false;
+    private volatile boolean rampAborted = false;
+    private volatile double currentRampRate;
+    private long rampStepStartNanos = Long.MIN_VALUE;
+    private long stepStartTimeouts, stepStartCompleted;
+
     public LatencyProbe(Config cfg, LatencyStats stats, Consumer<Msg> sender,
                         LongSupplier nanoClock, LongSupplier wallClock) {
         this.cfg = cfg;
@@ -51,6 +61,8 @@ public class LatencyProbe {
         this.sender = sender;
         this.nanoClock = nanoClock;
         this.wallClock = wallClock;
+        this.currentRampRate = cfg.rampStartRate();
+        this.rampStepStartNanos = nanoClock.getAsLong();
         this.pending = new LinkedHashMap<>() {
             @Override protected boolean removeEldestEntry(Map.Entry<MorphiumId, Pending> e) {
                 if (size() <= cfg.bufferCapacity()) return false;
@@ -86,6 +98,8 @@ public class LatencyProbe {
             return null;
         }
         pending.put(m.getMsgId(), new Pending(s, nanoClock.getAsLong(), sentTs));
+        if (sendNanos.size() >= 10_000) sendNanos.pollFirst();
+        sendNanos.addLast(nanoClock.getAsLong());
         return m;
     }
 
@@ -124,5 +138,92 @@ public class LatencyProbe {
         Map<String, Object> map = answer.getMapValue();
         if (map != null && map.get("recvTs") instanceof Number n) return n.longValue();
         return answer.getTimestamp() > 0 ? answer.getTimestamp() : null;
+    }
+
+    public synchronized void start() {
+        if (running) return;
+        running = true;
+        rampAborted = false;
+        currentRampRate = cfg.rampStartRate();
+        rampStepStartNanos = nanoClock.getAsLong();
+        var snap = stats.snapshot();
+        stepStartTimeouts = snap.timeouts();
+        stepStartCompleted = snap.completed();
+        for (int i = 0; i < Math.max(1, cfg.senderThreads()); i++) {
+            Thread t = new Thread(this::senderLoop, "latency-sender-" + i);
+            t.setDaemon(true);
+            threads.add(t);
+            t.start();
+        }
+        Thread sweeper = new Thread(this::sweeperLoop, "latency-sweeper");
+        sweeper.setDaemon(true);
+        threads.add(sweeper);
+        sweeper.start();
+    }
+
+    public void stop() {
+        running = false;
+        java.util.List<Thread> ts;
+        synchronized (this) { ts = new java.util.ArrayList<>(threads); threads.clear(); }
+        for (Thread t : ts) {
+            t.interrupt();
+            try { t.join(200); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+        }
+    }
+
+    public boolean isRunning() { return running; }
+    public boolean rampAborted() { return rampAborted; }
+    public synchronized java.util.List<Long> rampStepSeqs() { return java.util.List.copyOf(rampStepSeqs); }
+
+    public double targetRate() {
+        return switch (cfg.mode()) {
+            case INTERVAL -> 1000.0 / Math.max(1, cfg.intervalMs());
+            case FIXED_RATE -> cfg.rate();
+            case RAMP -> currentRampRate;
+        };
+    }
+
+    public synchronized double actualRate() {
+        long cutoff = nanoClock.getAsLong() - 10_000_000_000L;
+        while (!sendNanos.isEmpty() && sendNanos.peekFirst() < cutoff) sendNanos.pollFirst();
+        return sendNanos.size() / 10.0;
+    }
+
+    private void senderLoop() {
+        int nThreads = Math.max(1, cfg.senderThreads());
+        while (running) {
+            sendPing();
+            long sleepMs = (long) Math.max(1, nThreads * 1000.0 / Math.max(0.001, targetRate()));
+            try { Thread.sleep(sleepMs); } catch (InterruptedException e) { return; }
+        }
+    }
+
+    private void sweeperLoop() {
+        while (running) {
+            sweep();
+            if (cfg.mode() == Mode.RAMP && !rampTick()) { running = false; return; }
+            try { Thread.sleep(500); } catch (InterruptedException e) { return; }
+        }
+    }
+
+    /** Advances ramp state; returns false when the loss threshold aborted the run. */
+    synchronized boolean rampTick() {
+        if (cfg.mode() != Mode.RAMP) return true;
+        if (rampStepStartNanos == Long.MIN_VALUE) rampStepStartNanos = nanoClock.getAsLong();
+        if (nanoClock.getAsLong() - rampStepStartNanos < cfg.rampStepMs() * 1_000_000L) return true;
+        var snap = stats.snapshot();
+        long stepCompleted = snap.completed() - stepStartCompleted;
+        long stepTimeouts = snap.timeouts() - stepStartTimeouts;
+        double stepLoss = 100.0 * stepTimeouts / Math.max(1, stepCompleted);
+        if (stepLoss > cfg.rampAbortLossPct()) {
+            rampAborted = true;
+            return false;
+        }
+        currentRampRate += cfg.rampStepRate();
+        if (rampStepSeqs.size() < 100) rampStepSeqs.add(seq);
+        rampStepStartNanos = nanoClock.getAsLong();
+        stepStartCompleted = snap.completed();
+        stepStartTimeouts = snap.timeouts();
+        return true;
     }
 }

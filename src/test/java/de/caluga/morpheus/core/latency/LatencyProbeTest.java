@@ -154,4 +154,73 @@ public class LatencyProbeTest {
         assertEquals("ALL", m.getValue());
         assertNull(m.getMapValue());
     }
+
+    @org.junit.jupiter.api.Nested
+    class Scheduling {
+
+        @Test
+        void targetRateFollowsMode() {
+            var d = LatencyProbe.Config.defaults();
+            assertEquals(1.0, probe(d).targetRate(), 1e-9); // 1000ms interval
+            var fixed = new LatencyProbe.Config(d.topic(), false, LatencyProbe.Mode.FIXED_RATE,
+                    d.intervalMs(), 250, d.rampStartRate(), d.rampStepRate(), d.rampStepMs(),
+                    d.rampAbortLossPct(), 1, 0, d.timeoutMs(), d.bufferCapacity());
+            assertEquals(250.0, probe(fixed).targetRate(), 1e-9);
+        }
+
+        @Test
+        void rampStepsIncreaseRateAndRecordSeqs() {
+            var d = LatencyProbe.Config.defaults();
+            var cfg = new LatencyProbe.Config(d.topic(), false, LatencyProbe.Mode.RAMP,
+                    d.intervalMs(), d.rate(), 50, 25, 10_000, 50.0, 1, 0, d.timeoutMs(), d.bufferCapacity());
+            LatencyProbe p = probe(cfg);
+            assertEquals(50.0, p.targetRate(), 1e-9);
+            nanos.addAndGet(10_000_000_000L + 1);   // one step elapsed
+            assertTrue(p.rampTick());
+            assertEquals(75.0, p.targetRate(), 1e-9);
+            assertEquals(1, p.rampStepSeqs().size());
+        }
+
+        @Test
+        void rampAbortsOnLoss() {
+            var d = LatencyProbe.Config.defaults();
+            var cfg = new LatencyProbe.Config(d.topic(), false, LatencyProbe.Mode.RAMP,
+                    d.intervalMs(), d.rate(), 50, 25, 10_000, 50.0, 1, 0, d.timeoutMs(), d.bufferCapacity());
+            LatencyProbe p = probe(cfg);
+            // simulate a step with 100% loss
+            p.sendPing(); p.sendPing();
+            nanos.addAndGet(6_000_000_000L);        // both time out (5s timeout)
+            p.sweep();
+            nanos.addAndGet(5_000_000_000L);        // step boundary passed
+            assertFalse(p.rampTick());
+            assertTrue(p.rampAborted());
+        }
+
+        @Test
+        void startStopLifecycle() throws Exception {
+            var d = LatencyProbe.Config.defaults();
+            var cfg = new LatencyProbe.Config(d.topic(), false, LatencyProbe.Mode.FIXED_RATE,
+                    d.intervalMs(), 200, d.rampStartRate(), d.rampStepRate(), d.rampStepMs(),
+                    d.rampAbortLossPct(), 2, 0, d.timeoutMs(), d.bufferCapacity());
+            LatencyProbe p = new LatencyProbe(cfg, new LatencyStats(1000), sent::add,
+                    System::nanoTime, System::currentTimeMillis);
+            p.start();
+            assertTrue(p.isRunning());
+            Thread.sleep(300);
+            p.stop();
+            assertFalse(p.isRunning());
+            int after = sent.size();
+            assertTrue(after > 10, "should have sent a bunch at 200/s, got " + after);
+            Thread.sleep(200);
+            assertEquals(after, sent.size(), "no sends after stop");
+            p.stop(); // idempotent
+        }
+
+        @Test
+        void actualRateComputedFromRecentSends() {
+            LatencyProbe p = probe(LatencyProbe.Config.defaults());
+            for (int i = 0; i < 20; i++) p.sendPing();  // all at nanos=0 within 10s window
+            assertEquals(2.0, p.actualRate(), 1e-9);     // 20 sends / 10s
+        }
+    }
 }
