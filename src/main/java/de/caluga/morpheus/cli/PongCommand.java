@@ -6,6 +6,7 @@ import picocli.CommandLine.Option;
 import picocli.CommandLine.ParentCommand;
 
 import java.lang.management.ManagementFactory;
+import java.util.Locale;
 import java.util.concurrent.Callable;
 
 @Command(name = "pong", description = "Latency echo responder: answers pings on the latency topic until Ctrl-C.",
@@ -39,7 +40,7 @@ public class PongCommand implements Callable<Integer> {
             Thread.sleep(5000);
             long a = pong.answered();
             ctx.pr("answered: [good]" + a + "[r]  (+" + (a - lastCount) + " in 5s, "
-                    + String.format("%.1f", (a - lastCount) / 5.0) + "/s)");
+                    + String.format(Locale.ROOT, "%.1f", (a - lastCount) / 5.0) + "/s)");
             lastCount = a;
         }
     }

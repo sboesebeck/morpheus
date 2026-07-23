@@ -220,6 +220,8 @@ public class LatencyProbe {
     private void sweeperLoop() {
         while (running) {
             sweep();
+            // Set running=false directly rather than calling stop(): stop() joins every tracked
+            // thread including this one, and a thread cannot join itself.
             if (cfg.mode() == Mode.RAMP && !rampTick()) { running = false; return; }
             try { Thread.sleep(500); } catch (InterruptedException e) { return; }
         }
@@ -228,7 +230,6 @@ public class LatencyProbe {
     /** Advances ramp state; returns false when the loss threshold aborted the run. */
     synchronized boolean rampTick() {
         if (cfg.mode() != Mode.RAMP) return true;
-        if (rampStepStartNanos == Long.MIN_VALUE) rampStepStartNanos = nanoClock.getAsLong();
         if (nanoClock.getAsLong() - rampStepStartNanos < cfg.rampStepMs() * 1_000_000L) return true;
         var snap = stats.snapshot();
         long stepCompleted = snap.completed() - stepStartCompleted;

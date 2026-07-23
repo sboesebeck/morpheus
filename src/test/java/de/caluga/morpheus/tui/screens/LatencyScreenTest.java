@@ -119,4 +119,17 @@ public class LatencyScreenTest {
         s.onKey(KeyStroke.fromString("s"));
         assertFalse(s.isRunning());                      // must not NPE
     }
+
+    @Test
+    void sendErrorsShowInHeader() throws Exception {
+        LatencyStats st = new LatencyStats(1000);
+        st.recordPingSent(1);
+        st.recordSendError();
+        LatencyScreen s = new LatencyScreen(st.snapshot());
+        DefaultVirtualTerminal vt = terminal(120, 30);
+        TextGraphics g = vt.newTextGraphics();
+        s.draw(g);
+        String text = textOf(vt);
+        assertTrue(text.contains("sendErr:1"), "expected send error indicator in header, got:\n" + text);
+    }
 }

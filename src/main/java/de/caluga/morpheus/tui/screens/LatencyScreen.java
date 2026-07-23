@@ -200,6 +200,7 @@ public class LatencyScreen implements Screen {
         double actual = probe != null ? probe.actualRate() : 0.0;
         String header = String.format("conn:%s  topic:%s  mode:%s  rate(target/actual):%.1f/%.1f  %s",
                 conn, topic, mode, target, actual, status);
+        if (snap.sendErrors() > 0) header += "  sendErr:" + snap.sendErrors();
         g.setForegroundColor(TextColor.ANSI.CYAN);
         g.putString(2, 0, trunc(header, width - 3));
     }
@@ -234,12 +235,15 @@ public class LatencyScreen implements Screen {
 
         if (probe != null && !window.isEmpty()) {
             for (Long rampSeq : probe.rampStepSeqs()) {
+                // Same >=-fallback as the timeout markers below: a boundary seq that fell in a gap
+                // (evicted/never-sampled) still lands on the first sample at/after it, or the last
+                // column if the step is newer than every sample currently in the window.
+                int si = -1;
                 for (int i = 0; i < window.size(); i++) {
-                    if (window.get(i).seq() == rampSeq) {
-                        for (int sy = 0; sy < canvas.height(); sy += 2) canvas.plot(i, sy, TextColor.ANSI.WHITE);
-                        break;
-                    }
+                    if (window.get(i).seq() >= rampSeq) { si = i; break; }
                 }
+                if (si < 0) si = window.size() - 1;
+                for (int sy = 0; sy < canvas.height(); sy += 2) canvas.plot(si, sy, TextColor.ANSI.WHITE);
             }
         }
 

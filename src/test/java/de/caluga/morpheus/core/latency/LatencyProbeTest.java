@@ -127,7 +127,7 @@ public class LatencyProbeTest {
     void sweepTimesOutUnansweredOnly() {
         LatencyProbe p = probe(LatencyProbe.Config.defaults());
         Msg ping1 = p.sendPing();
-        Msg ping2 = p.sendPing();
+        p.sendPing();
         nanos.addAndGet(1_000_000);
         p.handleAnswer(answerTo(ping1, "pong-1", null));
         nanos.addAndGet(5_000_000_000L);       // > 5s timeout
