@@ -23,13 +23,22 @@ public class LatencyProbeTest {
     }
 
     private Msg answerTo(Msg ping, String sender, Long recvTs) {
+        return answerTo(ping, sender, recvTs, null);
+    }
+
+    private Msg answerTo(Msg ping, String sender, Long recvTs, String responderName) {
         Msg a = new Msg(ping.getTopic(), "pong", "v", 1000);
         a.setMsgId(new MorphiumId());
         a.setInAnswerTo(ping.getMsgId());
         a.setSender(sender);
         a.setSenderHost("hostX");
         a.setTimestamp(0);
-        if (recvTs != null) a.setMapValue(Map.of("recvTs", recvTs));
+        if (recvTs != null || responderName != null) {
+            Map<String, Object> map = new java.util.HashMap<>();
+            if (recvTs != null) map.put("recvTs", recvTs);
+            if (responderName != null) map.put("responder", responderName);
+            a.setMapValue(map);
+        }
         return a;
     }
 
@@ -65,6 +74,17 @@ public class LatencyProbeTest {
         assertEquals(1, snap.samples().size());
         assertEquals(3.0, snap.samples().get(0).rttMs(), 1e-6);
         assertEquals("pong-1/hostX", snap.samples().get(0).responderKey());
+    }
+
+    @Test
+    void answerUsesFriendlyResponderNameWhenPresent() {
+        LatencyProbe p = probe(LatencyProbe.Config.defaults());
+        Msg ping = p.sendPing();
+        nanos.addAndGet(3_000_000);            // 3ms later
+        p.handleAnswer(answerTo(ping, "internal-uuid-sender", 100_003L, "pong-nice"));
+        var s = p.stats().snapshot().samples().get(0);
+        assertTrue(s.responderKey().startsWith("pong-nice/"),
+                "expected friendly name to win over sender UUID, got " + s.responderKey());
     }
 
     @Test

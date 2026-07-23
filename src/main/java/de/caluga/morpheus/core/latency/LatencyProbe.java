@@ -115,8 +115,16 @@ public class LatencyProbe {
             outbound = (double) (recvTs - p.sentTs);
             ret = (p.sentTs + rttMs) - recvTs;
         }
-        stats.recordAnswer(new LatencySample(p.seq, answer.getSender(), answer.getSenderHost(),
+        stats.recordAnswer(new LatencySample(p.seq, responderName(answer), answer.getSenderHost(),
                 rttMs, outbound, ret, p.sentTs));
+    }
+
+    /** Prefers the friendly name the pong responder puts in the answer's mapValue
+     *  (via {@code pong --name}) over Morphium's internal sender UUID. */
+    private static String responderName(Msg answer) {
+        Map<String, Object> map = answer.getMapValue();
+        if (map != null && map.get("responder") instanceof String s && !s.isBlank()) return s;
+        return answer.getSender();
     }
 
     public synchronized int sweep() {

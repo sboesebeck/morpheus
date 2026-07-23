@@ -365,7 +365,8 @@ duration and print a summary.
 - `--max-loss <pct>` - Exit non-zero when total loss % exceeds this (for CI)
 
 `pong` options: `--topic <name>` (must match `latency --topic`), `--name
-<name>` (responder label, default: hostname-pid).
+<name>` (responder label, default: hostname-pid) — this name appears as the
+responder key in `latency` output instead of the internal sender id.
 
 **The `out≈`/`ret≈` split:** when the responder embeds its receive
 timestamp, the round trip is split into an outbound (sender → responder) and
@@ -373,7 +374,9 @@ return (responder → sender) leg. These are approximate (`≈`) because they
 depend on the two hosts' wall clocks agreeing — any clock skew between
 sender and responder shows up directly in the split, including as a negative
 `ret≈`. Trust the total RTT; treat `out≈`/`ret≈` as directional only, and
-`?` means no receive timestamp was available (e.g. `--status` mode).
+`?` means no receive timestamp was available (e.g. `--status` mode). The TUI
+also shows `?` in place of a negative `out≈`/`ret≈` value (clock skew);
+`--json`/`--csv` output prints the raw (possibly negative) value instead.
 
 **Headless examples:**
 ```bash
