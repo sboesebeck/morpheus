@@ -77,16 +77,21 @@ public class LatencyScreen implements Screen {
     /** Encapsulates the send strategy so a later task (poppydb wiring, Task 8) can swap it in one
      *  place. Currently uses sendAndAwaitAsync's per-message callback; if that turns out to block or
      *  leak waiters, replace the body with messaging.sendMessage(msg) + a topic listener that forwards
-     *  answers (getInAnswerTo() != null) to probe.handleAnswer and returns null. */
-    private Consumer<Msg> wireSender(MorphiumMessaging messaging, LatencyProbe.Config cfg) {
-        return m -> messaging.sendAndAwaitAsync(m, cfg.timeoutMs(), a -> probe.handleAnswer(a));
+     *  answers (getInAnswerTo() != null) to probeRef.handleAnswer and returns null.
+     *  Binds to the specific probe instance via probeRef (not the outer mutable field) so in-flight
+     *  answers for pings sent by an OLD probe are never misdelivered to a NEW one after a restart. */
+    private Consumer<Msg> wireSender(MorphiumMessaging messaging, LatencyProbe.Config cfg, LatencyProbe[] probeRef) {
+        return m -> messaging.sendAndAwaitAsync(m, cfg.timeoutMs(), a -> probeRef[0].handleAnswer(a));
     }
 
     private LatencyProbe buildProbe() {
         var cfg = currentConfig();
         var messaging = ownedCtx.getMessaging();
         LatencyStats stats = probe != null ? probe.stats() : new LatencyStats(cfg.bufferCapacity());
-        return new LatencyProbe(cfg, stats, wireSender(messaging, cfg), System::nanoTime, System::currentTimeMillis);
+        final LatencyProbe[] ref = new LatencyProbe[1];
+        LatencyProbe p = new LatencyProbe(cfg, stats, wireSender(messaging, cfg, ref), System::nanoTime, System::currentTimeMillis);
+        ref[0] = p;
+        return p;
     }
 
     private void restartIfRunning() {
@@ -103,7 +108,7 @@ public class LatencyScreen implements Screen {
             case 'q' -> { return Result.quit(); }
             case 's' -> toggleRun();
             case 'h' -> histogram = !histogram;
-            case 'm' -> { mode = LatencyProbe.Mode.values()[(mode.ordinal() + 1) % 3]; restartIfRunning(); }
+            case 'm' -> { mode = LatencyProbe.Mode.values()[(mode.ordinal() + 1) % LatencyProbe.Mode.values().length]; restartIfRunning(); }
             case 'P' -> { payloadIdx = (payloadIdx + 1) % PAYLOADS.length; restartIfRunning(); }
             case 'T' -> { threadIdx = (threadIdx + 1) % THREADS.length; restartIfRunning(); }
             case '+' -> { adjust(+1); restartIfRunning(); }
