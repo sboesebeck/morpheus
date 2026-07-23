@@ -3,9 +3,14 @@ package de.caluga.morpheus.cli;
 import de.caluga.morpheus.core.latency.LatencyProbe;
 import de.caluga.morpheus.core.latency.LatencyStats;
 import de.caluga.morpheus.tui.MorpheusTui;
+import de.caluga.morpheus.tui.screens.LatencyScreen;
+import picocli.CommandLine;
 import picocli.CommandLine.Command;
+import picocli.CommandLine.Model.CommandSpec;
 import picocli.CommandLine.Option;
+import picocli.CommandLine.ParameterException;
 import picocli.CommandLine.ParentCommand;
+import picocli.CommandLine.Spec;
 
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
@@ -52,10 +57,23 @@ public class LatencyCommand implements Callable<Integer> {
     @Option(names = {"--max-loss"}, description = "Exit non-zero when total loss %% exceeds this.")
     Double maxLoss;
 
+    @Spec
+    CommandSpec spec;
+
+    /** Headless-only options: honored in the headless branch, meaningless (and silently ignored,
+     *  save for a warning) in the interactive TUI branch where the screen's own key bindings
+     *  ('m', '+/-', 'P', 'T', ...) control these settings instead. */
+    private static final String[] HEADLESS_ONLY_OPTIONS = {
+        "--interval", "--rate", "--ramp", "--threads", "--payload",
+        "--timeout", "--duration", "--json", "--csv", "--graphite", "--max-loss"
+    };
+
     @Override
     public Integer call() throws Exception {
         if (!headless) {
-            MorpheusTui.launchView(parent.context(), "latency");
+            MorpheusContext ctx = parent.context();
+            warnIgnoredHeadlessOptions(ctx);
+            MorpheusTui.launchView(ctx, "latency", (viewName, viewCtx) -> new LatencyScreen(viewCtx, topic, status));
             return 0;
         }
         MorpheusContext ctx = parent.context();
@@ -70,7 +88,10 @@ public class LatencyCommand implements Callable<Integer> {
         probe.start();
         for (int i = 0; i < durationSecs && !probe.rampAborted(); i++) Thread.sleep(1000);
         probe.stop();
-        Thread.sleep(Math.min(cfg.timeoutMs(), 2000)); // let stragglers arrive
+        // Wait the full timeout so every ping sent in the last stretch either got answered or timed
+        // out before the final sweep; a shorter wait undercounts loss for --max-loss (stragglers from
+        // the last ~timeoutMs never get swept and their loss is silently dropped).
+        Thread.sleep(cfg.timeoutMs());
         probe.sweep();
         var snap = stats.snapshot();
         if (json) System.out.println(reportJson(snap));
@@ -88,9 +109,20 @@ public class LatencyCommand implements Callable<Integer> {
         long rampStepMs = d.rampStepMs();
         if (ramp != null) {
             String[] parts = ramp.split(":");
-            rampStart = Double.parseDouble(parts[0]);
-            rampStep = Double.parseDouble(parts[1]);
-            rampStepMs = Long.parseLong(parts[2]) * 1000L;
+            if (parts.length != 3) throw rampParamError();
+            double parsedStart, parsedStep;
+            long parsedStepSecs;
+            try {
+                parsedStart = Double.parseDouble(parts[0]);
+                parsedStep = Double.parseDouble(parts[1]);
+                parsedStepSecs = Long.parseLong(parts[2]);
+            } catch (NumberFormatException e) {
+                throw rampParamError();
+            }
+            if (!(parsedStart > 0) || !(parsedStep > 0) || !(parsedStepSecs > 0)) throw rampParamError();
+            rampStart = parsedStart;
+            rampStep = parsedStep;
+            rampStepMs = parsedStepSecs * 1000L;
         }
         String t = status ? ctx.getMessaging().getStatusInfoListenerName() : topic;
         return new LatencyProbe.Config(t, status, mode,
@@ -98,6 +130,27 @@ public class LatencyCommand implements Callable<Integer> {
                 rate != null ? rate : d.rate(),
                 rampStart, rampStep, rampStepMs, d.rampAbortLossPct(),
                 threads, payload, timeoutMs, d.bufferCapacity());
+    }
+
+    private ParameterException rampParamError() {
+        CommandLine cl = spec != null ? spec.commandLine() : new CommandLine(this);
+        return new ParameterException(cl, "Invalid --ramp value '" + ramp
+                + "': expected format start:step:stepSecs with three positive numbers, e.g. 50:50:10");
+    }
+
+    /** Prints a one-line warning when headless-only options were explicitly passed alongside a
+     *  non-headless run, where the TUI's own key bindings control these settings instead. */
+    private void warnIgnoredHeadlessOptions(MorpheusContext ctx) {
+        if (spec == null) return;
+        CommandLine.ParseResult pr = spec.commandLine().getParseResult();
+        boolean any = false;
+        for (String opt : HEADLESS_ONLY_OPTIONS) {
+            if (pr.hasMatchedOption(opt)) { any = true; break; }
+        }
+        if (any) {
+            ctx.pr("[warning]--interval/--rate/--ramp/--threads/--payload/--timeout/--duration/--json/"
+                    + "--csv/--graphite/--max-loss are ignored without --headless[r]");
+        }
     }
 
     static String reportJson(LatencyStats.Snapshot s) {

@@ -40,4 +40,34 @@ public class LatencyReportTest {
         String csv = LatencyCommand.reportCsv(st.snapshot());
         assertTrue(csv.strip().split("\n")[1].endsWith(",,"));
     }
+
+    @Test
+    void buildConfigRejectsRampWithWrongPartCount() {
+        LatencyCommand cmd = new LatencyCommand();
+        cmd.ramp = "50";
+        cmd.status = false;
+        var ex = assertThrows(picocli.CommandLine.ParameterException.class, () -> cmd.buildConfig(null));
+        assertTrue(ex.getMessage().contains("start:step:stepSecs"),
+                "expected the start:step:stepSecs format hint, got: " + ex.getMessage());
+    }
+
+    @Test
+    void buildConfigRejectsNonNumericRamp() {
+        LatencyCommand cmd = new LatencyCommand();
+        cmd.ramp = "a:b:c";
+        cmd.status = false;
+        var ex = assertThrows(picocli.CommandLine.ParameterException.class, () -> cmd.buildConfig(null));
+        assertTrue(ex.getMessage().contains("start:step:stepSecs"),
+                "expected the start:step:stepSecs format hint, got: " + ex.getMessage());
+    }
+
+    @Test
+    void buildConfigRejectsNonPositiveRampParts() {
+        LatencyCommand cmd = new LatencyCommand();
+        cmd.ramp = "0:10:5";
+        cmd.status = false;
+        var ex = assertThrows(picocli.CommandLine.ParameterException.class, () -> cmd.buildConfig(null));
+        assertTrue(ex.getMessage().contains("start:step:stepSecs"),
+                "expected the start:step:stepSecs format hint, got: " + ex.getMessage());
+    }
 }

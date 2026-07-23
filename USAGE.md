@@ -330,7 +330,9 @@ Watch the MongoDB change stream in real-time:
 matching answers (`inAnswerTo`); `pong` is a standalone echo responder to
 point it at. Run with no options for the TUI (live graph/histogram, `s` to
 start/stop — see `docs/views.md`), or `--headless` to run for a fixed
-duration and print a summary.
+duration and print a summary (plus a `--timeout`-length tail wait after
+`--duration` elapses, so every last-second ping is either answered or
+counted as a loss before the summary is printed).
 
 **Start a responder:**
 ```bash

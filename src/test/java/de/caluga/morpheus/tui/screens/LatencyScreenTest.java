@@ -111,4 +111,12 @@ public class LatencyScreenTest {
         s.onKey(KeyStroke.fromString("s"));
         assertFalse(s.isRunning());                     // must not NPE
     }
+
+    @Test
+    void topicCtorReflectsCustomTopicWithoutNpe() {
+        LatencyScreen s = new LatencyScreen((de.caluga.morpheus.cli.MorpheusContext) null, "custom_topic", false);
+        assertEquals("custom_topic", s.currentConfig().topic());
+        s.onKey(KeyStroke.fromString("s"));
+        assertFalse(s.isRunning());                      // must not NPE
+    }
 }

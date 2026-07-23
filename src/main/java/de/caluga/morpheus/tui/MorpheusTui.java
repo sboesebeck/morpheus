@@ -96,13 +96,20 @@ public class MorpheusTui {
     /** CLI entry: open the TUI directly on one view, connecting async behind the spinner.
      *  The view is the only screen, so Esc / connect-failure empties the stack and the program exits. */
     public static void launchView(MorpheusContext ctx, String viewName) {
+        launchView(ctx, viewName, de.caluga.morpheus.tui.screens.LauncherScreen::viewFor);
+    }
+
+    /** Same as {@link #launchView(MorpheusContext, String)} but with the view factory supplied by the
+     *  caller, so a CLI command can hand the already-parsed per-command options (e.g. --topic/--status
+     *  for latency) straight to its screen instead of going through LauncherScreen's fixed mapping. */
+    public static void launchView(MorpheusContext ctx, String viewName,
+            java.util.function.BiFunction<String, MorpheusContext, Screen> viewFactory) {
         silenceConsoleLogging();
         try {
             com.googlecode.lanterna.screen.Screen screen =
                 new DefaultTerminalFactory().createScreen();
             new MorpheusTui(screen, ctx).run(
-                new de.caluga.morpheus.tui.screens.ConnectingScreen(
-                    ctx, viewName, de.caluga.morpheus.tui.screens.LauncherScreen::viewFor));
+                new de.caluga.morpheus.tui.screens.ConnectingScreen(ctx, viewName, viewFactory));
         } catch (IOException e) {
             System.err.println("TUI failed: " + e.getMessage());
         }

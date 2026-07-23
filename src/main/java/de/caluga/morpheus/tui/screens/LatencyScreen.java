@@ -26,8 +26,13 @@ public class LatencyScreen implements Screen {
 
     private final MorpheusContext ownedCtx;      // null in test seam
     private final LatencyStats.Snapshot fixed;   // non-null in test seam
-    private volatile LatencyProbe probe;          // recreated on start/settings change; read from the
-                                                   // async answer callback thread (see wireSender), written on the UI thread
+    private final String initialTopic;
+    private final boolean statusMode;
+    private volatile LatencyProbe probe;          // recreated on start/settings change; UI-thread only —
+                                                   // the async answer callback (see wireSender) reads the
+                                                   // per-instance probeRef cell captured in buildProbe(),
+                                                   // never this field, so an old probe's in-flight answers
+                                                   // can't land on a newer one after a restart
 
     private LatencyProbe.Mode mode = LatencyProbe.Mode.INTERVAL;
     private long intervalMs = 1000;
@@ -38,14 +43,22 @@ public class LatencyScreen implements Screen {
     private boolean histogram = false;
 
     public LatencyScreen(MorpheusContext ctx) {
+        this(ctx, LatencyProbe.Config.defaults().topic(), false);
+    }
+
+    public LatencyScreen(MorpheusContext ctx, String topic, boolean statusMode) {
         this.ownedCtx = ctx;
         this.fixed = null;
+        this.initialTopic = topic;
+        this.statusMode = statusMode;
     }
 
     /** Test seam: render a fixed snapshot, no backend. */
     LatencyScreen(LatencyStats.Snapshot fixed) {
         this.ownedCtx = null;
         this.fixed = fixed;
+        this.initialTopic = LatencyProbe.Config.defaults().topic();
+        this.statusMode = false;
     }
 
     boolean histogramVisible() { return histogram; }
@@ -67,9 +80,14 @@ public class LatencyScreen implements Screen {
         probe.start();
     }
 
-    private LatencyProbe.Config currentConfig() {
+    LatencyProbe.Config currentConfig() {
         var d = LatencyProbe.Config.defaults();
-        return new LatencyProbe.Config(d.topic(), false, mode, intervalMs, rate,
+        String topic = initialTopic;
+        if (statusMode && ownedCtx != null && ownedCtx.getMessaging() != null) {
+            String resolved = ownedCtx.getMessaging().getStatusInfoListenerName();
+            if (resolved != null) topic = resolved;
+        }
+        return new LatencyProbe.Config(topic, statusMode, mode, intervalMs, rate,
                 50, rampStep, 10_000, 50.0, senderThreads(), payloadBytes(),
                 d.timeoutMs(), d.bufferCapacity());
     }

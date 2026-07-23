@@ -163,6 +163,35 @@ public class LatencyProbeTest {
     }
 
     @Test
+    void sendErrorRemovesPendingSoStrayAnswerIsIgnored() {
+        final Msg[] captured = new Msg[1];
+        LatencyProbe p = new LatencyProbe(LatencyProbe.Config.defaults(), new LatencyStats(10),
+                m -> { captured[0] = m; throw new RuntimeException("boom"); }, nanos::get, wall::get);
+        assertNull(p.sendPing());
+        assertEquals(1, p.stats().snapshot().sendErrors());
+        assertNotNull(captured[0], "sender must still receive the msg before throwing");
+        Msg stray = new Msg(captured[0].getTopic(), "pong", "v", 1000);
+        stray.setMsgId(new MorphiumId());
+        stray.setInAnswerTo(captured[0].getMsgId());
+        p.handleAnswer(stray);
+        assertEquals(0, p.stats().snapshot().samples().size(), "pending entry for a failed send must be gone");
+    }
+
+    /** RTT must be measured from just before the send call, not after it returns — otherwise the
+     *  publish/network cost of sender.accept is excluded from the RTT and returnMs can go negative
+     *  even with perfectly synced clocks. */
+    @Test
+    void rttClockStartsBeforeSendNotAfter() {
+        LatencyProbe p = new LatencyProbe(LatencyProbe.Config.defaults(), new LatencyStats(10),
+                m -> { sent.add(m); nanos.addAndGet(5_000_000); /* 5ms spent "sending" */ },
+                nanos::get, wall::get);
+        Msg ping = p.sendPing();
+        p.handleAnswer(answerTo(ping, "pong-1", null)); // answer arrives "instantly" after sendPing returns
+        var s = p.stats().snapshot().samples().get(0);
+        assertTrue(s.rttMs() >= 5.0, "expected rtt >= 5ms (clock must start before send), got " + s.rttMs());
+    }
+
+    @Test
     void statusModeUsesAllMarkers() {
         var d = LatencyProbe.Config.defaults();
         var cfg = new LatencyProbe.Config("msg_status_info", true, d.mode(), d.intervalMs(), d.rate(),

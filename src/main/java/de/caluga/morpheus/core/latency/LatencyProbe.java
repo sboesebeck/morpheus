@@ -75,31 +75,42 @@ public class LatencyProbe {
     public LatencyStats stats() { return stats; }
     public Config config() { return cfg; }
 
-    public synchronized Msg sendPing() {
-        long s = ++seq;
-        long sentTs = wallClock.getAsLong();
+    public Msg sendPing() {
         Msg m;
-        if (cfg.statusMode()) {
-            m = new Msg(cfg.topic(), "ALL", "ALL", cfg.timeoutMs());
-        } else {
-            m = new Msg(cfg.topic(), "ping", runId + ":" + s, cfg.timeoutMs());
-            Map<String, Object> map = new HashMap<>();
-            map.put("seq", s);
-            map.put("sentTs", sentTs);
-            if (cfg.payloadBytes() > 0) map.put("pad", "x".repeat(cfg.payloadBytes()));
-            m.setMapValue(map);
+        long s, sentTs;
+        synchronized (this) {
+            s = ++seq;
+            sentTs = wallClock.getAsLong();
+            if (cfg.statusMode()) {
+                m = new Msg(cfg.topic(), "ALL", "ALL", cfg.timeoutMs());
+            } else {
+                m = new Msg(cfg.topic(), "ping", runId + ":" + s, cfg.timeoutMs());
+                Map<String, Object> map = new HashMap<>();
+                map.put("seq", s);
+                map.put("sentTs", sentTs);
+                if (cfg.payloadBytes() > 0) map.put("pad", "x".repeat(cfg.payloadBytes()));
+                m.setMapValue(map);
+            }
+            m.setMsgId(new MorphiumId());
+            stats.recordPingSent(s);
+            if (sendNanos.size() >= 10_000) sendNanos.pollFirst();
+            sendNanos.addLast(nanoClock.getAsLong());
         }
-        m.setMsgId(new MorphiumId());
-        stats.recordPingSent(s);
+        // Clock starts here, before the (possibly slow) send call, and the Pending entry is inserted
+        // before sender.accept runs so an instantly-arriving answer (msgId is already assigned) finds
+        // it via the synchronized handleAnswer. This intentionally does NOT hold the probe monitor
+        // across the send itself, so concurrent sender threads don't serialize on network/publish cost.
+        long sendStartNanos = nanoClock.getAsLong();
+        synchronized (this) {
+            pending.put(m.getMsgId(), new Pending(s, sendStartNanos, sentTs));
+        }
         try {
             sender.accept(m);
         } catch (RuntimeException e) {
+            synchronized (this) { pending.remove(m.getMsgId()); }
             stats.recordSendError();
             return null;
         }
-        pending.put(m.getMsgId(), new Pending(s, nanoClock.getAsLong(), sentTs));
-        if (sendNanos.size() >= 10_000) sendNanos.pollFirst();
-        sendNanos.addLast(nanoClock.getAsLong());
         return m;
     }
 
