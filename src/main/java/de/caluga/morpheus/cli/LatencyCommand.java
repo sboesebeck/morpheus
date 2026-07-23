@@ -62,6 +62,8 @@ public class LatencyCommand implements Callable<Integer> {
     String prefix;
     @Option(names = {"--max-loss"}, description = "Exit non-zero when total loss %% exceeds this.")
     Double maxLoss;
+    @Option(names = {"--samples"}, description = "Write the raw sample series (one CSV row per answered ping) to this file.")
+    String samplesFile;
 
     @Spec
     CommandSpec spec;
@@ -71,7 +73,7 @@ public class LatencyCommand implements Callable<Integer> {
      *  ('m', '+/-', 'P', 'T', ...) control these settings instead. */
     private static final String[] HEADLESS_ONLY_OPTIONS = {
         "--interval", "--rate", "--ramp", "--ramp-abort-loss", "--buffer", "--threads", "--payload",
-        "--timeout", "--duration", "--json", "--csv", "--graphite", "--max-loss"
+        "--timeout", "--duration", "--json", "--csv", "--graphite", "--max-loss", "--samples"
     };
 
     @Override
@@ -103,6 +105,11 @@ public class LatencyCommand implements Callable<Integer> {
         if (json) System.out.println(reportJson(snap));
         else if (csv) System.out.println(reportCsv(snap));
         else printThemed(ctx, snap, probe);
+        if (samplesFile != null) {
+            var written = de.caluga.morpheus.core.latency.LatencyCsv.writeSamples(
+                    java.nio.file.Path.of(samplesFile), snap.samples());
+            System.err.println("[latency] wrote " + snap.samples().size() + " samples to " + written);
+        }
         if (graphite != null) pushGraphite(snap);
         return maxLoss != null && snap.lossPct() > maxLoss ? 2 : 0;
     }
@@ -155,7 +162,7 @@ public class LatencyCommand implements Callable<Integer> {
         }
         if (any) {
             ctx.pr("[warning]--interval/--rate/--ramp/--ramp-abort-loss/--buffer/--threads/--payload/"
-                    + "--timeout/--duration/--json/--csv/--graphite/--max-loss are ignored without --headless[r]");
+                    + "--timeout/--duration/--json/--csv/--graphite/--max-loss/--samples are ignored without --headless[r]");
         }
     }
 

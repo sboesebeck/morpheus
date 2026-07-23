@@ -35,17 +35,24 @@ Global options must appear **before** the subcommand.
 
 ### Available Subcommands
 
-- **`status`** - Get status from all connected Morphium nodes
+- **`messages`** - Live messaging monitor (TUI)
+- **`topics`** - Per-topic message/answer aggregates (TUI)
+- **`nodes`** - Sender → answerer pair activity (TUI)
+- **`status`** - Live node roster / status pings (TUI)
+- **`graph`** - Live message-flow graph (TUI)
+- **`ping`** - One-shot status ping of all messaging nodes (scriptable)
+- **`latency`** - Message-bus latency monitor / load test (TUI or `--headless`)
+- **`pong`** - Latency echo responder
 - **`send`** - Send messages through Morphium messaging
-- **`monitor`** - Real-time message monitoring
 - **`watch`** - Watch the MongoDB change stream
 - **`config`** - Interactive configuration management (connections, themes, proxy)
 
-Every subcommand supports `--help` for detailed inline help:
+Every subcommand supports `--help` for detailed inline help, and there is an
+equivalent `help` subcommand:
 ```bash
-./run.sh status --help
-./run.sh send --help
-./run.sh config --help
+./run.sh latency --help
+./run.sh help latency
+./run.sh help            # overview of all subcommands
 ```
 
 ### Examples
@@ -368,6 +375,10 @@ counted as a loss before the summary is printed).
 - `--graphite <host[:port]>` / `--prefix <name>` - Push per-responder
   metrics (`avg`, `p50`, `p90`, `p99`, `loss`) to Graphite
 - `--max-loss <pct>` - Exit non-zero when total loss % exceeds this (for CI)
+- `--samples <file>` - Write the raw sample series to a CSV file (one row per
+  answered ping: `seq,sentTs,responder,host,rttMs,outboundMs,returnMs`) —
+  the data series for plotting/analysis, complementing the aggregated
+  `--csv`/`--json` summary; the series length is capped by `--buffer`
 
 `pong` options: `--topic <name>` (must match `latency --topic`), `--name
 <name>` (responder label, default: hostname-pid) — this name appears as the

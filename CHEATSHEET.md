@@ -124,9 +124,10 @@ Inside `./run.sh latency`:
 s   start/stop the probe
 m   cycle send mode (interval → fixed-rate → ramp)
 +/- adjust the current mode's rate (interval ms / msgs-per-s / ramp step)
-P   cycle payload size (0, 1024, 10240, 102400 bytes)
-T   cycle sender threads (1, 2, 4, 8)
+p/P smaller/bigger payload (0, 1k, 10k, 100k - current value shown in help line)
+t/T fewer/more sender threads (1, 2, 4, 8 - current value shown in help line)
 h   toggle histogram vs. time-series graph
+e   export raw sample series as CSV (latency-samples-<timestamp>.csv)
 q   quit (Esc goes back)
 ```
 
@@ -155,6 +156,9 @@ q   quit (Esc goes back)
 
 # Push percentiles to Graphite
 ./run.sh latency --headless --duration 60 --graphite localhost:2003 --prefix morpheus
+
+# Export the raw sample series (one CSV row per ping) for plotting
+./run.sh latency --headless --rate 50 --duration 60 --samples run1.csv
 ```
 
 ## Send Examples

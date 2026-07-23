@@ -5,6 +5,7 @@ import com.googlecode.lanterna.graphics.TextGraphics;
 import com.googlecode.lanterna.input.KeyStroke;
 import com.googlecode.lanterna.input.KeyType;
 import de.caluga.morpheus.cli.MorpheusContext;
+import de.caluga.morpheus.core.latency.LatencyCsv;
 import de.caluga.morpheus.core.latency.LatencyProbe;
 import de.caluga.morpheus.core.latency.LatencySample;
 import de.caluga.morpheus.core.latency.LatencyStats;
@@ -41,6 +42,9 @@ public class LatencyScreen implements Screen {
     private int payloadIdx = 0;
     private int threadIdx = 0;
     private boolean histogram = false;
+    private java.nio.file.Path exportDir = java.nio.file.Path.of(".");
+    private String exportNote;
+    private long exportNoteAt;
 
     public LatencyScreen(MorpheusContext ctx) {
         this(ctx, LatencyProbe.Config.defaults().topic(), false);
@@ -66,6 +70,8 @@ public class LatencyScreen implements Screen {
     LatencyProbe.Mode mode() { return mode; }
     int payloadBytes() { return PAYLOADS[payloadIdx]; }
     int senderThreads() { return THREADS[threadIdx]; }
+    void setExportDir(java.nio.file.Path dir) { exportDir = dir; }   // test seam
+    String exportNote() { return exportNote; }
 
     @Override
     public void onClose() {
@@ -129,9 +135,12 @@ public class LatencyScreen implements Screen {
             case 'q' -> { return Result.quit(); }
             case 's' -> toggleRun();
             case 'h' -> histogram = !histogram;
+            case 'e' -> exportCsv();
             case 'm' -> { mode = LatencyProbe.Mode.values()[(mode.ordinal() + 1) % LatencyProbe.Mode.values().length]; restartIfRunning(); }
-            case 'P' -> { payloadIdx = (payloadIdx + 1) % PAYLOADS.length; restartIfRunning(); }
-            case 'T' -> { threadIdx = (threadIdx + 1) % THREADS.length; restartIfRunning(); }
+            case 'P' -> { if (payloadIdx < PAYLOADS.length - 1) { payloadIdx++; restartIfRunning(); } }
+            case 'p' -> { if (payloadIdx > 0) { payloadIdx--; restartIfRunning(); } }
+            case 'T' -> { if (threadIdx < THREADS.length - 1) { threadIdx++; restartIfRunning(); } }
+            case 't' -> { if (threadIdx > 0) { threadIdx--; restartIfRunning(); } }
             case '+' -> { adjust(+1); restartIfRunning(); }
             case '-' -> { adjust(-1); restartIfRunning(); }
             default -> { }
@@ -145,6 +154,29 @@ public class LatencyScreen implements Screen {
             case FIXED_RATE -> rate = Math.max(1, rate + dir * 10);
             case RAMP -> rampStep = Math.max(10, rampStep + dir * 10);
         }
+    }
+
+    /** 'e': dump the raw sample series (not the aggregated table) to a timestamped CSV
+     *  in the working directory, so a run can be re-plotted/analyzed offline. */
+    private void exportCsv() {
+        List<LatencySample> samples = snapshot().samples();
+        if (samples.isEmpty()) {
+            note("nothing to export - no samples yet");
+            return;
+        }
+        String name = "latency-samples-" + java.time.LocalDateTime.now()
+                .format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")) + ".csv";
+        try {
+            java.nio.file.Path written = LatencyCsv.writeSamples(exportDir.resolve(name), samples);
+            note("exported " + samples.size() + " samples to " + written);
+        } catch (Exception e) {
+            note("export failed: " + e.getMessage());
+        }
+    }
+
+    private void note(String text) {
+        exportNote = text;
+        exportNoteAt = System.currentTimeMillis();
     }
 
     private LatencyStats.Snapshot snapshot() {
@@ -190,8 +222,15 @@ public class LatencyScreen implements Screen {
         if (!empty) drawTable(g, 2, tableTop, width - 3, maxTableDataRows, snap);
 
         g.setForegroundColor(TextColor.ANSI.DEFAULT);
-        g.putString(2, keyHelpRow, trunc(
-                "s start/stop  m mode  +/- rate  P payload  T threads  h histogram  q back", width - 3));
+        String help = exportNote != null && System.currentTimeMillis() - exportNoteAt < 5000
+                ? exportNote
+                : String.format("s start/stop  m mode  +/- rate  p/P payload:%s  t/T threads:%d  "
+                        + "h histogram  e export csv  q back", fmtBytes(payloadBytes()), senderThreads());
+        g.putString(2, keyHelpRow, trunc(help, width - 3));
+    }
+
+    private static String fmtBytes(int bytes) {
+        return bytes >= 1024 ? (bytes / 1024) + "k" : String.valueOf(bytes);
     }
 
     private void drawHeader(TextGraphics g, int width, LatencyStats.Snapshot snap) {
