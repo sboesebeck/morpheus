@@ -171,6 +171,10 @@ public class ConfigurationManager {
         return properties;
     }
 
+    public String getConfigFilePath() {
+        return configFilePath;
+    }
+
     public boolean isVerbose() {
         return verbose;
     }

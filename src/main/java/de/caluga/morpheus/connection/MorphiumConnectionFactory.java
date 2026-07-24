@@ -43,7 +43,14 @@ public class MorphiumConnectionFactory {
         MorphiumConfig cfg = MorphiumConfig.fromProperties("morphium." + connection, config.getProperties());
 
         if (cfg.getHostSeed() == null || cfg.getHostSeed().isEmpty()) {
-            throw new IllegalStateException("Connection not configured properly - no hosts set");
+            if (!config.getAvailableConnections().contains(connection)) {
+                throw new IllegalStateException("Connection '" + connection + "' not found in "
+                        + config.getConfigFilePath() + ". Available connections: "
+                        + String.join(", ", config.getAvailableConnections()));
+            }
+            throw new IllegalStateException("Connection '" + connection
+                    + "' has no hosts configured (morphium." + connection + ".hostSeed) in "
+                    + config.getConfigFilePath());
         }
 
         // Set connection pool settings
