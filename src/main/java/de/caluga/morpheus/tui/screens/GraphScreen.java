@@ -19,6 +19,9 @@ import de.caluga.morpheus.tui.widget.GraphImageRenderer;
 import de.caluga.morpheus.tui.widget.KittyGraphics;
 import de.caluga.morpheus.tui.widget.TopicPalette;
 
+import static de.caluga.morpheus.tui.TuiText.shortId;
+import static de.caluga.morpheus.tui.TuiText.trunc;
+
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -515,18 +518,5 @@ public class GraphScreen implements Screen {
         if (filter.isEmpty() || filter.isHighlighted(id, registry)) return true;
         Long t = lastBeamMs.get(id);
         return t != null && now - t < ACTIVE_LAYOUT_MS;
-    }
-
-    /** Shortens an auto-generated sender id (UUID / object id) to head…tail; keeps short readable names as-is. */
-    private String shortId(String id) {
-        if (id == null) return "?";
-        if (id.length() <= 16) return id;
-        return id.substring(0, 6) + "…" + id.substring(id.length() - 4);
-    }
-
-    private String trunc(String s, int max) {
-        if (s == null) return "";
-        if (max <= 1) return "";
-        return s.length() <= max ? s : s.substring(0, max - 1) + "…";
     }
 }

@@ -2,11 +2,8 @@ package de.caluga.morpheus.tui.screens;
 
 import com.googlecode.lanterna.TextColor;
 import com.googlecode.lanterna.graphics.TextGraphics;
-import com.googlecode.lanterna.input.KeyStroke;
-import com.googlecode.lanterna.input.KeyType;
 import de.caluga.morpheus.core.NodeStatus;
 import de.caluga.morpheus.core.StatusFormat;
-import de.caluga.morpheus.tui.Screen;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -15,23 +12,12 @@ import java.util.TreeMap;
 
 /** Full status detail of one node, grouped into sections (Config last), scrollable.
  *  Pure render of a provided NodeStatus — no backend, no context ownership. */
-public class NodeDetailScreen implements Screen {
+public class NodeDetailScreen extends ScrollableDetailScreen {
 
     private final NodeStatus node;
-    private int scroll = 0;
 
     public NodeDetailScreen(NodeStatus node) {
         this.node = node;
-    }
-
-    @Override
-    public Result onKey(KeyStroke key) {
-        if (key == null) return Result.stay();
-        if (key.getCharacter() != null && key.getCharacter() == 'q') return Result.quit();
-        if (key.getKeyType() == KeyType.Escape) return Result.pop();
-        if (key.getKeyType() == KeyType.ArrowDown) { scroll++; return Result.stay(); }
-        if (key.getKeyType() == KeyType.ArrowUp) { if (scroll > 0) scroll--; return Result.stay(); }
-        return Result.stay();
     }
 
     @Override
