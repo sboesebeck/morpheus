@@ -59,7 +59,7 @@ public class LatencyProbeTest {
         var cfg = LatencyProbe.Config.defaults();
         cfg = new LatencyProbe.Config(cfg.topic(), false, cfg.mode(), cfg.intervalMs(), cfg.rate(),
                 cfg.rampStartRate(), cfg.rampStepRate(), cfg.rampStepMs(), cfg.rampAbortLossPct(),
-                cfg.senderThreads(), 1024, cfg.timeoutMs(), cfg.bufferCapacity());
+                cfg.senderThreads(), 1024, cfg.timeoutMs(), cfg.bufferCapacity(), 0);
         Msg m = probe(cfg).sendPing();
         assertEquals(1024, ((String) m.getMapValue().get("pad")).length());
     }
@@ -145,7 +145,7 @@ public class LatencyProbeTest {
         var d = LatencyProbe.Config.defaults();
         var cfg = new LatencyProbe.Config(d.topic(), false, d.mode(), d.intervalMs(), d.rate(),
                 d.rampStartRate(), d.rampStepRate(), d.rampStepMs(), d.rampAbortLossPct(),
-                d.senderThreads(), 0, d.timeoutMs(), 3);
+                d.senderThreads(), 0, d.timeoutMs(), 3, 0);
         LatencyProbe p = probe(cfg);
         for (int i = 0; i < 5; i++) p.sendPing();
         var snap = p.stats().snapshot();
@@ -196,7 +196,7 @@ public class LatencyProbeTest {
         var d = LatencyProbe.Config.defaults();
         var cfg = new LatencyProbe.Config("msg_status_info", true, d.mode(), d.intervalMs(), d.rate(),
                 d.rampStartRate(), d.rampStepRate(), d.rampStepMs(), d.rampAbortLossPct(),
-                d.senderThreads(), 0, d.timeoutMs(), d.bufferCapacity());
+                d.senderThreads(), 0, d.timeoutMs(), d.bufferCapacity(), 0);
         Msg m = probe(cfg).sendPing();
         assertEquals("msg_status_info", m.getTopic());
         assertEquals("ALL", m.getMsg());
@@ -213,7 +213,7 @@ public class LatencyProbeTest {
             assertEquals(1.0, probe(d).targetRate(), 1e-9); // 1000ms interval
             var fixed = new LatencyProbe.Config(d.topic(), false, LatencyProbe.Mode.FIXED_RATE,
                     d.intervalMs(), 250, d.rampStartRate(), d.rampStepRate(), d.rampStepMs(),
-                    d.rampAbortLossPct(), 1, 0, d.timeoutMs(), d.bufferCapacity());
+                    d.rampAbortLossPct(), 1, 0, d.timeoutMs(), d.bufferCapacity(), 0);
             assertEquals(250.0, probe(fixed).targetRate(), 1e-9);
         }
 
@@ -221,7 +221,7 @@ public class LatencyProbeTest {
         void rampStepsIncreaseRateAndRecordSeqs() {
             var d = LatencyProbe.Config.defaults();
             var cfg = new LatencyProbe.Config(d.topic(), false, LatencyProbe.Mode.RAMP,
-                    d.intervalMs(), d.rate(), 50, 25, 10_000, 50.0, 1, 0, d.timeoutMs(), d.bufferCapacity());
+                    d.intervalMs(), d.rate(), 50, 25, 10_000, 50.0, 1, 0, d.timeoutMs(), d.bufferCapacity(), 0);
             LatencyProbe p = probe(cfg);
             assertEquals(50.0, p.targetRate(), 1e-9);
             nanos.addAndGet(10_000_000_000L + 1);   // one step elapsed
@@ -234,7 +234,7 @@ public class LatencyProbeTest {
         void rampAbortsOnLoss() {
             var d = LatencyProbe.Config.defaults();
             var cfg = new LatencyProbe.Config(d.topic(), false, LatencyProbe.Mode.RAMP,
-                    d.intervalMs(), d.rate(), 50, 25, 10_000, 50.0, 1, 0, d.timeoutMs(), d.bufferCapacity());
+                    d.intervalMs(), d.rate(), 50, 25, 10_000, 50.0, 1, 0, d.timeoutMs(), d.bufferCapacity(), 0);
             LatencyProbe p = probe(cfg);
             // simulate a step with 100% loss
             p.sendPing(); p.sendPing();
@@ -250,7 +250,7 @@ public class LatencyProbeTest {
             var d = LatencyProbe.Config.defaults();
             var cfg = new LatencyProbe.Config(d.topic(), false, LatencyProbe.Mode.FIXED_RATE,
                     d.intervalMs(), 200, d.rampStartRate(), d.rampStepRate(), d.rampStepMs(),
-                    d.rampAbortLossPct(), 2, 0, d.timeoutMs(), d.bufferCapacity());
+                    d.rampAbortLossPct(), 2, 0, d.timeoutMs(), d.bufferCapacity(), 0);
             LatencyProbe p = new LatencyProbe(cfg, new LatencyStats(1000), sent::add,
                     System::nanoTime, System::currentTimeMillis);
             p.start();
@@ -270,6 +270,108 @@ public class LatencyProbeTest {
             LatencyProbe p = probe(LatencyProbe.Config.defaults());
             for (int i = 0; i < 20; i++) p.sendPing();  // all at nanos=0 within 10s window
             assertEquals(2.0, p.actualRate(), 1e-9);     // 20 sends / 10s
+        }
+
+        /** A blocking send must not lower the achieved rate: the scheduler works on absolute
+         *  timestamps, so send duration eats into the gap instead of extending the cycle.
+         *  The old sleep-after-send pacing yielded ~33/s here (10ms send + 20ms sleep). */
+        @Test
+        void blockingSenderStillMeetsTargetRate() throws Exception {
+            var d = LatencyProbe.Config.defaults();
+            var cfg = new LatencyProbe.Config(d.topic(), false, LatencyProbe.Mode.FIXED_RATE,
+                    d.intervalMs(), 50, d.rampStartRate(), d.rampStepRate(), d.rampStepMs(),
+                    d.rampAbortLossPct(), 1, 0, d.timeoutMs(), d.bufferCapacity(), 0);
+            java.util.concurrent.atomic.AtomicInteger count = new java.util.concurrent.atomic.AtomicInteger();
+            LatencyProbe p = new LatencyProbe(cfg, new LatencyStats(1000),
+                    m -> { count.incrementAndGet();
+                           try { Thread.sleep(10); } catch (InterruptedException e) { Thread.currentThread().interrupt(); } },
+                    System::nanoTime, System::currentTimeMillis);
+            p.start();
+            Thread.sleep(1000);
+            p.stop();
+            int sent = count.get();
+            assertTrue(sent >= 42, "expected ~50 sends/s despite 10ms blocking send, got " + sent);
+            assertTrue(sent <= 62, "must not overshoot the target rate, got " + sent);
+        }
+
+        /** When a send stalls longer than a full period, the schedule rebases instead of
+         *  firing a burst of catch-up sends that would distort latency percentiles. */
+        @Test
+        void noCatchUpBurstAfterStall() throws Exception {
+            var d = LatencyProbe.Config.defaults();
+            var cfg = new LatencyProbe.Config(d.topic(), false, LatencyProbe.Mode.FIXED_RATE,
+                    d.intervalMs(), 100, d.rampStartRate(), d.rampStepRate(), d.rampStepMs(),
+                    d.rampAbortLossPct(), 1, 0, d.timeoutMs(), d.bufferCapacity(), 0);
+            List<Long> sendTimes = java.util.Collections.synchronizedList(new ArrayList<>());
+            java.util.concurrent.atomic.AtomicBoolean stallOnce = new java.util.concurrent.atomic.AtomicBoolean(true);
+            LatencyProbe p = new LatencyProbe(cfg, new LatencyStats(1000),
+                    m -> { sendTimes.add(System.nanoTime());
+                           if (stallOnce.getAndSet(false)) {
+                               try { Thread.sleep(200); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+                           } },
+                    System::nanoTime, System::currentTimeMillis);
+            p.start();
+            Thread.sleep(600);
+            p.stop();
+            // after the 200ms stall (≈20 missed 10ms slots) no burst: consecutive sends stay >= ~5ms apart
+            int bursts = 0;
+            synchronized (sendTimes) {
+                for (int i = 2; i < sendTimes.size(); i++) {
+                    if (sendTimes.get(i) - sendTimes.get(i - 1) < 5_000_000L) bursts++;
+                }
+            }
+            assertTrue(bursts <= 1, "expected rebase instead of catch-up burst, got " + bursts + " sub-5ms gaps");
+        }
+    }
+
+    @org.junit.jupiter.api.Nested
+    class Warmup {
+
+        private LatencyProbe.Config warmupCfg(long warmupMs) {
+            var d = LatencyProbe.Config.defaults();
+            return new LatencyProbe.Config(d.topic(), false, d.mode(), d.intervalMs(), d.rate(),
+                    d.rampStartRate(), d.rampStepRate(), d.rampStepMs(), d.rampAbortLossPct(),
+                    d.senderThreads(), 0, d.timeoutMs(), d.bufferCapacity(), warmupMs);
+        }
+
+        @Test
+        void samplesWithinWarmupWindowAreFlagged() {
+            LatencyProbe p = probe(warmupCfg(5000));
+            Msg early = p.sendPing();                    // wall = 100_000 = run start
+            wall.addAndGet(6000);                        // past the 5s warmup window
+            Msg late = p.sendPing();
+            nanos.addAndGet(2_000_000);
+            p.handleAnswer(answerTo(early, "pong-1", null));
+            p.handleAnswer(answerTo(late, "pong-1", null));
+            var samples = p.stats().snapshot().samples();
+            assertEquals(2, samples.size());
+            assertTrue(samples.get(0).warmup(), "ping sent at run start must be warmup");
+            assertFalse(samples.get(1).warmup(), "ping sent after the window must not be warmup");
+        }
+
+        @Test
+        void warmupDisabledByDefault() {
+            LatencyProbe p = probe(warmupCfg(0));
+            Msg ping = p.sendPing();
+            p.handleAnswer(answerTo(ping, "pong-1", null));
+            assertFalse(p.stats().snapshot().samples().get(0).warmup());
+        }
+
+        @Test
+        void statsExcludeWarmupFromLatencyButKeepDeliveryCount() {
+            LatencyProbe p = probe(warmupCfg(5000));
+            Msg early = p.sendPing();
+            nanos.addAndGet(50_000_000);                 // slow warmup answer: 50ms
+            p.handleAnswer(answerTo(early, "pong-1", null));
+            wall.addAndGet(6000);
+            Msg late = p.sendPing();
+            nanos.addAndGet(2_000_000);                  // steady state: 2ms
+            p.handleAnswer(answerTo(late, "pong-1", null));
+            var r = p.stats().snapshot().responders().get(0);
+            assertEquals(2, r.count(), "delivery count must include warmup answers");
+            assertEquals(2.0, r.avgMs(), 1e-6, "latency avg must exclude the 50ms warmup sample");
+            assertEquals(2.0, r.maxMs(), 1e-6, "latency max must exclude the 50ms warmup sample");
+            assertEquals(2.0, r.p99(), 1e-6, "percentiles must exclude warmup samples");
         }
     }
 }

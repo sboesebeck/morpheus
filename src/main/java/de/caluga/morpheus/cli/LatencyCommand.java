@@ -64,6 +64,10 @@ public class LatencyCommand implements Callable<Integer> {
     Double maxLoss;
     @Option(names = {"--samples"}, description = "Write the raw sample series (one CSV row per answered ping) to this file.")
     String samplesFile;
+    @Option(names = {"--warmup"}, defaultValue = "0",
+            description = "Exclude pings sent in the first N seconds from latency stats (JIT/connection warmup); "
+                    + "samples stay in the --samples CSV, flagged in the warmup column (default: ${DEFAULT-VALUE}).")
+    int warmupSecs;
 
     @Spec
     CommandSpec spec;
@@ -73,7 +77,7 @@ public class LatencyCommand implements Callable<Integer> {
      *  ('m', '+/-', 'P', 'T', ...) control these settings instead. */
     private static final String[] HEADLESS_ONLY_OPTIONS = {
         "--interval", "--rate", "--ramp", "--ramp-abort-loss", "--buffer", "--threads", "--payload",
-        "--timeout", "--duration", "--json", "--csv", "--graphite", "--max-loss", "--samples"
+        "--timeout", "--duration", "--json", "--csv", "--graphite", "--max-loss", "--samples", "--warmup"
     };
 
     @Override
@@ -142,7 +146,7 @@ public class LatencyCommand implements Callable<Integer> {
                 intervalMs != null ? intervalMs : d.intervalMs(),
                 rate != null ? rate : d.rate(),
                 rampStart, rampStep, rampStepMs, rampAbortLoss,
-                threads, payload, timeoutMs, buffer);
+                threads, payload, timeoutMs, buffer, warmupSecs * 1000L);
     }
 
     private ParameterException rampParamError() {
@@ -162,7 +166,7 @@ public class LatencyCommand implements Callable<Integer> {
         }
         if (any) {
             ctx.pr("[warning]--interval/--rate/--ramp/--ramp-abort-loss/--buffer/--threads/--payload/"
-                    + "--timeout/--duration/--json/--csv/--graphite/--max-loss/--samples are ignored without --headless[r]");
+                    + "--timeout/--duration/--json/--csv/--graphite/--max-loss/--samples/--warmup are ignored without --headless[r]");
         }
     }
 

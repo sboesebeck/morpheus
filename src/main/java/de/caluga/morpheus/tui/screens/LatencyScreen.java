@@ -95,7 +95,7 @@ public class LatencyScreen implements Screen {
         }
         return new LatencyProbe.Config(topic, statusMode, mode, intervalMs, rate,
                 50, rampStep, 10_000, 50.0, senderThreads(), payloadBytes(),
-                d.timeoutMs(), d.bufferCapacity());
+                d.timeoutMs(), d.bufferCapacity(), d.warmupMs());
     }
 
     /** Send strategy: sendAndAwaitAsync's per-message callback. A swap to sendMessage + own topic

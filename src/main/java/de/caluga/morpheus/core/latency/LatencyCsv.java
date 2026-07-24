@@ -15,7 +15,7 @@ public final class LatencyCsv {
     private LatencyCsv() { }
 
     public static String samplesCsv(List<LatencySample> samples) {
-        StringBuilder b = new StringBuilder("seq,sentTs,responder,host,rttMs,outboundMs,returnMs\n");
+        StringBuilder b = new StringBuilder("seq,sentTs,responder,host,rttMs,outboundMs,returnMs,warmup\n");
         for (LatencySample s : samples) {
             b.append(s.seq()).append(',')
              .append(s.sentTs()).append(',')
@@ -23,7 +23,8 @@ public final class LatencyCsv {
              .append(csvField(s.senderHost())).append(',')
              .append(String.format(Locale.ROOT, "%.3f", s.rttMs())).append(',')
              .append(num(s.outboundMs())).append(',')
-             .append(num(s.returnMs())).append('\n');
+             .append(num(s.returnMs())).append(',')
+             .append(s.warmup() ? 1 : 0).append('\n');
         }
         return b.toString();
     }

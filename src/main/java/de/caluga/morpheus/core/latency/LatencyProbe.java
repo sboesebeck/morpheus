@@ -20,10 +20,10 @@ public class LatencyProbe {
     public record Config(String topic, boolean statusMode, Mode mode, long intervalMs, double rate,
                          double rampStartRate, double rampStepRate, long rampStepMs,
                          double rampAbortLossPct, int senderThreads, int payloadBytes,
-                         long timeoutMs, int bufferCapacity) {
+                         long timeoutMs, int bufferCapacity, long warmupMs) {
         public static Config defaults() {
             return new Config("morpheus_latency", false, Mode.INTERVAL, 1000, 10,
-                    10, 10, 10_000, 50.0, 1, 0, 5000, 10_000);
+                    10, 10, 10_000, 50.0, 1, 0, 5000, 10_000, 0);
         }
     }
 
@@ -43,6 +43,9 @@ public class LatencyProbe {
     private final String runId = Long.toHexString(ThreadLocalRandom.current().nextLong());
     private final Map<MorphiumId, Pending> pending;
     private long seq = 0;
+    // Wall clock of the first send; samples whose ping left within warmupMs after this
+    // are flagged so the stats can exclude JIT/connection warmup from latency figures.
+    private long runStartTs = Long.MIN_VALUE;
 
     // scheduling state
     private final java.util.List<Thread> threads = new java.util.ArrayList<>();
@@ -81,6 +84,7 @@ public class LatencyProbe {
         synchronized (this) {
             s = ++seq;
             sentTs = wallClock.getAsLong();
+            if (runStartTs == Long.MIN_VALUE) runStartTs = sentTs;
             if (cfg.statusMode()) {
                 m = new Msg(cfg.topic(), "ALL", "ALL", cfg.timeoutMs());
             } else {
@@ -126,8 +130,9 @@ public class LatencyProbe {
             outbound = (double) (recvTs - p.sentTs);
             ret = (p.sentTs + rttMs) - recvTs;
         }
+        boolean warmup = cfg.warmupMs() > 0 && p.sentTs - runStartTs < cfg.warmupMs();
         stats.recordAnswer(new LatencySample(p.seq, responderName(answer), answer.getSenderHost(),
-                rttMs, outbound, ret, p.sentTs));
+                rttMs, outbound, ret, p.sentTs, warmup));
     }
 
     /** Prefers the friendly name the pong responder puts in the answer's mapValue
@@ -169,7 +174,8 @@ public class LatencyProbe {
         stepStartTimeouts = snap.timeouts();
         stepStartCompleted = snap.completed();
         for (int i = 0; i < Math.max(1, cfg.senderThreads()); i++) {
-            Thread t = new Thread(this::senderLoop, "latency-sender-" + i);
+            final int threadIdx = i;
+            Thread t = new Thread(() -> senderLoop(threadIdx), "latency-sender-" + i);
             t.setDaemon(true);
             threads.add(t);
             t.start();
@@ -208,13 +214,37 @@ public class LatencyProbe {
         return sendNanos.size() / 10.0;
     }
 
-    private void senderLoop() {
+    /** Fixed-rate sender: schedules sends on absolute timestamps (next += period) so the
+     *  configured rate is met regardless of how long the (blocking) send call takes. The old
+     *  sleep-after-send pacing added the full send duration to every cycle, silently
+     *  undershooting the target rate and hiding latency via coordinated omission. */
+    private void senderLoop(int threadIdx) {
         int nThreads = Math.max(1, cfg.senderThreads());
+        long period = periodNanos(nThreads);
+        // stagger the threads across one period so their sends interleave instead of bursting
+        long next = nanoClock.getAsLong() + period * threadIdx / nThreads;
         while (running) {
+            long now = nanoClock.getAsLong();
+            if (now < next) {
+                long wait = next - now;
+                try {
+                    Thread.sleep(wait / 1_000_000L, (int) (wait % 1_000_000L));
+                } catch (InterruptedException e) {
+                    return;
+                }
+                continue;   // re-check running and the clock after every sleep
+            }
             sendPing();
-            long sleepMs = (long) Math.max(1, nThreads * 1000.0 / Math.max(0.001, targetRate()));
-            try { Thread.sleep(sleepMs); } catch (InterruptedException e) { return; }
+            period = periodNanos(nThreads);   // rate may have changed (RAMP mode)
+            next += period;
+            // Fell behind by more than a full period (send outlasted the schedule): rebase
+            // instead of firing a catch-up burst that would distort the latency measurement.
+            if (next < nanoClock.getAsLong() - period) next = nanoClock.getAsLong();
         }
+    }
+
+    private long periodNanos(int nThreads) {
+        return (long) (nThreads * 1e9 / Math.max(0.001, targetRate()));
     }
 
     private void sweeperLoop() {
