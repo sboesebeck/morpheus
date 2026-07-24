@@ -125,7 +125,7 @@ public class ConfigCommands implements Callable<Integer> {
                 password = readPassword();
             }
 
-            ctx.pr("[c3]Messaging Implementation[r] (single/multi, default: single):");
+            ctx.pr("[c3]Messaging Implementation[r] (single/multi/dual, default: single):");
             String messagingImpl = readLine("single");
 
             ctx.pr("[c3]Queue Name[r] (press ENTER for default 'msg'):");
@@ -183,7 +183,7 @@ public class ConfigCommands implements Callable<Integer> {
             }
 
             String currentMessagingImpl = cm.getProperty("morphium." + name + ".messaging.implementation", "single");
-            ctx.pr("[c3]Messaging Implementation[r] (current: " + currentMessagingImpl + "):");
+            ctx.pr("[c3]Messaging Implementation[r] (single/multi/dual, current: " + currentMessagingImpl + "):");
             String messagingImpl = readLineOrKeep(currentMessagingImpl);
 
             String currentQueueName = cm.getProperty("morphium." + name + ".messaging.queueName", "msg");

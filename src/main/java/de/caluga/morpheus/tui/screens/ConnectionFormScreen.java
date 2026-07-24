@@ -74,7 +74,11 @@ public class ConnectionFormScreen implements Screen {
             case Character -> {
                 char c = key.getCharacter();
                 if (focus == messagingRow() && c == ' ') {
-                    messagingImpl = messagingImpl.equals("single") ? "multi" : "single";
+                    messagingImpl = switch (messagingImpl) {
+                        case "single" -> "multi";
+                        case "multi" -> "dual";
+                        default -> "single";
+                    };
                 } else if (focus == proxyRow() && c == ' ') {
                     proxyEnabled = !proxyEnabled;
                 } else if (focus < fields.size()) {
@@ -87,7 +91,7 @@ public class ConnectionFormScreen implements Screen {
         return Result.stay();
     }
 
-    private int messagingRow() { return fields.size(); }     // virtual row after the text fields
+    int messagingRow() { return fields.size(); }              // virtual row after the text fields; package-private test seam
     private int proxyRow()     { return fields.size() + 1; } // virtual row after messaging
 
     @Override
@@ -106,7 +110,8 @@ public class ConnectionFormScreen implements Screen {
         int my = y + fields.size();
         if (focus == messagingRow()) g.setForegroundColor(TextColor.ANSI.CYAN);
         g.putString(2, my, "Messaging    (" + (messagingImpl.equals("single") ? "•" : " ") + ") single  ("
-                + (messagingImpl.equals("multi") ? "•" : " ") + ") multi   [Space]");
+                + (messagingImpl.equals("multi") ? "•" : " ") + ") multi   ("
+                + (messagingImpl.equals("dual") ? "•" : " ") + ") dual    [Space]");
         g.setForegroundColor(TextColor.ANSI.DEFAULT);
         if (focus == proxyRow()) g.setForegroundColor(TextColor.ANSI.CYAN);
         g.putString(2, my + 1, "Proxy        [" + (proxyEnabled ? "x" : " ") + "] aktiv   [Space]");

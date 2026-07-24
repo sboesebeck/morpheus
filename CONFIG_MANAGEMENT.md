@@ -31,7 +31,7 @@ This launches an interactive wizard that prompts for:
 - Authentication Database (default: admin)
 - Username
 - Password (hidden input)
-- Messaging Implementation (single/multi, default: single)
+- Messaging Implementation (single/multi/dual, default: single)
 - Queue Name (default: msg)
 
 ### Set Default Connection

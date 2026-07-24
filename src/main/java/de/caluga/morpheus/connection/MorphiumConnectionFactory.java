@@ -6,6 +6,7 @@ import de.caluga.morphium.Morphium;
 import de.caluga.morphium.MorphiumConfig;
 import de.caluga.morphium.driver.ReadPreference;
 import de.caluga.morphium.driver.wire.PooledDriver;
+import de.caluga.morphium.messaging.DualChannelMessaging;
 import de.caluga.morphium.messaging.MorphiumMessaging;
 import de.caluga.morphium.messaging.MultiCollectionMessaging;
 import de.caluga.morphium.messaging.SingleCollectionMessaging;
@@ -74,16 +75,25 @@ public class MorphiumConnectionFactory {
         msgSettings.setSenderId(msgConfig.senderId);
 
         // Set messaging implementation
-        if (msgConfig.implementation.equalsIgnoreCase("multi")) {
-            msgSettings.setMessagingClass(MultiCollectionMessaging.class);
-            if (verbose) {
-                theme.print("  Messaging: [c3]MultiCollectionMessaging[r]");
-            }
-        } else {
-            msgSettings.setMessagingClass(SingleCollectionMessaging.class);
-            if (verbose) {
-                theme.print("  Messaging: [c3]SingleCollectionMessaging[r]");
-            }
+        switch (msgConfig.implementation.toLowerCase()) {
+            case "multi":
+                msgSettings.setMessagingClass(MultiCollectionMessaging.class);
+                if (verbose) {
+                    theme.print("  Messaging: [c3]MultiCollectionMessaging[r]");
+                }
+                break;
+            case "dual":
+                msgSettings.setMessagingClass(DualChannelMessaging.class);
+                if (verbose) {
+                    theme.print("  Messaging: [c3]DualChannelMessaging[r] (beta)");
+                }
+                break;
+            default:
+                msgSettings.setMessagingClass(SingleCollectionMessaging.class);
+                if (verbose) {
+                    theme.print("  Messaging: [c3]SingleCollectionMessaging[r]");
+                }
+                break;
         }
 
         // Create Morphium instance

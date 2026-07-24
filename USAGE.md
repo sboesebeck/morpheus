@@ -202,7 +202,7 @@ theme.dark.gradient3=purple
 
 - `-c <name>` - Select connection by name
 - `--theme <name>` - Select theme
-- `--messaging single|multi` - Select messaging implementation
+- `--messaging single|multi|dual` - Select messaging implementation
 - `-v` / `--verbose` - Show detailed startup information
 
 ### Examples
@@ -226,7 +226,7 @@ theme.dark.gradient3=purple
 
 ### Messaging Implementations
 
-Morpheus supports two messaging implementations:
+Morpheus supports three messaging implementations:
 
 1. **SingleCollectionMessaging** (default)
    - All messages in one collection
@@ -237,6 +237,12 @@ Morpheus supports two messaging implementations:
    - Separate collection per message type
    - Better for high-volume systems
    - More complex setup
+
+3. **DualChannelMessaging** (beta)
+   - Same single-collection layout as Standard for broadcast/topic traffic
+   - Adds a second, per-recipient collection + change-stream cursor just for directed messages/answers
+   - Targets request/reply throughput without Multi's per-topic collection split
+   - Requires all participants on the queue to run `dual` - mixing with `single`/`multi` nodes breaks answer delivery
 
 **Configure default:**
 ```properties

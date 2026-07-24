@@ -86,6 +86,7 @@ Global options go **before** the subcommand:
 # Select messaging implementation
 ./run.sh --messaging single <subcommand>
 ./run.sh --messaging multi <subcommand>
+./run.sh --messaging dual <subcommand>   # beta: DualChannelMessaging, see USAGE.md
 
 # List available themes
 ./run.sh config theme list
@@ -212,6 +213,9 @@ morphium.default_connection.messaging.implementation=single
 
 # Multi collection (separate per topic)
 morphium.default_connection.messaging.implementation=multi
+
+# Dual channel (beta, second cursor for DMs/answers, see USAGE.md)
+morphium.default_connection.messaging.implementation=dual
 
 # Other messaging settings
 morphium.default_connection.messaging.processMultiple=true
