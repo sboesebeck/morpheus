@@ -370,26 +370,6 @@ counted as a loss before the summary is printed).
 <name>` (responder label, default: hostname-pid) — this name appears as the
 responder key in `latency` output instead of the internal sender id.
 
-## uptime — availability & failover monitoring
-
-`uptime` reuses the latency pings for availability measurement: every pong
-responder that answered once is expected from then on; a node that misses N
-consecutive pings (default 3, key `n` / `--misses`) is marked DOWN — backdated
-to the first missed ping — and UP again with its outage duration on the first
-answer after the gap. A replica-set watcher polls `hello` (~1/s) and logs
-primary changes, so you can see when the actual failover happened vs. when the
-messaging layer noticed. Typical failover test: start `morpheus pong --name
-nodeX` on each node, start `morpheus uptime`, press `s`, then kill a node.
-
-- TUI: per-node up/down timeline (last 10 min), availability table and a
-  scrollable event log; `w` writes events/nodes/samples CSVs to the current
-  directory.
-- Headless: `morpheus uptime --headless --duration 300 --events-csv ev.csv
-  --nodes-csv nodes.csv --samples-csv samples.csv [--json] [--fail-on-outage]`
-  (`--fail-on-outage` exits 2 when at least one outage was recorded).
-- `--no-rs-watch` disables the primary polling (e.g. backends without `hello`
-  primary info).
-
 **The `out≈`/`ret≈` split:** when the responder embeds its receive
 timestamp, the round trip is split into an outbound (sender → responder) and
 return (responder → sender) leg. These are approximate (`≈`) because they
@@ -417,6 +397,26 @@ also shows `?` in place of a negative `out≈`/`ret≈` value (clock skew);
 # Latency against real app nodes (no dedicated pong needed)
 ./run.sh -c myconn latency --headless --status --interval 1000 --duration 10 --json
 ```
+
+### uptime — availability & failover monitoring
+
+`uptime` reuses the latency pings for availability measurement: every pong
+responder that answered once is expected from then on; a node that misses N
+consecutive pings (default 3, key `n` / `--misses`) is marked DOWN — backdated
+to the first missed ping — and UP again with its outage duration on the first
+answer after the gap. A replica-set watcher polls `hello` (~1/s) and logs
+primary changes, so you can see when the actual failover happened vs. when the
+messaging layer noticed. Typical failover test: start `morpheus pong --name
+nodeX` on each node, start `morpheus uptime`, press `s`, then kill a node.
+
+- TUI: per-node up/down timeline (last 10 min), availability table and a
+  scrollable event log; `w` writes events/nodes/samples CSVs to the current
+  directory.
+- Headless: `morpheus uptime --headless --duration 300 --events-csv ev.csv
+  --nodes-csv nodes.csv --samples-csv samples.csv [--json] [--fail-on-outage]`
+  (`--fail-on-outage` exits 2 when at least one outage was recorded).
+- `--no-rs-watch` disables the primary polling (e.g. backends without `hello`
+  primary info).
 
 ### Running Directly with Java
 
