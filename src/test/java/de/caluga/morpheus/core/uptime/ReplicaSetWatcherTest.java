@@ -101,4 +101,24 @@ public class ReplicaSetWatcherTest {
         assertEquals(n, events().size(), "no polling after stop");
         w.stop();   // idempotent
     }
+
+    @Test
+    void interruptedPollDropsResults() {
+        // Test that poll() drops results when the thread has been interrupted
+        ReplicaSetWatcher w = watcher();
+        w.poll();
+        assertEquals(1, events().size());
+        assertEquals("h1:27017", w.primary());
+
+        // Create a HelloSource that sets the interrupt flag before returning
+        ReplicaSetWatcher w2 = new ReplicaSetWatcher(() -> {
+            Thread.currentThread().interrupt();
+            return "h2:27017";  // Try to change primary
+        }, tracker, 50);
+
+        w2.poll();
+        // Should not record the change because thread was interrupted
+        assertEquals(1, events().size(), "interrupted poll must not record events");
+        assertNull(w2.primary(), "interrupted poll must not update state");
+    }
 }

@@ -31,6 +31,10 @@ public class ReplicaSetWatcher {
     synchronized void poll() {
         try {
             String p = source.primary();
+            // If interrupted after the blocking call, discard result to avoid events after stop()
+            if (Thread.currentThread().isInterrupted()) {
+                return;
+            }
             if (unknown) {
                 unknown = false;
                 tracker.recordEvent(UptimeTracker.Event.Type.RS_RECOVERED, "rs",
@@ -42,6 +46,10 @@ public class ReplicaSetWatcher {
                 primary = p;
             }
         } catch (Exception e) {
+            // If interrupted, discard exception to avoid recording events after stop()
+            if (Thread.currentThread().isInterrupted()) {
+                return;
+            }
             if (!unknown) {
                 unknown = true;
                 String msg = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
