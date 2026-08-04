@@ -144,4 +144,16 @@ public class UptimeScreenTest {
         DefaultVirtualTerminal vt = terminal(8, 4);
         s.draw(vt.newTextGraphics());   // must not throw
     }
+
+    @Test
+    void writeKeyProducesThreeCsvFiles(@org.junit.jupiter.api.io.TempDir java.nio.file.Path dir) throws Exception {
+        UptimeScreen s = new UptimeScreen(upSnap(), latSnap());
+        s.csvDir(dir);
+        s.onKey(KeyStroke.fromString("w"));
+        try (var files = java.nio.file.Files.list(dir)) {
+            assertEquals(3, files.count());
+        }
+        assertNotNull(s.csvStatus());
+        assertTrue(s.csvStatus().startsWith("CSV: uptime-"), s.csvStatus());
+    }
 }

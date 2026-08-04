@@ -166,3 +166,26 @@ What you are looking at:
 > The Kitty-graphics mode is eye-candy, not a different data source — it draws the
 > exact same scene (same ring, same shots, same colours) as a smooth image where
 > the terminal supports it.
+
+---
+
+## `uptime` — Uptime/failover monitor over pong responders
+
+Timeline, availability statistics, and event log tracking node state changes,
+replica-set primary failovers, and send errors. Reuses latency-probe pings to
+detect outages; `w` writes three CSVs (events, nodes, samples).
+
+| Column (Table) | Meaning |
+|---|---|
+| `Node` | pong responder name |
+| `Status` | UP or DOWN |
+| `seit` | time since current state |
+| `avail%` | availability percentage since first ping |
+| `Ausfälle` | number of outages recorded |
+| `längster` | duration of longest outage |
+| `⌀Ausfall` | average outage duration |
+| `lastRTT` | last round-trip time to responder (ms) |
+
+**Keys:** `s` start/stop probe, `+`/`-` adjust ping interval, `n` cycle miss
+threshold (1/2/3/5/10), `r` toggle replica-set watcher, `w` write CSVs, `↑/↓`
+scroll events, `c` reset, `Esc` back, `q` quit.

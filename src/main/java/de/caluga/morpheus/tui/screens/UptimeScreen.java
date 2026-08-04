@@ -39,6 +39,8 @@ public class UptimeScreen implements Screen {
     private int missIdx = 2;                             // MISSES[2] == 3
     private boolean rsWatch = true;
     private int eventScroll = 0;                          // 0 = neueste sichtbar
+    private java.nio.file.Path csvDir = java.nio.file.Path.of(".");
+    private String csvStatus;
 
     public UptimeScreen(MorpheusContext ctx) {
         this(ctx, LatencyProbe.Config.defaults().topic());
@@ -65,6 +67,8 @@ public class UptimeScreen implements Screen {
     public boolean rsWatchEnabled() { return rsWatch; }
     public int eventScroll() { return eventScroll; }
     public boolean isRunning() { return probe != null && probe.isRunning(); }
+    void csvDir(java.nio.file.Path dir) { this.csvDir = dir; }
+    String csvStatus() { return csvStatus; }
 
     @Override
     public void onClose() {
@@ -90,7 +94,16 @@ public class UptimeScreen implements Screen {
         if (isRunning()) { probe.stop(); probe = buildProbe(); probe.start(); }
     }
 
-    void writeCsv() { }          // Task 8
+    void writeCsv() {
+        String stamp = new java.text.SimpleDateFormat("yyyyMMdd-HHmmss")
+                .format(new java.util.Date());
+        try {
+            var files = de.caluga.morpheus.core.uptime.UptimeCsv.writeAll(csvDir, stamp, snapshot(), latSnapshot());
+            csvStatus = "CSV: " + files.get(0).getFileName() + " (+2)";
+        } catch (Exception e) {
+            csvStatus = "CSV-Fehler: " + e.getMessage();
+        }
+    }
 
     /** Probe im festen INTERVAL-Mode; Stats überleben Neustarts (wie LatencyScreen.buildProbe),
      *  der Tracker sowieso (Feld). Der Outcome-Listener speist den Tracker. */
@@ -218,6 +231,7 @@ public class UptimeScreen implements Screen {
                 "conn:%s  topic:%s  interval:%dms  misses:%d  %s  avail:%.1f%%",
                 conn, topic, intervalMs, missThreshold(), isRunning() ? "RUNNING" : "STOPPED", avail);
         if (snap.sendErrors() > 0) header += "  sendErr:" + snap.sendErrors();
+        if (csvStatus != null) header += "  " + csvStatus;
         g.setForegroundColor(TextColor.ANSI.CYAN);
         g.putString(2, 0, trunc(header, width - 3));
     }
