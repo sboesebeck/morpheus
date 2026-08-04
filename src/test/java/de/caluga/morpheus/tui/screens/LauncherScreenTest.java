@@ -105,4 +105,9 @@ public class LauncherScreenTest {
         assertInstanceOf(LatencyScreen.class, LauncherScreen.viewFor("latency", null));
     }
 
+    @Test
+    void uptimeViewRegistered() {
+        assertInstanceOf(UptimeScreen.class, LauncherScreen.viewFor("uptime", null));
+    }
+
 }

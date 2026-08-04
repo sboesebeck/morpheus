@@ -7,6 +7,7 @@ import com.googlecode.lanterna.input.KeyType;
 import de.caluga.morpheus.cli.MorpheusContext;
 import de.caluga.morpheus.core.latency.LatencyProbe;
 import de.caluga.morpheus.core.latency.LatencyStats;
+import de.caluga.morpheus.core.uptime.DriverHelloSource;
 import de.caluga.morpheus.core.uptime.ReplicaSetWatcher;
 import de.caluga.morpheus.core.uptime.UptimeTracker;
 import de.caluga.morpheus.tui.Screen;
@@ -71,11 +72,60 @@ public class UptimeScreen implements Screen {
         if (ownedCtx != null) ownedCtx.close();
     }
 
-    // Backend-Wiring folgt in Task 5 — hier bewusst no-op, damit der Screen ohne Kontext läuft.
-    void toggleRun() { }
-    void stopRun() { }
-    void restartIfRunning() { }
+    void toggleRun() {
+        if (isRunning()) { stopRun(); return; }
+        if (ownedCtx == null || ownedCtx.getMessaging() == null) return;
+        if (tracker == null) tracker = new UptimeTracker(missThreshold(), System::currentTimeMillis);
+        probe = buildProbe();
+        probe.start();
+        if (rsWatch) startWatcher();
+    }
+
+    void stopRun() {
+        if (probe != null) probe.stop();
+        stopWatcher();
+    }
+
+    void restartIfRunning() {
+        if (isRunning()) { probe.stop(); probe = buildProbe(); probe.start(); }
+    }
+
     void writeCsv() { }          // Task 8
+
+    /** Probe im festen INTERVAL-Mode; Stats überleben Neustarts (wie LatencyScreen.buildProbe),
+     *  der Tracker sowieso (Feld). Der Outcome-Listener speist den Tracker. */
+    private LatencyProbe buildProbe() {
+        var d = LatencyProbe.Config.defaults();
+        var cfg = new LatencyProbe.Config(topic, false, LatencyProbe.Mode.INTERVAL, intervalMs, d.rate(),
+                d.rampStartRate(), d.rampStepRate(), d.rampStepMs(), d.rampAbortLossPct(),
+                1, 0, d.timeoutMs(), d.bufferCapacity());
+        var messaging = ownedCtx.getMessaging();
+        LatencyStats stats = probe != null ? probe.stats() : new LatencyStats(cfg.bufferCapacity());
+        final LatencyProbe[] ref = new LatencyProbe[1];
+        LatencyProbe p = new LatencyProbe(cfg, stats,
+                m -> messaging.sendAndAwaitAsync(m, cfg.timeoutMs(), a -> ref[0].handleAnswer(a)),
+                System::nanoTime, System::currentTimeMillis);
+        ref[0] = p;
+        p.setOutcomeListener(new de.caluga.morpheus.core.latency.PingOutcomeListener() {
+            @Override public void onPingComplete(long seq, long sentTs, java.util.Set<String> answeredBy) {
+                tracker.onPingComplete(seq, sentTs, answeredBy);
+            }
+            @Override public void onSendError(long sentTs) {
+                tracker.recordSendError();
+            }
+        });
+        return p;
+    }
+
+    private void startWatcher() {
+        if (watcher != null || ownedCtx == null || ownedCtx.getMorphium() == null) return;
+        watcher = new ReplicaSetWatcher(new DriverHelloSource(ownedCtx.getMorphium()), tracker, 1000);
+        watcher.start();
+    }
+
+    private void stopWatcher() {
+        if (watcher != null) { watcher.stop(); watcher = null; }
+    }
 
     private UptimeTracker.Snapshot snapshot() {
         if (fixed != null) return fixed;
@@ -114,7 +164,10 @@ public class UptimeScreen implements Screen {
         return Result.stay();
     }
 
-    void onRsWatchToggled() { }   // Task 5
+    void onRsWatchToggled() {
+        if (!isRunning()) return;
+        if (rsWatch) startWatcher(); else stopWatcher();
+    }
 
     private int maxScroll() {
         return Math.max(0, snapshot().events().size() - 1);

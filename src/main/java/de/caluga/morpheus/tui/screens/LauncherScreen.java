@@ -21,7 +21,7 @@ public class LauncherScreen implements Screen {
 
     public enum Column { CONNECTIONS, VIEWS }
 
-    private static final List<String> VIEWS = List.of("messages", "topics", "nodes", "status", "graph", "latency");
+    private static final List<String> VIEWS = List.of("messages", "topics", "nodes", "status", "graph", "latency", "uptime");
     private final MorpheusContext ctx;
     private final ConnectionStore store;
     private final ListBox<String> connections;
@@ -198,6 +198,7 @@ public class LauncherScreen implements Screen {
             case "status" -> new StatusScreen(viewCtx);
             case "graph" -> new GraphScreen(viewCtx);
             case "latency" -> new LatencyScreen(viewCtx);
+            case "uptime" -> new UptimeScreen(viewCtx);
             default -> null;
         };
     }
