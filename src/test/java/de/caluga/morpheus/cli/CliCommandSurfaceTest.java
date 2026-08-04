@@ -77,4 +77,17 @@ public class CliCommandSurfaceTest {
         assertTrue(ping.getCommand() instanceof PingCommand);
         assertTrue(ping.getCommandSpec().optionsMap().containsKey("--graphite"));
     }
+
+    @Test
+    void uptimeRegisteredWithOptions() {
+        var subs = cli().getSubcommands();
+        assertTrue(subs.containsKey("uptime"), "uptime must be registered");
+        assertTrue(subs.get("uptime").getCommand() instanceof UptimeCommand);
+        var opts = subs.get("uptime").getCommandSpec().optionsMap();
+        for (String o : new String[]{"--headless", "--duration", "--topic", "--interval", "--misses",
+                "--timeout", "--no-rs-watch", "--json", "--events-csv", "--nodes-csv",
+                "--samples-csv", "--fail-on-outage"}) {
+            assertTrue(opts.containsKey(o), o + " must be present");
+        }
+    }
 }

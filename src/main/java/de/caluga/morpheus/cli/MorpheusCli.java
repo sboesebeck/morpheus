@@ -14,6 +14,7 @@ public class MorpheusCli {
         cl.addSubcommand("graph", new GraphCommand());
         cl.addSubcommand("ping", new PingCommand());
         cl.addSubcommand("latency", new LatencyCommand());
+        cl.addSubcommand("uptime", new UptimeCommand());
         cl.addSubcommand("pong", new PongCommand());
         cl.addSubcommand("send", new SendCommand());
         cl.addSubcommand("watch", new WatchCommand());
