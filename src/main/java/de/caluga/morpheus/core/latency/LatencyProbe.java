@@ -30,6 +30,7 @@ public class LatencyProbe {
     private static final class Pending {
         final long seq, sentNanos, sentTs;
         volatile boolean answered;
+        final java.util.Set<String> answeredBy = new java.util.HashSet<>();
         Pending(long seq, long sentNanos, long sentTs) {
             this.seq = seq; this.sentNanos = sentNanos; this.sentTs = sentTs;
         }
@@ -43,6 +44,7 @@ public class LatencyProbe {
     private final String runId = Long.toHexString(ThreadLocalRandom.current().nextLong());
     private final Map<MorphiumId, Pending> pending;
     private long seq = 0;
+    private volatile PingOutcomeListener outcomeListener;
 
     // scheduling state
     private final java.util.List<Thread> threads = new java.util.ArrayList<>();
@@ -67,6 +69,9 @@ public class LatencyProbe {
             @Override protected boolean removeEldestEntry(Map.Entry<MorphiumId, Pending> e) {
                 if (size() <= cfg.bufferCapacity()) return false;
                 stats.recordPingCompleted(e.getValue().seq, e.getValue().answered);
+                PingOutcomeListener l = outcomeListener;
+                if (l != null) l.onPingComplete(e.getValue().seq, e.getValue().sentTs,
+                        java.util.Set.copyOf(e.getValue().answeredBy));
                 return true;
             }
         };
@@ -74,6 +79,8 @@ public class LatencyProbe {
 
     public LatencyStats stats() { return stats; }
     public Config config() { return cfg; }
+
+    public void setOutcomeListener(PingOutcomeListener l) { this.outcomeListener = l; }
 
     public Msg sendPing() {
         Msg m;
@@ -109,6 +116,8 @@ public class LatencyProbe {
         } catch (RuntimeException e) {
             synchronized (this) { pending.remove(m.getMsgId()); }
             stats.recordSendError();
+            PingOutcomeListener l = outcomeListener;
+            if (l != null) l.onSendError(sentTs);
             return null;
         }
         return m;
@@ -126,8 +135,10 @@ public class LatencyProbe {
             outbound = (double) (recvTs - p.sentTs);
             ret = (p.sentTs + rttMs) - recvTs;
         }
-        stats.recordAnswer(new LatencySample(p.seq, responderName(answer), answer.getSenderHost(),
-                rttMs, outbound, ret, p.sentTs));
+        LatencySample sample = new LatencySample(p.seq, responderName(answer), answer.getSenderHost(),
+                rttMs, outbound, ret, p.sentTs);
+        p.answeredBy.add(sample.responderKey());
+        stats.recordAnswer(sample);
     }
 
     /** Prefers the friendly name the pong responder puts in the answer's mapValue
@@ -146,6 +157,8 @@ public class LatencyProbe {
             Pending p = it.next().getValue();
             if (now - p.sentNanos > cfg.timeoutMs() * 1_000_000L) {
                 stats.recordPingCompleted(p.seq, p.answered);
+                PingOutcomeListener l = outcomeListener;
+                if (l != null) l.onPingComplete(p.seq, p.sentTs, java.util.Set.copyOf(p.answeredBy));
                 if (!p.answered) timedOut++;
                 it.remove();
             }

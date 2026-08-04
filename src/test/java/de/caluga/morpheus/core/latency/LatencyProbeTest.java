@@ -272,4 +272,61 @@ public class LatencyProbeTest {
             assertEquals(2.0, p.actualRate(), 1e-9);     // 20 sends / 10s
         }
     }
+
+    // --- PingOutcomeListener hook (uptime feature) ---
+
+    private record Outcome(long seq, long sentTs, java.util.Set<String> answeredBy) {}
+
+    @Test
+    void outcomeListenerFiresOnSweepWithAnsweredSet() {
+        LatencyProbe p = probe(LatencyProbe.Config.defaults());
+        List<Outcome> outcomes = new ArrayList<>();
+        p.setOutcomeListener((seq, sentTs, answeredBy) -> outcomes.add(new Outcome(seq, sentTs, answeredBy)));
+        Msg ping1 = p.sendPing();
+        p.sendPing();
+        nanos.addAndGet(1_000_000);
+        p.handleAnswer(answerTo(ping1, "pong-1", null));
+        nanos.addAndGet(6_000_000_000L);   // > 5s timeout
+        p.sweep();
+        assertEquals(2, outcomes.size());
+        assertEquals(1, outcomes.get(0).seq());
+        assertEquals(100_000L, outcomes.get(0).sentTs());
+        assertEquals(java.util.Set.of("pong-1/hostX"), outcomes.get(0).answeredBy());
+        assertEquals(java.util.Set.of(), outcomes.get(1).answeredBy());
+    }
+
+    @Test
+    void outcomeListenerFiresOnEviction() {
+        var d = LatencyProbe.Config.defaults();
+        var cfg = new LatencyProbe.Config(d.topic(), false, d.mode(), d.intervalMs(), d.rate(),
+                d.rampStartRate(), d.rampStepRate(), d.rampStepMs(), d.rampAbortLossPct(),
+                d.senderThreads(), 0, d.timeoutMs(), 3);
+        LatencyProbe p = probe(cfg);
+        List<Outcome> outcomes = new ArrayList<>();
+        p.setOutcomeListener((seq, sentTs, answeredBy) -> outcomes.add(new Outcome(seq, sentTs, answeredBy)));
+        for (int i = 0; i < 5; i++) p.sendPing();
+        assertEquals(2, outcomes.size(), "two evicted pings must fire the listener");
+        assertEquals(java.util.Set.of(), outcomes.get(0).answeredBy());
+    }
+
+    @Test
+    void outcomeListenerSendErrorFires() {
+        List<Long> errors = new ArrayList<>();
+        LatencyProbe p = new LatencyProbe(LatencyProbe.Config.defaults(), new LatencyStats(10),
+                m -> { throw new RuntimeException("boom"); }, nanos::get, wall::get);
+        p.setOutcomeListener(new PingOutcomeListener() {
+            @Override public void onPingComplete(long seq, long sentTs, java.util.Set<String> answeredBy) { }
+            @Override public void onSendError(long sentTs) { errors.add(sentTs); }
+        });
+        p.sendPing();
+        assertEquals(List.of(100_000L), errors);
+    }
+
+    @Test
+    void noListenerBehavesAsBefore() {
+        LatencyProbe p = probe(LatencyProbe.Config.defaults());
+        p.sendPing();
+        nanos.addAndGet(6_000_000_000L);
+        assertEquals(1, p.sweep());   // must not NPE without a listener
+    }
 }
