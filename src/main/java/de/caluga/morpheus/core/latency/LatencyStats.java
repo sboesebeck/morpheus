@@ -21,6 +21,9 @@ public class LatencyStats {
 
     private static final class Lifetime {
         long count, firstSeenSeq;
+        // latency aggregates track non-warmup samples only; count keeps counting everything
+        // so loss% (delivery) stays correct even when a warmup window is configured
+        long latCount;
         double last, min = Double.MAX_VALUE, max, sum;
     }
 
@@ -39,10 +42,13 @@ public class LatencyStats {
             return l;
         });
         lt.count++;
-        lt.last = s.rttMs();
-        lt.min = Math.min(lt.min, s.rttMs());
-        lt.max = Math.max(lt.max, s.rttMs());
-        lt.sum += s.rttMs();
+        if (!s.warmup()) {
+            lt.latCount++;
+            lt.last = s.rttMs();
+            lt.min = Math.min(lt.min, s.rttMs());
+            lt.max = Math.max(lt.max, s.rttMs());
+            lt.sum += s.rttMs();
+        }
     }
 
     public synchronized void recordPingCompleted(long seq, boolean answered) {
@@ -56,7 +62,10 @@ public class LatencyStats {
 
     public synchronized Snapshot snapshot() {
         Map<String, List<LatencySample>> window = new HashMap<>();
-        for (LatencySample s : ring) window.computeIfAbsent(s.responderKey(), k -> new ArrayList<>()).add(s);
+        for (LatencySample s : ring) {
+            if (s.warmup()) continue;
+            window.computeIfAbsent(s.responderKey(), k -> new ArrayList<>()).add(s);
+        }
 
         List<ResponderStats> out = new ArrayList<>();
         for (var e : responders.entrySet()) {
@@ -69,13 +78,15 @@ public class LatencyStats {
             double expected = Math.max(1, lastSeq - lt.firstSeenSeq + 1);
             double loss = 100.0 * Math.max(0, 1 - (double) lt.count / expected);
             out.add(new ResponderStats(e.getKey(), lt.count, loss, lt.last,
-                    lt.count == 0 ? 0 : lt.min, lt.count == 0 ? 0 : lt.sum / lt.count, lt.max,
+                    lt.latCount == 0 ? 0 : lt.min, lt.latCount == 0 ? 0 : lt.sum / lt.latCount, lt.max,
                     pct(rtts, 50), pct(rtts, 90), pct(rtts, 99), jitter,
                     mean(w, true), mean(w, false)));
         }
 
         long[] histogram = new long[BUCKET_BOUNDS.length + 1];
-        for (LatencySample s : ring) histogram[bucket(s.rttMs())]++;
+        for (LatencySample s : ring) {
+            if (!s.warmup()) histogram[bucket(s.rttMs())]++;
+        }
 
         double loss = completed == 0 ? 0 : 100.0 * timeouts / completed;
         return new Snapshot(pingsSent, completed, timeouts, sendErrors, loss,

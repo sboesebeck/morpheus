@@ -169,6 +169,34 @@ What you are looking at:
 
 ---
 
+## `latency` — RTT graph / load test
+
+Live round-trip-time view for the message bus: a Braille time series (or
+histogram, toggle with `h`) of every answered ping, plus a per-responder
+percentile table (`cnt`, `loss%`, `avg`, `p50/p90/p99`, jitter and the
+approximate `out≈`/`ret≈` split). Point it at a `pong` responder, an
+application topic, or the built-in status listener (`--status`). Red `×`
+marks are timeouts; white dotted vertical lines mark ramp steps.
+
+The bottom line always shows the **current** payload/thread settings, e.g.
+`p/P payload:10k  t/T threads:4`.
+
+**Keys:**
+
+- `s` — start / stop the probe
+- `m` — cycle send mode: interval → fixed-rate → ramp
+- `+` / `-` — adjust the current mode's knob (interval ms / rate msgs/s / ramp step)
+- `p` / `P` — smaller / bigger ping payload (0, 1k, 10k, 100k)
+- `t` / `T` — fewer / more sender threads (1, 2, 4, 8)
+- `h` — toggle histogram vs. time series
+- `e` — export the raw sample series as CSV into the working directory
+  (`latency-samples-<timestamp>.csv`, one row per answered ping) — the file
+  name is confirmed in the bottom line
+- `Esc` back, `q` quit
+
+Changing mode, payload or threads restarts a running probe; collected stats
+are kept.
+
 ## `uptime` — Uptime/failover monitor over pong responders
 
 Timeline, availability statistics, and event log tracking node state changes,

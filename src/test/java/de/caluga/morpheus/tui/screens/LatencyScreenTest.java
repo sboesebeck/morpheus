@@ -92,6 +92,61 @@ public class LatencyScreenTest {
     }
 
     @Test
+    void lowercaseKeysDecreaseAndClampAtBounds() {
+        LatencyScreen s = new LatencyScreen(snap(0));
+        s.onKey(KeyStroke.fromString("p"));                     // already at minimum
+        assertEquals(0, s.payloadBytes());
+        s.onKey(KeyStroke.fromString("t"));
+        assertEquals(1, s.senderThreads());
+        s.onKey(KeyStroke.fromString("P"));
+        s.onKey(KeyStroke.fromString("p"));                     // up then down again
+        assertEquals(0, s.payloadBytes());
+        for (int i = 0; i < 10; i++) s.onKey(KeyStroke.fromString("T"));   // clamp at maximum
+        assertEquals(8, s.senderThreads());
+        s.onKey(KeyStroke.fromString("t"));
+        assertEquals(4, s.senderThreads());
+    }
+
+    @Test
+    void helpLineShowsCurrentPayloadAndThreads() throws Exception {
+        LatencyScreen s = new LatencyScreen(snap(5));
+        s.onKey(KeyStroke.fromString("P"));
+        s.onKey(KeyStroke.fromString("T"));
+        DefaultVirtualTerminal vt = terminal(120, 30);
+        s.draw(vt.newTextGraphics());
+        String text = textOf(vt);
+        assertTrue(text.contains("payload:1k"), "expected payload value in help line, got:\n" + text);
+        assertTrue(text.contains("threads:2"), "expected thread count in help line, got:\n" + text);
+    }
+
+    @Test
+    void exportWritesSamplesCsv(@org.junit.jupiter.api.io.TempDir java.nio.file.Path dir) throws Exception {
+        LatencyScreen s = new LatencyScreen(snap(10));
+        s.setExportDir(dir);
+        s.onKey(KeyStroke.fromString("e"));
+        assertNotNull(s.exportNote());
+        assertTrue(s.exportNote().startsWith("exported 10 samples"), s.exportNote());
+        try (var files = java.nio.file.Files.list(dir)) {
+            var written = files.toList();
+            assertEquals(1, written.size());
+            String content = java.nio.file.Files.readString(written.get(0));
+            assertTrue(content.startsWith("seq,sentTs,responder,host,rttMs"));
+            assertEquals(11, content.strip().split("\n").length);   // header + 10 samples
+        }
+    }
+
+    @Test
+    void exportWithoutSamplesOnlyNotes(@org.junit.jupiter.api.io.TempDir java.nio.file.Path dir) throws Exception {
+        LatencyScreen s = new LatencyScreen(snap(0));
+        s.setExportDir(dir);
+        s.onKey(KeyStroke.fromString("e"));
+        assertTrue(s.exportNote().contains("nothing to export"), s.exportNote());
+        try (var files = java.nio.file.Files.list(dir)) {
+            assertEquals(0, files.count());
+        }
+    }
+
+    @Test
     void quitAndPop() {
         LatencyScreen s = new LatencyScreen(snap(0));
         assertEquals(de.caluga.morpheus.tui.Screen.Result.Kind.QUIT, s.onKey(KeyStroke.fromString("q")).kind());

@@ -19,6 +19,7 @@ public class MorpheusCli {
         cl.addSubcommand("send", new SendCommand());
         cl.addSubcommand("watch", new WatchCommand());
         cl.addSubcommand("config", new ConfigCommands());
+        cl.addSubcommand("help", new CommandLine.HelpCommand());
         return cl;
     }
 

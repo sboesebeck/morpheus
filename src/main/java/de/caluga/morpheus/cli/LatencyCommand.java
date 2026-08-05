@@ -38,6 +38,12 @@ public class LatencyCommand implements Callable<Integer> {
     Double rate;
     @Option(names = {"--ramp"}, description = "Ramp mode start:step:stepSecs, e.g. 50:50:10.")
     String ramp;
+    @Option(names = {"--ramp-abort-loss"}, defaultValue = "50.0",
+            description = "Abort ramp when a step's loss %% exceeds this (default: ${DEFAULT-VALUE}).")
+    double rampAbortLoss;
+    @Option(names = {"--buffer"}, defaultValue = "10000",
+            description = "Sample/pending buffer capacity (default: ${DEFAULT-VALUE}).")
+    int buffer;
     @Option(names = {"--threads"}, defaultValue = "1", description = "Sender threads (default: ${DEFAULT-VALUE}).")
     int threads;
     @Option(names = {"--payload"}, defaultValue = "0", description = "Ping padding bytes (default: ${DEFAULT-VALUE}).")
@@ -56,6 +62,12 @@ public class LatencyCommand implements Callable<Integer> {
     String prefix;
     @Option(names = {"--max-loss"}, description = "Exit non-zero when total loss %% exceeds this.")
     Double maxLoss;
+    @Option(names = {"--samples"}, description = "Write the raw sample series (one CSV row per answered ping) to this file.")
+    String samplesFile;
+    @Option(names = {"--warmup"}, defaultValue = "0",
+            description = "Exclude pings sent in the first N seconds from latency stats (JIT/connection warmup); "
+                    + "samples stay in the --samples CSV, flagged in the warmup column (default: ${DEFAULT-VALUE}).")
+    int warmupSecs;
 
     @Spec
     CommandSpec spec;
@@ -64,8 +76,8 @@ public class LatencyCommand implements Callable<Integer> {
      *  save for a warning) in the interactive TUI branch where the screen's own key bindings
      *  ('m', '+/-', 'P', 'T', ...) control these settings instead. */
     private static final String[] HEADLESS_ONLY_OPTIONS = {
-        "--interval", "--rate", "--ramp", "--threads", "--payload",
-        "--timeout", "--duration", "--json", "--csv", "--graphite", "--max-loss"
+        "--interval", "--rate", "--ramp", "--ramp-abort-loss", "--buffer", "--threads", "--payload",
+        "--timeout", "--duration", "--json", "--csv", "--graphite", "--max-loss", "--samples", "--warmup"
     };
 
     @Override
@@ -97,6 +109,11 @@ public class LatencyCommand implements Callable<Integer> {
         if (json) System.out.println(reportJson(snap));
         else if (csv) System.out.println(reportCsv(snap));
         else printThemed(ctx, snap, probe);
+        if (samplesFile != null) {
+            var written = de.caluga.morpheus.core.latency.LatencyCsv.writeSamples(
+                    java.nio.file.Path.of(samplesFile), snap.samples());
+            System.err.println("[latency] wrote " + snap.samples().size() + " samples to " + written);
+        }
         if (graphite != null) pushGraphite(snap);
         return maxLoss != null && snap.lossPct() > maxLoss ? 2 : 0;
     }
@@ -128,8 +145,8 @@ public class LatencyCommand implements Callable<Integer> {
         return new LatencyProbe.Config(t, status, mode,
                 intervalMs != null ? intervalMs : d.intervalMs(),
                 rate != null ? rate : d.rate(),
-                rampStart, rampStep, rampStepMs, d.rampAbortLossPct(),
-                threads, payload, timeoutMs, d.bufferCapacity());
+                rampStart, rampStep, rampStepMs, rampAbortLoss,
+                threads, payload, timeoutMs, buffer, warmupSecs * 1000L);
     }
 
     private ParameterException rampParamError() {
@@ -148,8 +165,8 @@ public class LatencyCommand implements Callable<Integer> {
             if (pr.hasMatchedOption(opt)) { any = true; break; }
         }
         if (any) {
-            ctx.pr("[warning]--interval/--rate/--ramp/--threads/--payload/--timeout/--duration/--json/"
-                    + "--csv/--graphite/--max-loss are ignored without --headless[r]");
+            ctx.pr("[warning]--interval/--rate/--ramp/--ramp-abort-loss/--buffer/--threads/--payload/"
+                    + "--timeout/--duration/--json/--csv/--graphite/--max-loss/--samples/--warmup are ignored without --headless[r]");
         }
     }
 

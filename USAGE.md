@@ -35,17 +35,24 @@ Global options must appear **before** the subcommand.
 
 ### Available Subcommands
 
-- **`status`** - Get status from all connected Morphium nodes
+- **`messages`** - Live messaging monitor (TUI)
+- **`topics`** - Per-topic message/answer aggregates (TUI)
+- **`nodes`** - Sender → answerer pair activity (TUI)
+- **`status`** - Live node roster / status pings (TUI)
+- **`graph`** - Live message-flow graph (TUI)
+- **`ping`** - One-shot status ping of all messaging nodes (scriptable)
+- **`latency`** - Message-bus latency monitor / load test (TUI or `--headless`)
+- **`pong`** - Latency echo responder
 - **`send`** - Send messages through Morphium messaging
-- **`monitor`** - Real-time message monitoring
 - **`watch`** - Watch the MongoDB change stream
 - **`config`** - Interactive configuration management (connections, themes, proxy)
 
-Every subcommand supports `--help` for detailed inline help:
+Every subcommand supports `--help` for detailed inline help, and there is an
+equivalent `help` subcommand:
 ```bash
-./run.sh status --help
-./run.sh send --help
-./run.sh config --help
+./run.sh latency --help
+./run.sh help latency
+./run.sh help            # overview of all subcommands
 ```
 
 ### Examples
@@ -195,7 +202,7 @@ theme.dark.gradient3=purple
 
 - `-c <name>` - Select connection by name
 - `--theme <name>` - Select theme
-- `--messaging single|multi` - Select messaging implementation
+- `--messaging single|multi|dual` - Select messaging implementation
 - `-v` / `--verbose` - Show detailed startup information
 
 ### Examples
@@ -219,7 +226,7 @@ theme.dark.gradient3=purple
 
 ### Messaging Implementations
 
-Morpheus supports two messaging implementations:
+Morpheus supports three messaging implementations:
 
 1. **SingleCollectionMessaging** (default)
    - All messages in one collection
@@ -230,6 +237,12 @@ Morpheus supports two messaging implementations:
    - Separate collection per message type
    - Better for high-volume systems
    - More complex setup
+
+3. **DualChannelMessaging** (beta)
+   - Same single-collection layout as Standard for broadcast/topic traffic
+   - Adds a second, per-recipient collection + change-stream cursor just for directed messages/answers
+   - Targets request/reply throughput without Multi's per-topic collection split
+   - Requires all participants on the queue to run `dual` - mixing with `single`/`multi` nodes breaks answer delivery
 
 **Configure default:**
 ```properties
@@ -354,7 +367,10 @@ counted as a loss before the summary is printed).
 - `--interval <ms>` - Ping interval in ms, default send mode (default: 1000)
 - `--rate <n>` - Fixed send rate in msgs/s (enables load mode)
 - `--ramp <start:step:stepSecs>` - Ramp mode, e.g. `50:50:10` (start at 50/s,
-  +50/s every 10s; aborts automatically past ~50% loss)
+  +50/s every 10s)
+- `--ramp-abort-loss <pct>` - Abort the ramp when a step's loss % exceeds
+  this (default: 50)
+- `--buffer <n>` - Sample/pending buffer capacity (default: 10000)
 - `--threads <n>` - Sender threads (default: 1) — raise this if the achieved
   rate falls well short of `--rate`/`--ramp` on one thread
 - `--payload <bytes>` - Ping padding bytes (default: 0)
@@ -365,10 +381,26 @@ counted as a loss before the summary is printed).
 - `--graphite <host[:port]>` / `--prefix <name>` - Push per-responder
   metrics (`avg`, `p50`, `p90`, `p99`, `loss`) to Graphite
 - `--max-loss <pct>` - Exit non-zero when total loss % exceeds this (for CI)
+- `--samples <file>` - Write the raw sample series to a CSV file (one row per
+  answered ping: `seq,sentTs,responder,host,rttMs,outboundMs,returnMs`) —
+  the data series for plotting/analysis, complementing the aggregated
+  `--csv`/`--json` summary; the series length is capped by `--buffer`
 
 `pong` options: `--topic <name>` (must match `latency --topic`), `--name
 <name>` (responder label, default: hostname-pid) — this name appears as the
-responder key in `latency` output instead of the internal sender id.
+responder key in `latency` output instead of the internal sender id — and
+`--payload <bytes>` (default: 0) to pad the answers, so the return leg
+carries the same kind of load as `latency --payload` puts on the outbound
+leg.
+
+**Multiple responders / multi-node `--status`:** with the default
+`SingleCollectionMessaging`, every answer to a ping is recorded, so several
+pong responders (or all nodes in `--status` mode) each show up as their own
+row. With `implementation: multi` (`MultiCollectionMessaging`) on morphium
+6.2.x and older, morphium delivers only the *first* answer per ping to the
+sender's callback — the per-responder breakdown then only ever shows the
+fastest responder, and additional answers are silently dropped (fixed in
+morphium 6.3.0).
 
 **The `out≈`/`ret≈` split:** when the responder embeds its receive
 timestamp, the round trip is split into an outbound (sender → responder) and

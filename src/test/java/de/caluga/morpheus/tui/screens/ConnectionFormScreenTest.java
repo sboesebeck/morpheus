@@ -70,6 +70,26 @@ public class ConnectionFormScreenTest {
     }
 
     @Test
+    void spaceCyclesMessagingImplementationThroughAllThreeOptions() {
+        ConnectionSpec existing = new ConnectionSpec("prod", List.of("h:27017"), "mydb", "admin",
+                "u", "pw", "single", "msg", false, "127.0.0.1", 5555);
+        ConnectionFormScreen form = new ConnectionFormScreen(ctx(), existing);
+        while (form.focusIndex() < form.messagingRow()) {
+            form.onKey(new KeyStroke(KeyType.Tab));
+        }
+        KeyStroke space = new KeyStroke(' ', false, false);
+
+        form.onKey(space);
+        assertEquals("multi", form.toSpec().messagingImpl());
+
+        form.onKey(space);
+        assertEquals("dual", form.toSpec().messagingImpl());
+
+        form.onKey(space);
+        assertEquals("single", form.toSpec().messagingImpl());
+    }
+
+    @Test
     void rendersWithoutError() {
         ConnectionFormScreen form = new ConnectionFormScreen(ctx(), null);
         DefaultVirtualTerminal vt = new DefaultVirtualTerminal();

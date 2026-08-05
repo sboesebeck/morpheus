@@ -65,9 +65,27 @@ public class CliCommandSurfaceTest {
         var spec = cli().getSubcommands().get("latency").getCommandSpec();
         for (String opt : new String[]{"--headless", "--topic", "--status", "--interval", "--rate",
                 "--ramp", "--threads", "--payload", "--timeout", "--duration",
-                "--json", "--csv", "--graphite", "--max-loss"}) {
+                "--json", "--csv", "--graphite", "--max-loss", "--ramp-abort-loss", "--buffer",
+                "--samples"}) {
             assertTrue(spec.optionsMap().containsKey(opt), opt + " missing");
         }
+    }
+
+    @Test
+    void helpSubcommandRegistered() {
+        var subs = cli().getSubcommands();
+        assertTrue(subs.containsKey("help"), "help subcommand must be registered");
+        var out = new java.io.StringWriter();
+        var cl = cli();
+        cl.setOut(new java.io.PrintWriter(out));
+        assertEquals(0, cl.execute("help", "latency"));
+        assertTrue(out.toString().contains("--headless"), "help latency must print the options");
+    }
+
+    @Test
+    void pongPayloadOptionPresent() {
+        var spec = cli().getSubcommands().get("pong").getCommandSpec();
+        assertTrue(spec.optionsMap().containsKey("--payload"), "--payload missing on pong");
     }
 
     @Test

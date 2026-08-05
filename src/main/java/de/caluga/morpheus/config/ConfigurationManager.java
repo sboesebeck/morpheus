@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.util.HashSet;
 import java.util.Properties;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.UUID;
 
 /**
@@ -148,7 +149,7 @@ public class ConfigurationManager {
     }
 
     public Set<String> getAvailableConnections() {
-        Set<String> connections = new HashSet<>();
+        Set<String> connections = new TreeSet<>();
         for (Object key : properties.keySet()) {
             if (key.toString().startsWith("morphium.")) {
                 String connName = key.toString().split("\\.")[1];
@@ -168,6 +169,10 @@ public class ConfigurationManager {
 
     public Properties getProperties() {
         return properties;
+    }
+
+    public String getConfigFilePath() {
+        return configFilePath;
     }
 
     public boolean isVerbose() {

@@ -2,20 +2,18 @@ package de.caluga.morpheus.tui.screens;
 
 import com.googlecode.lanterna.TextColor;
 import com.googlecode.lanterna.graphics.TextGraphics;
-import com.googlecode.lanterna.input.KeyStroke;
-import com.googlecode.lanterna.input.KeyType;
-import de.caluga.morpheus.tui.Screen;
+import static de.caluga.morpheus.tui.TuiText.shortId;
+import static de.caluga.morpheus.tui.TuiText.trunc;
 
 import java.util.List;
 
 /** The listener nodes subscribed to one topic (id + host), scrollable. Pure render, no backend. */
-public class TopicDetailScreen implements Screen {
+public class TopicDetailScreen extends ScrollableDetailScreen {
 
     public record Listener(String id, String host) {}
 
     private final String topic;
     private final List<Listener> listeners;
-    private int scroll = 0;
 
     public TopicDetailScreen(String topic, List<Listener> listeners) {
         this.topic = topic;
@@ -24,16 +22,6 @@ public class TopicDetailScreen implements Screen {
 
     String topic() { return topic; }                 // test seam
     List<Listener> listeners() { return listeners; } // test seam
-
-    @Override
-    public Result onKey(KeyStroke key) {
-        if (key == null) return Result.stay();
-        if (key.getCharacter() != null && key.getCharacter() == 'q') return Result.quit();
-        if (key.getKeyType() == KeyType.Escape) return Result.pop();
-        if (key.getKeyType() == KeyType.ArrowDown) { scroll++; return Result.stay(); }
-        if (key.getKeyType() == KeyType.ArrowUp) { if (scroll > 0) scroll--; return Result.stay(); }
-        return Result.stay();
-    }
 
     @Override
     public void draw(TextGraphics g) {
@@ -61,18 +49,5 @@ public class TopicDetailScreen implements Screen {
 
         g.setForegroundColor(TextColor.ANSI.DEFAULT);
         g.putString(2, height - 1, "[↑↓] scroll   [esc] zurück   [q] quit");
-    }
-
-    /** Shortens an auto-generated id (UUID / object id) to head…tail; keeps short names as-is. */
-    private String shortId(String id) {
-        if (id == null) return "?";
-        if (id.length() <= 16) return id;
-        return id.substring(0, 6) + "…" + id.substring(id.length() - 4);
-    }
-
-    private String trunc(String s, int max) {
-        if (s == null) return "";
-        if (max <= 1) return "";
-        return s.length() <= max ? s : s.substring(0, max - 1) + "…";
     }
 }

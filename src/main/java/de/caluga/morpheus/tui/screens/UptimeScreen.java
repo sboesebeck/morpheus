@@ -111,7 +111,7 @@ public class UptimeScreen implements Screen {
         var d = LatencyProbe.Config.defaults();
         var cfg = new LatencyProbe.Config(topic, false, LatencyProbe.Mode.INTERVAL, intervalMs, d.rate(),
                 d.rampStartRate(), d.rampStepRate(), d.rampStepMs(), d.rampAbortLossPct(),
-                1, 0, d.timeoutMs(), d.bufferCapacity());
+                1, 0, d.timeoutMs(), d.bufferCapacity(), d.warmupMs());
         var messaging = ownedCtx.getMessaging();
         LatencyStats stats = probe != null ? probe.stats() : new LatencyStats(cfg.bufferCapacity());
         final LatencyProbe[] ref = new LatencyProbe[1];

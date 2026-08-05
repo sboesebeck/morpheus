@@ -32,7 +32,7 @@ public class RootCommand implements Callable<Integer> {
             description = "Messaging implementation override: ${COMPLETION-CANDIDATES}.")
     MessagingImpl messaging;
 
-    public enum MessagingImpl { single, multi }
+    public enum MessagingImpl { single, multi, dual }
 
     @Spec
     CommandSpec spec;

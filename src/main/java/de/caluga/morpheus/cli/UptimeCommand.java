@@ -76,7 +76,7 @@ public class UptimeCommand implements Callable<Integer> {
         var d = LatencyProbe.Config.defaults();
         var cfg = new LatencyProbe.Config(topic, false, LatencyProbe.Mode.INTERVAL, intervalMs, d.rate(),
                 d.rampStartRate(), d.rampStepRate(), d.rampStepMs(), d.rampAbortLossPct(),
-                1, 0, timeoutMs, d.bufferCapacity());
+                1, 0, timeoutMs, d.bufferCapacity(), d.warmupMs());
         UptimeTracker tracker = new UptimeTracker(misses, System::currentTimeMillis);
         LatencyStats stats = new LatencyStats(cfg.bufferCapacity());
         final LatencyProbe[] ref = new LatencyProbe[1];

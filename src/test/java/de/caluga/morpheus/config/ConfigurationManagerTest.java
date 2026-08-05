@@ -74,6 +74,18 @@ public class ConfigurationManagerTest {
     }
 
     @Test
+    void availableConnectionsAreSortedAlphabetically() throws Exception {
+        String path = writeConfig("""
+            morphium.zebra.database=z
+            morphium.apple.database=a
+            morphium.mango.database=m
+            """);
+        ConfigurationManager cm = new ConfigurationManager(path);
+        assertEquals(java.util.List.of("apple", "mango", "zebra"),
+                new java.util.ArrayList<>(cm.getAvailableConnections()));
+    }
+
+    @Test
     void setDefaultConnectionPersistsAndClears() throws Exception {
         String path = writeConfig("""
             morphium.prod.database=p

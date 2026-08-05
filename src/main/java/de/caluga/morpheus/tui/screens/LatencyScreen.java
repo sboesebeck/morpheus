@@ -5,6 +5,7 @@ import com.googlecode.lanterna.graphics.TextGraphics;
 import com.googlecode.lanterna.input.KeyStroke;
 import com.googlecode.lanterna.input.KeyType;
 import de.caluga.morpheus.cli.MorpheusContext;
+import de.caluga.morpheus.core.latency.LatencyCsv;
 import de.caluga.morpheus.core.latency.LatencyProbe;
 import de.caluga.morpheus.core.latency.LatencySample;
 import de.caluga.morpheus.core.latency.LatencyStats;
@@ -41,6 +42,9 @@ public class LatencyScreen implements Screen {
     private int payloadIdx = 0;
     private int threadIdx = 0;
     private boolean histogram = false;
+    private java.nio.file.Path exportDir = java.nio.file.Path.of(".");
+    private String exportNote;
+    private long exportNoteAt;
 
     public LatencyScreen(MorpheusContext ctx) {
         this(ctx, LatencyProbe.Config.defaults().topic(), false);
@@ -66,6 +70,8 @@ public class LatencyScreen implements Screen {
     LatencyProbe.Mode mode() { return mode; }
     int payloadBytes() { return PAYLOADS[payloadIdx]; }
     int senderThreads() { return THREADS[threadIdx]; }
+    void setExportDir(java.nio.file.Path dir) { exportDir = dir; }   // test seam
+    String exportNote() { return exportNote; }
 
     @Override
     public void onClose() {
@@ -89,13 +95,16 @@ public class LatencyScreen implements Screen {
         }
         return new LatencyProbe.Config(topic, statusMode, mode, intervalMs, rate,
                 50, rampStep, 10_000, 50.0, senderThreads(), payloadBytes(),
-                d.timeoutMs(), d.bufferCapacity());
+                d.timeoutMs(), d.bufferCapacity(), d.warmupMs());
     }
 
-    /** Encapsulates the send strategy so a later task (poppydb wiring, Task 8) can swap it in one
-     *  place. Currently uses sendAndAwaitAsync's per-message callback; if that turns out to block or
-     *  leak waiters, replace the body with messaging.sendMessage(msg) + a topic listener that forwards
-     *  answers (getInAnswerTo() != null) to probeRef.handleAnswer and returns null.
+    /** Send strategy: sendAndAwaitAsync's per-message callback. A swap to sendMessage + own topic
+     *  listener was considered and rejected — it would only matter if messaging itself leaked
+     *  waiters, and a latency tool measuring a fundamentally broken bus is moot anyway.
+     *  Callback semantics differ per messaging implementation: SingleCollectionMessaging keeps the
+     *  callback registered until timeout, so every answer (multiple pongs, --status with N nodes)
+     *  is delivered; MultiCollectionMessaging on morphium <= 6.2.x deregisters after the FIRST
+     *  answer per ping, so only the fastest responder is sampled there (fixed in morphium 6.3.0).
      *  Binds to the specific probe instance via probeRef (not the outer mutable field) so in-flight
      *  answers for pings sent by an OLD probe are never misdelivered to a NEW one after a restart. */
     private Consumer<Msg> wireSender(MorphiumMessaging messaging, LatencyProbe.Config cfg, LatencyProbe[] probeRef) {
@@ -126,9 +135,12 @@ public class LatencyScreen implements Screen {
             case 'q' -> { return Result.quit(); }
             case 's' -> toggleRun();
             case 'h' -> histogram = !histogram;
+            case 'e' -> exportCsv();
             case 'm' -> { mode = LatencyProbe.Mode.values()[(mode.ordinal() + 1) % LatencyProbe.Mode.values().length]; restartIfRunning(); }
-            case 'P' -> { payloadIdx = (payloadIdx + 1) % PAYLOADS.length; restartIfRunning(); }
-            case 'T' -> { threadIdx = (threadIdx + 1) % THREADS.length; restartIfRunning(); }
+            case 'P' -> { if (payloadIdx < PAYLOADS.length - 1) { payloadIdx++; restartIfRunning(); } }
+            case 'p' -> { if (payloadIdx > 0) { payloadIdx--; restartIfRunning(); } }
+            case 'T' -> { if (threadIdx < THREADS.length - 1) { threadIdx++; restartIfRunning(); } }
+            case 't' -> { if (threadIdx > 0) { threadIdx--; restartIfRunning(); } }
             case '+' -> { adjust(+1); restartIfRunning(); }
             case '-' -> { adjust(-1); restartIfRunning(); }
             default -> { }
@@ -142,6 +154,29 @@ public class LatencyScreen implements Screen {
             case FIXED_RATE -> rate = Math.max(1, rate + dir * 10);
             case RAMP -> rampStep = Math.max(10, rampStep + dir * 10);
         }
+    }
+
+    /** 'e': dump the raw sample series (not the aggregated table) to a timestamped CSV
+     *  in the working directory, so a run can be re-plotted/analyzed offline. */
+    private void exportCsv() {
+        List<LatencySample> samples = snapshot().samples();
+        if (samples.isEmpty()) {
+            note("nothing to export - no samples yet");
+            return;
+        }
+        String name = "latency-samples-" + java.time.LocalDateTime.now()
+                .format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")) + ".csv";
+        try {
+            java.nio.file.Path written = LatencyCsv.writeSamples(exportDir.resolve(name), samples);
+            note("exported " + samples.size() + " samples to " + written);
+        } catch (Exception e) {
+            note("export failed: " + e.getMessage());
+        }
+    }
+
+    private void note(String text) {
+        exportNote = text;
+        exportNoteAt = System.currentTimeMillis();
     }
 
     private LatencyStats.Snapshot snapshot() {
@@ -187,8 +222,15 @@ public class LatencyScreen implements Screen {
         if (!empty) drawTable(g, 2, tableTop, width - 3, maxTableDataRows, snap);
 
         g.setForegroundColor(TextColor.ANSI.DEFAULT);
-        g.putString(2, keyHelpRow, trunc(
-                "s start/stop  m mode  +/- rate  P payload  T threads  h histogram  q back", width - 3));
+        String help = exportNote != null && System.currentTimeMillis() - exportNoteAt < 5000
+                ? exportNote
+                : String.format("s start/stop  m mode  +/- rate  p/P payload:%s  t/T threads:%d  "
+                        + "h histogram  e export csv  q back", fmtBytes(payloadBytes()), senderThreads());
+        g.putString(2, keyHelpRow, trunc(help, width - 3));
+    }
+
+    private static String fmtBytes(int bytes) {
+        return bytes >= 1024 ? (bytes / 1024) + "k" : String.valueOf(bytes);
     }
 
     private void drawHeader(TextGraphics g, int width, LatencyStats.Snapshot snap) {
