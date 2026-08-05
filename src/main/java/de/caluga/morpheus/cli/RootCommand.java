@@ -56,6 +56,12 @@ public class RootCommand implements Callable<Integer> {
         if (context != null) context.close();
     }
 
+    /** Test seam: inject a context (e.g. backed by a @TempDir config file) instead of letting
+     * {@link #context()} lazily build one from the real default config path. */
+    synchronized void setContextForTest(MorpheusContext ctx) {
+        this.context = ctx;
+    }
+
     @Override
     public Integer call() {
         de.caluga.morpheus.tui.MorpheusTui.launch(context());

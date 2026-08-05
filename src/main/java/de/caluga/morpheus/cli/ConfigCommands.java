@@ -7,6 +7,7 @@ import picocli.CommandLine.Parameters;
 import picocli.CommandLine.ParentCommand;
 
 import java.io.BufferedReader;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.Set;
 import java.util.concurrent.Callable;
@@ -40,21 +41,46 @@ public class ConfigCommands implements Callable<Integer> {
 
     // ── input helpers ─────────────────────────────────────────────────────────
 
+    // One reader per underlying System.in, not one per call: a fresh BufferedReader wraps
+    // System.in with its own internal read-ahead buffer, so a multi-question flow (e.g. 'config
+    // ssl config's three questions) that discarded and recreated the reader after every line
+    // would silently lose whatever the first reader had already buffered past that line - fine
+    // interactively (a human's terminal never has more than one line available at a time), but
+    // it meant every later question in the same flow silently fell back to its default whenever
+    // stdin was piped/pre-supplied all at once (scripts, tests) - previously untested and
+    // unnoticed for exactly that reason. Rebuilt whenever System.in itself changes (identity
+    // check, not just "is it null") so tests that System.setIn() a fresh stream per test still
+    // get a reader bound to THAT stream, not a stale one left over from an earlier test/call.
+    private static InputStream stdinRef;
+    private static BufferedReader stdinReader;
+
+    private static synchronized BufferedReader stdin() {
+        if (stdinReader == null || stdinRef != System.in) {
+            stdinRef = System.in;
+            stdinReader = new BufferedReader(new InputStreamReader(stdinRef));
+        }
+        return stdinReader;
+    }
+
     private static String readLine(String defaultValue) throws Exception {
-        BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
-        String line = reader.readLine();
+        String line = stdin().readLine();
         return (line == null || line.trim().isEmpty()) ? defaultValue : line.trim();
     }
 
     private static String readLineOrKeep(String currentValue) throws Exception {
-        BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
-        String line = reader.readLine();
+        String line = stdin().readLine();
         return (line == null || line.trim().isEmpty()) ? currentValue : line.trim();
     }
 
     private static String readPassword() throws Exception {
-        BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
-        return reader.readLine();
+        return stdin().readLine();
+    }
+
+    /** Accepts yes/y/true/1 (case-insensitive) as "yes" - anything else, including empty, is "no". */
+    private static boolean parseYesNo(String input) {
+        if (input == null) return false;
+        String v = input.trim().toLowerCase();
+        return v.equals("yes") || v.equals("y") || v.equals("true") || v.equals("1");
     }
 
     // ── subcommands ───────────────────────────────────────────────────────────
@@ -136,7 +162,7 @@ public class ConfigCommands implements Callable<Integer> {
             for (String h : hosts) if (!h.trim().isEmpty()) hostList.add(h.trim());
             new de.caluga.morpheus.config.ConnectionStore(cm).save(
                 new de.caluga.morpheus.config.ConnectionSpec(name, hostList, database, authDb,
-                    username, password, messagingImpl, queueName, false, "127.0.0.1", 5555, false, false));
+                    username, password, messagingImpl, queueName, false, "127.0.0.1", 5555, false, false, false));
 
             ctx.pr("");
             ctx.pr("[good]✓ Connection '" + name + "' saved successfully![r]");
@@ -200,10 +226,12 @@ public class ConfigCommands implements Callable<Integer> {
             boolean useSSL = cm.getProperty("morphium." + name + ".useSSL", "false").equals("true");
             boolean sslInvalidHostnameAllowed =
                 cm.getProperty("morphium." + name + ".sslInvalidHostNameAllowed", "false").equals("true");
+            boolean sslTrustAllCertificates =
+                cm.getProperty("morphium." + name + ".sslTrustAllCertificates", "false").equals("true");
             new de.caluga.morpheus.config.ConnectionStore(cm).save(
                 new de.caluga.morpheus.config.ConnectionSpec(name, hostList, database, authDb,
                     username, password, messagingImpl, queueName, proxyEnabled, proxyHost, proxyPort,
-                    useSSL, sslInvalidHostnameAllowed));
+                    useSSL, sslInvalidHostnameAllowed, sslTrustAllCertificates));
 
             ctx.pr("");
             ctx.pr("[good]✓ Connection '" + name + "' updated successfully![r]");
@@ -252,12 +280,26 @@ public class ConfigCommands implements Callable<Integer> {
                     String db = cm.getProperty("morphium." + conn + ".database", "N/A");
                     String messagingImpl = cm.getProperty("morphium." + conn + ".messaging.implementation", "N/A");
                     boolean sslEnabled = cm.getProperty("morphium." + conn + ".useSSL", "false").equals("true");
+                    boolean sslInvalidHostnameAllowed =
+                        cm.getProperty("morphium." + conn + ".sslInvalidHostNameAllowed", "false").equals("true");
+                    boolean sslTrustAll =
+                        cm.getProperty("morphium." + conn + ".sslTrustAllCertificates", "false").equals("true");
+
+                    String sslDetail = "no";
+                    if (sslEnabled) {
+                        sslDetail = "yes";
+                        if (sslTrustAll) {
+                            sslDetail += " [error](⚠ ALL CERTIFICATES TRUSTED - INSECURE)[r]";
+                        } else if (sslInvalidHostnameAllowed) {
+                            sslDetail += " (hostname verification DISABLED)";
+                        }
+                    }
 
                     ctx.pr("  [c3]" + conn + "[r]");
                     ctx.pr("    Host(s): " + cleanedHosts);
                     ctx.pr("    Database: " + db);
                     ctx.pr("    Messaging: " + messagingImpl);
-                    ctx.pr("    SSL: " + (sslEnabled ? "yes" : "no"));
+                    ctx.pr("    SSL: " + sslDetail);
                     ctx.pr("");
                 }
             }
@@ -372,7 +414,13 @@ public class ConfigCommands implements Callable<Integer> {
                     ctx.pr("[good]✓ SSL/TLS enabled for connection: " + connectionName + "[r]");
                 }
                 case "disable" -> {
+                    // Reset the two weakening flags too, not just useSSL: leaving them "true" on
+                    // disk means a later 'ssl enable' silently comes back with hostname
+                    // verification (or, worse, all certificate validation) still off, invisible
+                    // in 'connection list' unless SSL itself is also on.
                     cm.setProperty("morphium." + connectionName + ".useSSL", "false");
+                    cm.setProperty("morphium." + connectionName + ".sslInvalidHostNameAllowed", "false");
+                    cm.setProperty("morphium." + connectionName + ".sslTrustAllCertificates", "false");
                     cm.save();
                     ctx.pr("[good]✓ SSL/TLS disabled for connection: " + connectionName + "[r]");
                 }
@@ -381,15 +429,26 @@ public class ConfigCommands implements Callable<Integer> {
                     ctx.pr("");
 
                     ctx.pr("[c3]Enable SSL/TLS?[r] (yes/no, default: yes):");
-                    String enable = readLine("yes");
+                    boolean enable = parseYesNo(readLine("yes"));
 
-                    ctx.pr("[c3]Allow invalid hostname[r] (for self-signed certs without matching SAN; yes/no, default: no):");
-                    String allowInvalid = readLine("no");
+                    // Same reasoning as 'disable': if SSL ends up off, both weakening flags must
+                    // land as false too - otherwise 'config' with "Enable? no" is a second, silent
+                    // way to leave hostname verification (or all certificate validation) off for
+                    // a later 'ssl enable', which doesn't reset anything on its own.
+                    boolean allowInvalid = false;
+                    boolean trustAll = false;
+                    if (enable) {
+                        ctx.pr("[c3]Allow invalid hostname[r] (for self-signed certs without matching SAN; yes/no, default: no):");
+                        allowInvalid = parseYesNo(readLine("no"));
 
-                    cm.setProperty("morphium." + connectionName + ".useSSL",
-                        enable.equalsIgnoreCase("yes") ? "true" : "false");
-                    cm.setProperty("morphium." + connectionName + ".sslInvalidHostNameAllowed",
-                        allowInvalid.equalsIgnoreCase("yes") ? "true" : "false");
+                        ctx.pr("[error]Trust ALL certificates[r] (skips certificate validation entirely - INSECURE,"
+                            + " dev/test only; yes/no, default: no):");
+                        trustAll = parseYesNo(readLine("no"));
+                    }
+
+                    cm.setProperty("morphium." + connectionName + ".useSSL", String.valueOf(enable));
+                    cm.setProperty("morphium." + connectionName + ".sslInvalidHostNameAllowed", String.valueOf(allowInvalid));
+                    cm.setProperty("morphium." + connectionName + ".sslTrustAllCertificates", String.valueOf(trustAll));
 
                     cm.save();
 
@@ -397,9 +456,17 @@ public class ConfigCommands implements Callable<Integer> {
                     ctx.pr("[good]✓ SSL/TLS configured:[r]");
                     ctx.pr("  Enabled: " + enable);
                     ctx.pr("  Invalid hostname allowed: " + allowInvalid);
+                    ctx.pr("  Trust ALL certificates: " + trustAll);
                     ctx.pr("");
-                    ctx.pr("[warning]Note:[r] uses the JVM's default truststore (cacerts). For a private/self-signed CA,");
-                    ctx.pr("import it there (keytool -importcert ...) — a custom truststore path is not yet supported.");
+                    if (trustAll) {
+                        ctx.pr("[error]⚠ WARNING:[r] certificate validation is completely disabled for this"
+                            + " connection - any server (or attacker in the middle) can present any certificate."
+                            + " Use only for local/dev testing against a self-signed server you control.");
+                        ctx.pr("");
+                    }
+                    ctx.pr("[warning]Note:[r] without trust-all, this uses the JVM's default truststore (cacerts).");
+                    ctx.pr("For a private/self-signed CA, import it there (keytool -importcert ...) — a custom");
+                    ctx.pr("truststore path is not yet supported.");
                 }
                 default -> {
                     ctx.pr("[error]Unknown ssl action: " + action + "[r]");

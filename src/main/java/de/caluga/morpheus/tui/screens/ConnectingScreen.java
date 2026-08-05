@@ -7,6 +7,7 @@ import com.googlecode.lanterna.input.KeyType;
 import de.caluga.morpheus.cli.MorpheusContext;
 import de.caluga.morpheus.config.ConfigurationManager;
 import de.caluga.morpheus.tui.Screen;
+import de.caluga.morpheus.utils.Failures;
 
 import java.util.function.BiFunction;
 
@@ -73,7 +74,7 @@ public class ConnectingScreen implements Screen {
                 readyCtx = c;
                 state = State.READY;
             } catch (Throwable e) {
-                error = e.getMessage() == null ? e.toString() : e.getMessage();
+                error = (e.getMessage() == null ? e.toString() : e.getMessage()) + Failures.causeDetail(e.getCause());
                 state = State.FAILED;
             }
         }, "connecting");
@@ -84,6 +85,7 @@ public class ConnectingScreen implements Screen {
     /** Test seams (non-mutating). */
     boolean isFailed() { return state == State.FAILED; }
     boolean isReady()  { return state == State.READY; }
+    String errorText() { return error; }
 
     @Override
     public Result tick() {
@@ -92,7 +94,7 @@ public class ConnectingScreen implements Screen {
             try {
                 view = viewFactory.apply(viewName, readyCtx);
             } catch (Throwable e) {
-                error = e.getMessage() == null ? e.toString() : e.getMessage();
+                error = (e.getMessage() == null ? e.toString() : e.getMessage()) + Failures.causeDetail(e.getCause());
                 state = State.FAILED;
                 return Result.stay();
             }
@@ -126,12 +128,30 @@ public class ConnectingScreen implements Screen {
         int w = g.getSize().getColumns();
         int h = g.getSize().getRows();
         if (state == State.FAILED) {
-            String msg = "✗ Verbindung fehlgeschlagen: " + error;
             g.setForegroundColor(TextColor.ANSI.RED);
-            g.putString(center(w, msg), h / 2, msg);
+            String header = "✗ Verbindung fehlgeschlagen:";
+            int maxWidth = Math.max(10, w - 4);
+            java.util.List<String> lines = wrap(error, maxWidth);
+            // Center the whole block vertically around h/2 instead of clipping the message at
+            // the terminal edge (see review finding: a long cause chain - e.g. an SSL handshake
+            // error - used to be cut off after a handful of characters, silently defeating the
+            // whole point of attaching the real cause).
+            int startY = Math.max(1, h / 2 - (lines.size() + 1) / 2);
+            g.putString(center(w, header), startY, header);
+            int y = startY + 1;
+            int lastRow = h - 4; // leave room for a blank line + the "[esc] zurück" hint below,
+                                  // so the "…" overflow marker itself never lands on the hint's row
+            for (String line : lines) {
+                if (y > lastRow) {
+                    g.putString(center(w, "…"), y, "…");
+                    break;
+                }
+                g.putString(center(w, line), y, line);
+                y++;
+            }
             g.setForegroundColor(TextColor.ANSI.DEFAULT);
             String hint = "[esc] zurück";
-            g.putString(center(w, hint), h / 2 + 2, hint);
+            g.putString(center(w, hint), h - 2, hint);
             return;
         }
         String spin = SPINNER[frame % SPINNER.length];
@@ -140,6 +160,25 @@ public class ConnectingScreen implements Screen {
         g.setForegroundColor(new TextColor.RGB(140, 255, 140));
         g.putString(center(w, line), h / 2, line);
         g.setForegroundColor(TextColor.ANSI.DEFAULT);
+    }
+
+    /** Word-wraps text to at most {@code width} columns per line, breaking on spaces where
+     * possible. Package-private so {@link LauncherScreen} can reuse it for the same reason:
+     * long connect-failure messages must not be silently clipped at the terminal edge. */
+    static java.util.List<String> wrap(String text, int width) {
+        java.util.List<String> lines = new java.util.ArrayList<>();
+        String remaining = text == null ? "" : text;
+        width = Math.max(1, width); // guard against an infinite loop for a non-positive width
+        while (remaining.length() > width) {
+            int breakAt = remaining.lastIndexOf(' ', width);
+            if (breakAt <= 0) {
+                breakAt = width;
+            }
+            lines.add(remaining.substring(0, breakAt).stripTrailing());
+            remaining = remaining.substring(breakAt).stripLeading();
+        }
+        lines.add(remaining);
+        return lines;
     }
 
     private int center(int width, String s) {

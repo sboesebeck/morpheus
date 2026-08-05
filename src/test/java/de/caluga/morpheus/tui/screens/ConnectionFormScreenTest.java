@@ -28,7 +28,7 @@ public class ConnectionFormScreenTest {
     @Test
     void editPrefillsFromExisting() {
         ConnectionSpec existing = new ConnectionSpec("prod", List.of("h:27017"), "mydb", "admin",
-                "u", "pw", "single", "msg", true, "127.0.0.1", 5555, true, true);
+                "u", "pw", "single", "msg", true, "127.0.0.1", 5555, true, true, true);
         ConnectionFormScreen form = new ConnectionFormScreen(ctx(), existing);
         ConnectionSpec spec = form.toSpec();
         assertEquals("prod", spec.name());
@@ -36,6 +36,7 @@ public class ConnectionFormScreenTest {
         assertTrue(spec.proxyEnabled());
         assertTrue(spec.useSSL());
         assertTrue(spec.sslInvalidHostnameAllowed());
+        assertTrue(spec.sslTrustAllCertificates());
     }
 
     @Test
@@ -64,7 +65,7 @@ public class ConnectionFormScreenTest {
     void enterSavesAndPops() throws Exception {
         MorpheusContext c = ctx();
         ConnectionSpec existing = new ConnectionSpec("toSave", List.of("h:27017"), "d", "admin",
-                "", "", "single", "msg", false, "127.0.0.1", 5555, false, false);
+                "", "", "single", "msg", false, "127.0.0.1", 5555, false, false, false);
         ConnectionFormScreen form = new ConnectionFormScreen(c, existing);
         Screen.Result r = form.onKey(new KeyStroke(KeyType.Enter));
         assertEquals(Screen.Result.Kind.POP, r.kind());
@@ -74,7 +75,7 @@ public class ConnectionFormScreenTest {
     @Test
     void spaceCyclesMessagingImplementationThroughAllThreeOptions() {
         ConnectionSpec existing = new ConnectionSpec("prod", List.of("h:27017"), "mydb", "admin",
-                "u", "pw", "single", "msg", false, "127.0.0.1", 5555, false, false);
+                "u", "pw", "single", "msg", false, "127.0.0.1", 5555, false, false, false);
         ConnectionFormScreen form = new ConnectionFormScreen(ctx(), existing);
         while (form.focusIndex() < form.messagingRow()) {
             form.onKey(new KeyStroke(KeyType.Tab));
@@ -107,6 +108,23 @@ public class ConnectionFormScreenTest {
         form.onKey(space);
         assertTrue(form.toSpec().useSSL());
         assertTrue(form.toSpec().sslInvalidHostnameAllowed());
+        assertFalse(form.toSpec().sslTrustAllCertificates());
+    }
+
+    @Test
+    void spaceTogglesSslTrustAllIndependentlyOfTheOtherTwoSslRows() {
+        ConnectionFormScreen form = new ConnectionFormScreen(ctx(), null);
+        KeyStroke space = new KeyStroke(' ', false, false);
+
+        while (form.focusIndex() < form.sslTrustAllRow()) {
+            form.onKey(new KeyStroke(KeyType.Tab));
+        }
+        form.onKey(space);
+
+        ConnectionSpec spec = form.toSpec();
+        assertTrue(spec.sslTrustAllCertificates());
+        assertFalse(spec.useSSL(), "toggling trust-all must not also flip the unrelated SSL-enabled row");
+        assertFalse(spec.sslInvalidHostnameAllowed());
     }
 
     @Test

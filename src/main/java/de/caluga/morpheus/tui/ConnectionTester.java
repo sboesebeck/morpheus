@@ -1,5 +1,7 @@
 package de.caluga.morpheus.tui;
 
+import de.caluga.morpheus.utils.Failures;
+
 import java.util.concurrent.atomic.AtomicReference;
 
 /** Runs a connection probe off-thread with a hard timeout; status() is non-blocking. */
@@ -27,7 +29,7 @@ public class ConnectionTester {
                 // watchdog interrupted us; it already set "✗ Timeout" — don't overwrite
                 Thread.currentThread().interrupt();
             } catch (Exception e) {
-                status.set("✗ " + e.getMessage());
+                status.set("✗ " + e.getMessage() + Failures.causeDetail(e.getCause()));
             }
         }, "conn-test");
         worker.setDaemon(true);

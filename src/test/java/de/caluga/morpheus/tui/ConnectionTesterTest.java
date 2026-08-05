@@ -40,6 +40,18 @@ public class ConnectionTesterTest {
     }
 
     @Test
+    void errorIncludesTheCauseNotJustTheWrapperMessage() throws Exception {
+        Exception cause = new javax.net.ssl.SSLHandshakeException("PKIX path building failed");
+        ConnectionTester t = new ConnectionTester(
+                name -> { throw new IllegalStateException("Failed to connect to MongoDB after 10 attempts", cause); },
+                2000);
+        t.start("prod");
+        await(t, "✗", 2000);
+        assertTrue(t.status().contains("SSLHandshakeException"),
+                "must surface the cause, not just the generic outer message: " + t.status());
+    }
+
+    @Test
     void idleBeforeStartIsEmpty() {
         ConnectionTester t = new ConnectionTester(name -> "x", 2000);
         assertEquals("", t.status());

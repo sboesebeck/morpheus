@@ -16,5 +16,6 @@ public record ConnectionSpec(
         String proxyHost,
         int proxyPort,
         boolean useSSL,
-        boolean sslInvalidHostnameAllowed) {
+        boolean sslInvalidHostnameAllowed,
+        boolean sslTrustAllCertificates) {
 }

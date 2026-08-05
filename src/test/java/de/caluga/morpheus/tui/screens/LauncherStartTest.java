@@ -19,7 +19,7 @@ public class LauncherStartTest {
     private MorpheusContext ctx() throws Exception {
         ConfigurationManager cm = new ConfigurationManager(tmp.resolve("m.properties").toString());
         new ConnectionStore(cm).save(new ConnectionSpec("alpha", List.of("h:27017"), "d", "admin",
-                "", "", "single", "msg", false, "127.0.0.1", 5555, false, false));
+                "", "", "single", "msg", false, "127.0.0.1", 5555, false, false, false));
         return new MorpheusContext(cm);
     }
 

@@ -42,7 +42,8 @@ public class ConnectionStore {
                 cm.getProperty(prefix + "proxy.host", "127.0.0.1"),
                 Integer.parseInt(cm.getProperty(prefix + "proxy.port", "5555")),
                 cm.getProperty(prefix + "useSSL", "false").equals("true"),
-                cm.getProperty(prefix + "sslInvalidHostNameAllowed", "false").equals("true"));
+                cm.getProperty(prefix + "sslInvalidHostNameAllowed", "false").equals("true"),
+                cm.getProperty(prefix + "sslTrustAllCertificates", "false").equals("true"));
     }
 
     public void save(ConnectionSpec spec) throws Exception {
@@ -98,6 +99,10 @@ public class ConnectionStore {
         // ConnectionSettings field names exactly so MorphiumConfig.fromProperties() picks them up.
         cm.setProperty(prefix + "useSSL", String.valueOf(spec.useSSL()));
         cm.setProperty(prefix + "sslInvalidHostNameAllowed", String.valueOf(spec.sslInvalidHostnameAllowed()));
+        // Not a MorphiumConfig/ConnectionSettings field either (an SSLContext can't be built from
+        // a string property), so it's written here explicitly too and read back explicitly in
+        // MorphiumConnectionFactory rather than via MorphiumConfig.fromProperties().
+        cm.setProperty(prefix + "sslTrustAllCertificates", String.valueOf(spec.sslTrustAllCertificates()));
 
         cm.save();
     }

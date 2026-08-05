@@ -22,13 +22,14 @@ public class ConnectionFormScreen implements Screen {
     private boolean proxyEnabled;
     private boolean useSSL;
     private boolean sslInvalidHostnameAllowed;
+    private boolean sslTrustAllCertificates;
     private int focus = 0;
 
     public ConnectionFormScreen(MorpheusContext ctx, ConnectionSpec existing) {
         this.ctx = ctx;
         ConnectionSpec e = existing != null ? existing
                 : new ConnectionSpec("", List.of("localhost:27017"), "test", "admin",
-                        "", "", "single", "msg", false, "127.0.0.1", 5555, false, false);
+                        "", "", "single", "msg", false, "127.0.0.1", 5555, false, false, false);
         nameF = add(new Field("Name", e.name(), Field.Type.TEXT));
         hostsF = add(new Field("Hosts", String.join(",", e.hosts()), Field.Type.TEXT));
         dbF = add(new Field("Datenbank", e.database(), Field.Type.TEXT));
@@ -42,6 +43,7 @@ public class ConnectionFormScreen implements Screen {
         proxyEnabled = e.proxyEnabled();
         useSSL = e.useSSL();
         sslInvalidHostnameAllowed = e.sslInvalidHostnameAllowed();
+        sslTrustAllCertificates = e.sslTrustAllCertificates();
     }
 
     private Field add(Field f) { fields.add(f); return f; }
@@ -56,7 +58,8 @@ public class ConnectionFormScreen implements Screen {
         try { port = Integer.parseInt(proxyPortF.value().trim()); } catch (Exception ex) { port = 5555; }
         return new ConnectionSpec(nameF.value().trim(), hosts, dbF.value(), authF.value(),
                 userF.value(), pwF.value(), messagingImpl, queueF.value(),
-                proxyEnabled, proxyHostF.value(), port, useSSL, sslInvalidHostnameAllowed);
+                proxyEnabled, proxyHostF.value(), port, useSSL, sslInvalidHostnameAllowed,
+                sslTrustAllCertificates);
     }
 
     @Override
@@ -73,7 +76,7 @@ public class ConnectionFormScreen implements Screen {
                 }
                 return Result.pop();
             }
-            case Tab, ArrowDown -> focus = Math.min(focus + 1, fields.size() + 3); // +4 virtual rows: messaging, proxy, ssl, ssl-hostname
+            case Tab, ArrowDown -> focus = Math.min(focus + 1, fields.size() + 4); // +5 virtual rows: messaging, proxy, ssl, ssl-hostname, ssl-trust-all
             case ReverseTab, ArrowUp -> focus = Math.max(focus - 1, 0);
             case Character -> {
                 char c = key.getCharacter();
@@ -89,6 +92,8 @@ public class ConnectionFormScreen implements Screen {
                     useSSL = !useSSL;
                 } else if (focus == sslInvalidHostnameRow() && c == ' ') {
                     sslInvalidHostnameAllowed = !sslInvalidHostnameAllowed;
+                } else if (focus == sslTrustAllRow() && c == ' ') {
+                    sslTrustAllCertificates = !sslTrustAllCertificates;
                 } else if (focus < fields.size()) {
                     fields.get(focus).type(c);
                 }
@@ -103,6 +108,7 @@ public class ConnectionFormScreen implements Screen {
     private int proxyRow()     { return fields.size() + 1; } // virtual row after messaging
     int sslRow()                { return fields.size() + 2; } // virtual row after proxy; package-private test seam
     private int sslInvalidHostnameRow() { return fields.size() + 3; } // virtual row after ssl
+    int sslTrustAllRow()        { return fields.size() + 4; } // virtual row after ssl-hostname; package-private test seam
 
     @Override
     public void draw(TextGraphics g) {
@@ -135,6 +141,11 @@ public class ConnectionFormScreen implements Screen {
         g.putString(2, my + 3, "SSL-Hostname [" + (sslInvalidHostnameAllowed ? "x" : " ") + "] invalid erlauben (selbstsigniert)   [Space]");
         g.setForegroundColor(TextColor.ANSI.DEFAULT);
 
-        g.putString(2, my + 5, "[⏎] speichern   [esc] abbrechen   [↹] nächstes Feld");
+        if (focus == sslTrustAllRow()) g.setForegroundColor(TextColor.ANSI.CYAN);
+        else if (sslTrustAllCertificates) g.setForegroundColor(TextColor.ANSI.RED);
+        g.putString(2, my + 4, "SSL-Trust-All[" + (sslTrustAllCertificates ? "x" : " ") + "] ALLE Zertifikate akzeptieren (UNSICHER!)   [Space]");
+        g.setForegroundColor(TextColor.ANSI.DEFAULT);
+
+        g.putString(2, my + 6, "[⏎] speichern   [esc] abbrechen   [↹] nächstes Feld");
     }
 }

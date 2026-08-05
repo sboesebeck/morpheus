@@ -66,7 +66,11 @@ public class LauncherScreen implements Screen {
                 char c = key.getCharacter();
                 if (c == 't' && active == Column.CONNECTIONS && connections.selected() != null) {
                     testedConnection = connections.selected();
-                    tester = new ConnectionTester(this::probe, 5000);
+                    // 12s: comfortably above createMorphium()'s own up-to-10s connect-retry
+                    // budget (10 attempts x 1s). A shorter watchdog here used to fire first on
+                    // any real connect failure (e.g. a TLS handshake error), so the probe always
+                    // reported "Timeout" instead of the actual cause - see MorphiumConnectionFactory.
+                    tester = new ConnectionTester(this::probe, 12000);
                     tester.start(testedConnection);
                 }
                 if (c == 'a' && active == Column.CONNECTIONS) {
@@ -152,13 +156,26 @@ public class LauncherScreen implements Screen {
             g.setForegroundColor(TextColor.ANSI.DEFAULT);
         }
 
-        // Test result line
+        int fy = g.getSize().getRows() - 1;
+
+        // Test result line - wrapped like ConnectingScreen's failure view, for the same reason:
+        // a connect failure's status line (e.g. an SSL handshake error's cause chain) can be far
+        // longer than one row and must not be silently clipped at the terminal edge.
         if (tester != null && testedConnection != null) {
-            g.putString(2, dy + 4, "Test " + testedConnection + ": " + tester.status());
+            String prefix = "Test " + testedConnection + ": ";
+            int maxWidth = Math.max(10, g.getSize().getColumns() - 2 - prefix.length());
+            java.util.List<String> lines = ConnectingScreen.wrap(tester.status(), maxWidth);
+            g.putString(2, dy + 4, prefix + lines.get(0));
+            int i = 1;
+            for (; i < lines.size() && dy + 4 + i < fy - 1; i++) {
+                g.putString(2 + prefix.length(), dy + 4 + i, lines.get(i));
+            }
+            if (i < lines.size()) {
+                g.putString(2 + prefix.length(), dy + 4 + i, "…");
+            }
         }
 
         // Footer (colored keys)
-        int fy = g.getSize().getRows() - 1;
         g.setForegroundColor(TextColor.ANSI.GREEN_BRIGHT);
         g.putString(2, fy, "[⏎] starten  ");
         g.setForegroundColor(TextColor.ANSI.CYAN);
