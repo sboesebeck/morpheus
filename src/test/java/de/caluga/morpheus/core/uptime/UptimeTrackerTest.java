@@ -118,6 +118,29 @@ public class UptimeTrackerTest {
     }
 
     @Test
+    void openOutageCountsInSnapshot() {
+        UptimeTracker t = tracker(3);
+        t.onPingComplete(1, 1000, Set.of("a/h1"));       // learned at 1000
+        t.onPingComplete(2, 2000, Set.of());
+        t.onPingComplete(3, 3000, Set.of());
+        t.onPingComplete(4, 4000, Set.of());              // DOWN since 2000 (never recovers)
+        wall.set(9000);
+        var n = t.snapshot().nodes().get(0);
+        assertEquals(UptimeTracker.State.DOWN, n.state());
+        assertEquals(1, n.outages(), "an open outage must still be counted");
+        assertEquals(7000, n.longestOutageMs());
+        assertEquals(7000, n.avgOutageMs());
+
+        // now let it recover and verify the closed-outage math still matches (unaffected by the open-outage fold)
+        t.onPingComplete(9, 9000, Set.of("a/h1"));
+        var n2 = t.snapshot().nodes().get(0);
+        assertEquals(UptimeTracker.State.UP, n2.state());
+        assertEquals(1, n2.outages());
+        assertEquals(7000, n2.longestOutageMs());
+        assertEquals(7000, n2.avgOutageMs());
+    }
+
+    @Test
     void timelineRecordsStateChanges() {
         UptimeTracker t = tracker(1);
         t.onPingComplete(1, 1000, Set.of("a/h1"));

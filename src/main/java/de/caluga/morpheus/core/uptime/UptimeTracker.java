@@ -100,11 +100,16 @@ public class UptimeTracker {
         for (var e : nodes.entrySet()) {
             Node n = e.getValue();
             long observed = Math.max(1, now - n.learnedTs);
-            long down = n.outageTotalMs + (n.state == State.DOWN ? Math.max(0, now - n.stateSinceTs) : 0);
+            long openMs = n.state == State.DOWN ? Math.max(0, now - n.stateSinceTs) : 0;
+            long down = n.outageTotalMs + openMs;
             double avail = 100.0 * Math.max(0.0, 1.0 - (double) down / observed);
-            long avg = n.outages == 0 ? 0 : n.outageTotalMs / n.outages;
+            // Fold a still-open outage into the reported stats so a node that goes DOWN and
+            // never recovers is still visible in the summary/exit code; Node fields stay closed-only.
+            int reportedOutages = n.state == State.DOWN ? n.outages + 1 : n.outages;
+            long reportedLongest = n.state == State.DOWN ? Math.max(n.longestOutageMs, openMs) : n.longestOutageMs;
+            long reportedAvg = reportedOutages == 0 ? 0 : (n.outageTotalMs + openMs) / reportedOutages;
             out.add(new NodeStats(e.getKey(), n.state, n.stateSinceTs, n.learnedTs,
-                    avail, n.outages, n.longestOutageMs, avg));
+                    avail, reportedOutages, reportedLongest, reportedAvg));
             timelines.put(e.getKey(), List.copyOf(n.changes));
         }
         return new Snapshot(now, out, List.copyOf(events), timelines, sendErrors);

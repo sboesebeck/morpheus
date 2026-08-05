@@ -18,6 +18,7 @@ public class ReplicaSetWatcher {
     private volatile boolean unknown = false;
     private volatile boolean running = false;
     private Thread thread;
+    private final Object lifecycle = new Object();
 
     public ReplicaSetWatcher(HelloSource source, UptimeTracker tracker, long pollMs) {
         this.source = source;
@@ -28,7 +29,7 @@ public class ReplicaSetWatcher {
     public String primary() { return primary; }
     public boolean unknown() { return unknown; }
 
-    synchronized void poll() {
+    void poll() {
         try {
             String p = source.primary();
             // If interrupted after the blocking call, discard result to avoid events after stop()
@@ -58,23 +59,25 @@ public class ReplicaSetWatcher {
         }
     }
 
-    public synchronized void start() {
-        if (running) return;
-        running = true;
-        thread = new Thread(() -> {
-            while (running) {
-                poll();
-                try { Thread.sleep(pollMs); } catch (InterruptedException e) { return; }
-            }
-        }, "rs-watcher");
-        thread.setDaemon(true);
-        thread.start();
+    public void start() {
+        synchronized (lifecycle) {
+            if (running) return;
+            running = true;
+            thread = new Thread(() -> {
+                while (running) {
+                    poll();
+                    try { Thread.sleep(pollMs); } catch (InterruptedException e) { return; }
+                }
+            }, "rs-watcher");
+            thread.setDaemon(true);
+            thread.start();
+        }
     }
 
     public void stop() {
         running = false;
         Thread t;
-        synchronized (this) { t = thread; thread = null; }
+        synchronized (lifecycle) { t = thread; thread = null; }
         if (t != null) {
             t.interrupt();
             try { t.join(200); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }

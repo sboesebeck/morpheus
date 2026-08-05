@@ -40,4 +40,16 @@ public class UptimeCommandTest {
         t.onPingComplete(3, 3000, Set.of("a/h1", "b/h2"));
         assertEquals(2, UptimeCommand.totalOutages(t.snapshot()));
     }
+
+    @Test
+    void stillDownNodeCountsAsOutage() {
+        // Canonical CI scenario: a node goes DOWN and never recovers before the run ends.
+        AtomicLong wall = new AtomicLong(0);
+        UptimeTracker t = new UptimeTracker(1, wall::get);
+        t.onPingComplete(1, 1000, Set.of("a/h1"));
+        t.onPingComplete(2, 2000, Set.of());   // DOWN since 2000, never recovers
+        wall.set(5000);
+        assertTrue(UptimeCommand.totalOutages(t.snapshot()) >= 1,
+                "a still-DOWN node must count as an outage so --fail-on-outage exits non-zero");
+    }
 }
