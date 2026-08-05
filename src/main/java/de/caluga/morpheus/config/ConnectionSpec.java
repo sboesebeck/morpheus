@@ -14,5 +14,7 @@ public record ConnectionSpec(
         String queueName,
         boolean proxyEnabled,
         String proxyHost,
-        int proxyPort) {
+        int proxyPort,
+        boolean useSSL,
+        boolean sslInvalidHostnameAllowed) {
 }

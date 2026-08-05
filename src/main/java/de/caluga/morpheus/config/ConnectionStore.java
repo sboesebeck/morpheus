@@ -40,7 +40,9 @@ public class ConnectionStore {
                 cm.getProperty(prefix + "messaging.queueName", "msg"),
                 cm.getProperty(prefix + "proxy.enabled", "false").equals("true"),
                 cm.getProperty(prefix + "proxy.host", "127.0.0.1"),
-                Integer.parseInt(cm.getProperty(prefix + "proxy.port", "5555")));
+                Integer.parseInt(cm.getProperty(prefix + "proxy.port", "5555")),
+                cm.getProperty(prefix + "useSSL", "false").equals("true"),
+                cm.getProperty(prefix + "sslInvalidHostNameAllowed", "false").equals("true"));
     }
 
     public void save(ConnectionSpec spec) throws Exception {
@@ -89,6 +91,13 @@ public class ConnectionStore {
         cm.setProperty(prefix + "proxy.enabled", String.valueOf(spec.proxyEnabled()));
         cm.setProperty(prefix + "proxy.host", spec.proxyHost());
         cm.setProperty(prefix + "proxy.port", String.valueOf(spec.proxyPort()));
+
+        // Written explicitly (not via cfg.asProperties()) because MorphiumConfig's Settings.asProperties()
+        // only serializes fields that differ from their default — a false useSSL would silently fail to
+        // overwrite a previously saved true value. Property names must match MorphiumConfig's
+        // ConnectionSettings field names exactly so MorphiumConfig.fromProperties() picks them up.
+        cm.setProperty(prefix + "useSSL", String.valueOf(spec.useSSL()));
+        cm.setProperty(prefix + "sslInvalidHostNameAllowed", String.valueOf(spec.sslInvalidHostnameAllowed()));
 
         cm.save();
     }

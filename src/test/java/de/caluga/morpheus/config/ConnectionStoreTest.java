@@ -22,7 +22,7 @@ public class ConnectionStoreTest {
         ConnectionSpec spec = new ConnectionSpec("prod",
                 List.of("h1:27017", "h2:27017"), "mydb", "admin",
                 "user", "secret", "single", "msg",
-                true, "127.0.0.1", 5555);
+                true, "127.0.0.1", 5555, false, false);
         s.save(spec);
 
         ConnectionSpec loaded = s.load("prod");
@@ -36,13 +36,45 @@ public class ConnectionStoreTest {
         assertEquals(5555, loaded.proxyPort());
         assertTrue(loaded.hosts().contains("h1:27017"));
         assertTrue(loaded.hosts().contains("h2:27017"));
+        assertFalse(loaded.useSSL());
+        assertFalse(loaded.sslInvalidHostnameAllowed());
+    }
+
+    @Test
+    void saveThenLoadRoundtripSSL() throws Exception {
+        ConnectionStore s = store();
+        s.save(new ConnectionSpec("secure", List.of("h:27017"), "d", "admin",
+                "", "", "single", "msg", false, "127.0.0.1", 5555, true, true));
+
+        ConnectionSpec loaded = s.load("secure");
+        assertTrue(loaded.useSSL());
+        assertTrue(loaded.sslInvalidHostnameAllowed());
+
+        ConfigurationManager cm = new ConfigurationManager(tmp.resolve("m.properties").toString());
+        assertEquals("true", cm.getProperty("morphium.secure.useSSL"));
+        assertEquals("true", cm.getProperty("morphium.secure.sslInvalidHostNameAllowed"));
+    }
+
+    @Test
+    void reSaveWithSslDisabledOverwritesPreviousTrueValue() throws Exception {
+        // Regression test: MorphiumConfig's Settings.asProperties() only serializes fields that
+        // differ from their default, so a naive re-save could silently leave a stale "true" behind.
+        ConnectionStore s = store();
+        s.save(new ConnectionSpec("toggle", List.of("h:27017"), "d", "admin",
+                "", "", "single", "msg", false, "127.0.0.1", 5555, true, true));
+        s.save(new ConnectionSpec("toggle", List.of("h:27017"), "d", "admin",
+                "", "", "single", "msg", false, "127.0.0.1", 5555, false, false));
+
+        ConnectionSpec loaded = s.load("toggle");
+        assertFalse(loaded.useSSL());
+        assertFalse(loaded.sslInvalidHostnameAllowed());
     }
 
     @Test
     void saveListsTheConnection() throws Exception {
         ConnectionStore s = store();
         s.save(new ConnectionSpec("dev", List.of("localhost:27017"), "d", "admin",
-                "", "", "single", "msg", false, "127.0.0.1", 5555));
+                "", "", "single", "msg", false, "127.0.0.1", 5555, false, false));
         assertTrue(s.list().contains("dev"));
     }
 
@@ -50,7 +82,7 @@ public class ConnectionStoreTest {
     void emptyUserSkipsAuthKeys() throws Exception {
         ConnectionStore s = store();
         s.save(new ConnectionSpec("noauth", List.of("localhost:27017"), "d", "admin",
-                "", "", "single", "msg", false, "127.0.0.1", 5555));
+                "", "", "single", "msg", false, "127.0.0.1", 5555, false, false));
         ConfigurationManager cm = new ConfigurationManager(tmp.resolve("m.properties").toString());
         assertNull(cm.getProperty("morphium.noauth.mongoLogin"));
         assertNull(cm.getProperty("morphium.noauth.mongoPassword"));
@@ -60,9 +92,9 @@ public class ConnectionStoreTest {
     void blankPasswordKeepsExistingOnReSave() throws Exception {
         ConnectionStore s = store();
         s.save(new ConnectionSpec("p", List.of("h:27017"), "d", "admin",
-                "u", "orig", "single", "msg", false, "127.0.0.1", 5555));
+                "u", "orig", "single", "msg", false, "127.0.0.1", 5555, false, false));
         s.save(new ConnectionSpec("p", List.of("h:27017"), "d", "admin",
-                "u", "", "single", "msg", false, "127.0.0.1", 5555));
+                "u", "", "single", "msg", false, "127.0.0.1", 5555, false, false));
         ConfigurationManager cm = new ConfigurationManager(tmp.resolve("m.properties").toString());
         assertEquals("orig", cm.getProperty("morphium.p.mongoPassword"));
     }
@@ -71,7 +103,7 @@ public class ConnectionStoreTest {
     void deleteRemovesConnection() throws Exception {
         ConnectionStore s = store();
         s.save(new ConnectionSpec("gone", List.of("h:27017"), "d", "admin",
-                "", "", "single", "msg", false, "127.0.0.1", 5555));
+                "", "", "single", "msg", false, "127.0.0.1", 5555, false, false));
         s.delete("gone");
         assertFalse(s.list().contains("gone"));
     }

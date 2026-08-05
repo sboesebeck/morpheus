@@ -128,6 +128,60 @@ ssh -D 5555 -f -C -q -N user@bastion-host
 ./run.sh -c production status
 ```
 
+## SSL/TLS Management
+
+Morpheus can connect to a MongoDB (or PoppyDB) node that requires or offers SSL/TLS. This wraps
+the Morphium driver's built-in `useSSL`/`sslInvalidHostNameAllowed` support; there is currently no
+support for a custom truststore/keystore (mutual TLS) — connections use the JVM's default
+truststore (`cacerts`).
+
+### Configure SSL/TLS for a Connection
+
+```bash
+./run.sh config ssl config production
+```
+
+Interactive prompts:
+- Enable SSL/TLS? (yes/no, default: yes)
+- Allow invalid hostname (yes/no, default: no) — for self-signed certificates without a matching SAN
+
+### Enable / Disable SSL/TLS
+
+```bash
+./run.sh config ssl enable production
+./run.sh config ssl disable production
+```
+
+### Manual Configuration
+
+You can also manually edit `~/.config/morpheus.properties`:
+
+```properties
+# Enable SSL/TLS for a connection
+morphium.production.useSSL=true
+morphium.production.sslInvalidHostNameAllowed=false
+```
+
+### Self-Signed / Private CA Certificates
+
+Since there's no custom truststore support yet, a node using a certificate from a private or
+self-signed CA needs that CA imported into the JVM's default truststore:
+
+```bash
+keytool -importcert -alias my-private-ca -file ca.pem \
+    -keystore "$JAVA_HOME/lib/security/cacerts" -storepass changeit
+```
+
+Alternatively, set `sslInvalidHostNameAllowed=true` to skip hostname verification — this does
+**not** skip certificate chain validation, so the CA still needs to be trusted by the JVM.
+
+With `--verbose`, Morpheus logs whether SSL is active when connecting:
+
+```bash
+./run.sh -c production --verbose status
+#   SSL: enabled (invalid hostname allowed)
+```
+
 ## Theme Management
 
 ### List Available Themes
@@ -223,6 +277,10 @@ morphium.production.messaging.senderId=unique-id-here
 morphium.production.proxy.enabled=true
 morphium.production.proxy.host=127.0.0.1
 morphium.production.proxy.port=5555
+
+# SSL/TLS settings
+morphium.production.useSSL=true
+morphium.production.sslInvalidHostNameAllowed=false
 ```
 
 ## Examples

@@ -20,13 +20,15 @@ public class ConnectionFormScreen implements Screen {
     private final Field nameF, hostsF, dbF, authF, userF, pwF, queueF, proxyHostF, proxyPortF;
     private String messagingImpl;
     private boolean proxyEnabled;
+    private boolean useSSL;
+    private boolean sslInvalidHostnameAllowed;
     private int focus = 0;
 
     public ConnectionFormScreen(MorpheusContext ctx, ConnectionSpec existing) {
         this.ctx = ctx;
         ConnectionSpec e = existing != null ? existing
                 : new ConnectionSpec("", List.of("localhost:27017"), "test", "admin",
-                        "", "", "single", "msg", false, "127.0.0.1", 5555);
+                        "", "", "single", "msg", false, "127.0.0.1", 5555, false, false);
         nameF = add(new Field("Name", e.name(), Field.Type.TEXT));
         hostsF = add(new Field("Hosts", String.join(",", e.hosts()), Field.Type.TEXT));
         dbF = add(new Field("Datenbank", e.database(), Field.Type.TEXT));
@@ -38,6 +40,8 @@ public class ConnectionFormScreen implements Screen {
         proxyPortF = add(new Field("Proxy-Port", String.valueOf(e.proxyPort()), Field.Type.TEXT));
         messagingImpl = e.messagingImpl();
         proxyEnabled = e.proxyEnabled();
+        useSSL = e.useSSL();
+        sslInvalidHostnameAllowed = e.sslInvalidHostnameAllowed();
     }
 
     private Field add(Field f) { fields.add(f); return f; }
@@ -52,7 +56,7 @@ public class ConnectionFormScreen implements Screen {
         try { port = Integer.parseInt(proxyPortF.value().trim()); } catch (Exception ex) { port = 5555; }
         return new ConnectionSpec(nameF.value().trim(), hosts, dbF.value(), authF.value(),
                 userF.value(), pwF.value(), messagingImpl, queueF.value(),
-                proxyEnabled, proxyHostF.value(), port);
+                proxyEnabled, proxyHostF.value(), port, useSSL, sslInvalidHostnameAllowed);
     }
 
     @Override
@@ -69,7 +73,7 @@ public class ConnectionFormScreen implements Screen {
                 }
                 return Result.pop();
             }
-            case Tab, ArrowDown -> focus = Math.min(focus + 1, fields.size() + 1); // +2 virtual rows: messaging, proxy
+            case Tab, ArrowDown -> focus = Math.min(focus + 1, fields.size() + 3); // +4 virtual rows: messaging, proxy, ssl, ssl-hostname
             case ReverseTab, ArrowUp -> focus = Math.max(focus - 1, 0);
             case Character -> {
                 char c = key.getCharacter();
@@ -81,6 +85,10 @@ public class ConnectionFormScreen implements Screen {
                     };
                 } else if (focus == proxyRow() && c == ' ') {
                     proxyEnabled = !proxyEnabled;
+                } else if (focus == sslRow() && c == ' ') {
+                    useSSL = !useSSL;
+                } else if (focus == sslInvalidHostnameRow() && c == ' ') {
+                    sslInvalidHostnameAllowed = !sslInvalidHostnameAllowed;
                 } else if (focus < fields.size()) {
                     fields.get(focus).type(c);
                 }
@@ -93,6 +101,8 @@ public class ConnectionFormScreen implements Screen {
 
     int messagingRow() { return fields.size(); }              // virtual row after the text fields; package-private test seam
     private int proxyRow()     { return fields.size() + 1; } // virtual row after messaging
+    int sslRow()                { return fields.size() + 2; } // virtual row after proxy; package-private test seam
+    private int sslInvalidHostnameRow() { return fields.size() + 3; } // virtual row after ssl
 
     @Override
     public void draw(TextGraphics g) {
@@ -117,6 +127,14 @@ public class ConnectionFormScreen implements Screen {
         g.putString(2, my + 1, "Proxy        [" + (proxyEnabled ? "x" : " ") + "] aktiv   [Space]");
         g.setForegroundColor(TextColor.ANSI.DEFAULT);
 
-        g.putString(2, my + 3, "[⏎] speichern   [esc] abbrechen   [↹] nächstes Feld");
+        if (focus == sslRow()) g.setForegroundColor(TextColor.ANSI.CYAN);
+        g.putString(2, my + 2, "SSL          [" + (useSSL ? "x" : " ") + "] aktiv   [Space]");
+        g.setForegroundColor(TextColor.ANSI.DEFAULT);
+
+        if (focus == sslInvalidHostnameRow()) g.setForegroundColor(TextColor.ANSI.CYAN);
+        g.putString(2, my + 3, "SSL-Hostname [" + (sslInvalidHostnameAllowed ? "x" : " ") + "] invalid erlauben (selbstsigniert)   [Space]");
+        g.setForegroundColor(TextColor.ANSI.DEFAULT);
+
+        g.putString(2, my + 5, "[⏎] speichern   [esc] abbrechen   [↹] nächstes Feld");
     }
 }

@@ -17,6 +17,7 @@ import java.util.concurrent.Callable;
              ConfigCommands.Connection.class,
              ConfigCommands.Theme.class,
              ConfigCommands.Proxy.class,
+             ConfigCommands.Ssl.class,
              ConfigCommands.Show.class,
              ConfigCommands.Validate.class
          })
@@ -135,7 +136,7 @@ public class ConfigCommands implements Callable<Integer> {
             for (String h : hosts) if (!h.trim().isEmpty()) hostList.add(h.trim());
             new de.caluga.morpheus.config.ConnectionStore(cm).save(
                 new de.caluga.morpheus.config.ConnectionSpec(name, hostList, database, authDb,
-                    username, password, messagingImpl, queueName, false, "127.0.0.1", 5555));
+                    username, password, messagingImpl, queueName, false, "127.0.0.1", 5555, false, false));
 
             ctx.pr("");
             ctx.pr("[good]✓ Connection '" + name + "' saved successfully![r]");
@@ -192,13 +193,17 @@ public class ConfigCommands implements Callable<Integer> {
 
             java.util.List<String> hostList = new java.util.ArrayList<>();
             for (String h : hosts) if (!h.trim().isEmpty()) hostList.add(h.trim());
-            // Preserve existing proxy settings across an edit.
+            // Preserve existing proxy/SSL settings across an edit.
             boolean proxyEnabled = cm.getProperty("morphium." + name + ".proxy.enabled", "false").equals("true");
             String proxyHost = cm.getProperty("morphium." + name + ".proxy.host", "127.0.0.1");
             int proxyPort = Integer.parseInt(cm.getProperty("morphium." + name + ".proxy.port", "5555"));
+            boolean useSSL = cm.getProperty("morphium." + name + ".useSSL", "false").equals("true");
+            boolean sslInvalidHostnameAllowed =
+                cm.getProperty("morphium." + name + ".sslInvalidHostNameAllowed", "false").equals("true");
             new de.caluga.morpheus.config.ConnectionStore(cm).save(
                 new de.caluga.morpheus.config.ConnectionSpec(name, hostList, database, authDb,
-                    username, password, messagingImpl, queueName, proxyEnabled, proxyHost, proxyPort));
+                    username, password, messagingImpl, queueName, proxyEnabled, proxyHost, proxyPort,
+                    useSSL, sslInvalidHostnameAllowed));
 
             ctx.pr("");
             ctx.pr("[good]✓ Connection '" + name + "' updated successfully![r]");
@@ -246,11 +251,13 @@ public class ConfigCommands implements Callable<Integer> {
                     String cleanedHosts = hostSeed.equals("N/A") ? "N/A" : hostSeed.replaceAll("[\\[\\]\\\\]", "").trim();
                     String db = cm.getProperty("morphium." + conn + ".database", "N/A");
                     String messagingImpl = cm.getProperty("morphium." + conn + ".messaging.implementation", "N/A");
+                    boolean sslEnabled = cm.getProperty("morphium." + conn + ".useSSL", "false").equals("true");
 
                     ctx.pr("  [c3]" + conn + "[r]");
                     ctx.pr("    Host(s): " + cleanedHosts);
                     ctx.pr("    Database: " + db);
                     ctx.pr("    Messaging: " + messagingImpl);
+                    ctx.pr("    SSL: " + (sslEnabled ? "yes" : "no"));
                     ctx.pr("");
                 }
             }
@@ -333,6 +340,69 @@ public class ConfigCommands implements Callable<Integer> {
                 }
                 default -> {
                     ctx.pr("[error]Unknown proxy action: " + action + "[r]");
+                    return 2;
+                }
+            }
+            return 0;
+        }
+    }
+
+    @Command(name = "ssl", description = "Manage SSL/TLS per connection.",
+             mixinStandardHelpOptions = true)
+    public static class Ssl implements Callable<Integer> {
+        @ParentCommand ConfigCommands parent;
+
+        @Parameters(index = "0", description = "Action: enable, disable, config.")
+        String action;
+
+        @Parameters(index = "1", arity = "0..1", description = "Connection name.")
+        String name;
+
+        @Override
+        public Integer call() throws Exception {
+            MorpheusContext ctx = parent.parent.context();
+            ConfigurationManager cm = ctx.getConfig();
+
+            String connectionName = (name != null) ? name : cm.getConnection();
+
+            switch (action) {
+                case "enable" -> {
+                    cm.setProperty("morphium." + connectionName + ".useSSL", "true");
+                    cm.save();
+                    ctx.pr("[good]✓ SSL/TLS enabled for connection: " + connectionName + "[r]");
+                }
+                case "disable" -> {
+                    cm.setProperty("morphium." + connectionName + ".useSSL", "false");
+                    cm.save();
+                    ctx.pr("[good]✓ SSL/TLS disabled for connection: " + connectionName + "[r]");
+                }
+                case "config" -> {
+                    ctx.pr("[header1]Configure SSL/TLS for: " + connectionName + "[r]");
+                    ctx.pr("");
+
+                    ctx.pr("[c3]Enable SSL/TLS?[r] (yes/no, default: yes):");
+                    String enable = readLine("yes");
+
+                    ctx.pr("[c3]Allow invalid hostname[r] (for self-signed certs without matching SAN; yes/no, default: no):");
+                    String allowInvalid = readLine("no");
+
+                    cm.setProperty("morphium." + connectionName + ".useSSL",
+                        enable.equalsIgnoreCase("yes") ? "true" : "false");
+                    cm.setProperty("morphium." + connectionName + ".sslInvalidHostNameAllowed",
+                        allowInvalid.equalsIgnoreCase("yes") ? "true" : "false");
+
+                    cm.save();
+
+                    ctx.pr("");
+                    ctx.pr("[good]✓ SSL/TLS configured:[r]");
+                    ctx.pr("  Enabled: " + enable);
+                    ctx.pr("  Invalid hostname allowed: " + allowInvalid);
+                    ctx.pr("");
+                    ctx.pr("[warning]Note:[r] uses the JVM's default truststore (cacerts). For a private/self-signed CA,");
+                    ctx.pr("import it there (keytool -importcert ...) — a custom truststore path is not yet supported.");
+                }
+                default -> {
+                    ctx.pr("[error]Unknown ssl action: " + action + "[r]");
                     return 2;
                 }
             }

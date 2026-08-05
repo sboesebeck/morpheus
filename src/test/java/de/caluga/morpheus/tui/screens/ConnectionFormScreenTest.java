@@ -28,12 +28,14 @@ public class ConnectionFormScreenTest {
     @Test
     void editPrefillsFromExisting() {
         ConnectionSpec existing = new ConnectionSpec("prod", List.of("h:27017"), "mydb", "admin",
-                "u", "pw", "single", "msg", true, "127.0.0.1", 5555);
+                "u", "pw", "single", "msg", true, "127.0.0.1", 5555, true, true);
         ConnectionFormScreen form = new ConnectionFormScreen(ctx(), existing);
         ConnectionSpec spec = form.toSpec();
         assertEquals("prod", spec.name());
         assertEquals("mydb", spec.database());
         assertTrue(spec.proxyEnabled());
+        assertTrue(spec.useSSL());
+        assertTrue(spec.sslInvalidHostnameAllowed());
     }
 
     @Test
@@ -62,7 +64,7 @@ public class ConnectionFormScreenTest {
     void enterSavesAndPops() throws Exception {
         MorpheusContext c = ctx();
         ConnectionSpec existing = new ConnectionSpec("toSave", List.of("h:27017"), "d", "admin",
-                "", "", "single", "msg", false, "127.0.0.1", 5555);
+                "", "", "single", "msg", false, "127.0.0.1", 5555, false, false);
         ConnectionFormScreen form = new ConnectionFormScreen(c, existing);
         Screen.Result r = form.onKey(new KeyStroke(KeyType.Enter));
         assertEquals(Screen.Result.Kind.POP, r.kind());
@@ -72,7 +74,7 @@ public class ConnectionFormScreenTest {
     @Test
     void spaceCyclesMessagingImplementationThroughAllThreeOptions() {
         ConnectionSpec existing = new ConnectionSpec("prod", List.of("h:27017"), "mydb", "admin",
-                "u", "pw", "single", "msg", false, "127.0.0.1", 5555);
+                "u", "pw", "single", "msg", false, "127.0.0.1", 5555, false, false);
         ConnectionFormScreen form = new ConnectionFormScreen(ctx(), existing);
         while (form.focusIndex() < form.messagingRow()) {
             form.onKey(new KeyStroke(KeyType.Tab));
@@ -87,6 +89,24 @@ public class ConnectionFormScreenTest {
 
         form.onKey(space);
         assertEquals("single", form.toSpec().messagingImpl());
+    }
+
+    @Test
+    void spaceTogglesSslAndInvalidHostnameIndependently() {
+        ConnectionFormScreen form = new ConnectionFormScreen(ctx(), null);
+        KeyStroke space = new KeyStroke(' ', false, false);
+
+        while (form.focusIndex() < form.sslRow()) {
+            form.onKey(new KeyStroke(KeyType.Tab));
+        }
+        form.onKey(space);
+        assertTrue(form.toSpec().useSSL());
+        assertFalse(form.toSpec().sslInvalidHostnameAllowed());
+
+        form.onKey(new KeyStroke(KeyType.Tab));
+        form.onKey(space);
+        assertTrue(form.toSpec().useSSL());
+        assertTrue(form.toSpec().sslInvalidHostnameAllowed());
     }
 
     @Test

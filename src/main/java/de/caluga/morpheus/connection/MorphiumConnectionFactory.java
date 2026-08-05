@@ -42,6 +42,11 @@ public class MorphiumConnectionFactory {
         // Load Morphium configuration
         MorphiumConfig cfg = MorphiumConfig.fromProperties("morphium." + connection, config.getProperties());
 
+        if (verbose && cfg.isUseSSL()) {
+            theme.print("  SSL: [c3]enabled[r]"
+                    + (cfg.isSslInvalidHostNameAllowed() ? " (invalid hostname allowed)" : ""));
+        }
+
         if (cfg.getHostSeed() == null || cfg.getHostSeed().isEmpty()) {
             if (!config.getAvailableConnections().contains(connection)) {
                 throw new IllegalStateException("Connection '" + connection + "' not found in "

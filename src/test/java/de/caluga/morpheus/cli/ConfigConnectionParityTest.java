@@ -21,7 +21,7 @@ public class ConfigConnectionParityTest {
         ConfigurationManager cm = new ConfigurationManager(tmp.resolve("m.properties").toString());
         new ConnectionStore(cm).save(new ConnectionSpec("c1",
                 List.of("localhost:27017"), "test", "admin",
-                "", "", "single", "msg", false, "127.0.0.1", 5555));
+                "", "", "single", "msg", false, "127.0.0.1", 5555, false, false));
 
         ConfigurationManager re = new ConfigurationManager(tmp.resolve("m.properties").toString());
         assertEquals("test", re.getProperty("morphium.c1.database"));

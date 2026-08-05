@@ -93,6 +93,9 @@ The easiest way to configure Morpheus is using the interactive `config` command:
 # Configure SOCKS proxy (for SSH tunnels)
 ./run.sh config proxy config production
 
+# Configure SSL/TLS
+./run.sh config ssl config production
+
 # List all connections
 ./run.sh config connection list
 

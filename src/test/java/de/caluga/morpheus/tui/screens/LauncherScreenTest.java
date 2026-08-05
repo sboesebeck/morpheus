@@ -23,8 +23,8 @@ public class LauncherScreenTest {
     private MorpheusContext ctxWithConnections() throws Exception {
         ConfigurationManager cm = new ConfigurationManager(tmp.resolve("m.properties").toString());
         ConnectionStore store = new ConnectionStore(cm);
-        store.save(new ConnectionSpec("alpha", List.of("h:27017"), "d", "admin", "", "", "single", "msg", false, "127.0.0.1", 5555));
-        store.save(new ConnectionSpec("beta", List.of("h:27017"), "d", "admin", "", "", "single", "msg", false, "127.0.0.1", 5555));
+        store.save(new ConnectionSpec("alpha", List.of("h:27017"), "d", "admin", "", "", "single", "msg", false, "127.0.0.1", 5555, false, false));
+        store.save(new ConnectionSpec("beta", List.of("h:27017"), "d", "admin", "", "", "single", "msg", false, "127.0.0.1", 5555, false, false));
         return new MorpheusContext(cm);
     }
 
