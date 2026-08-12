@@ -185,6 +185,9 @@ The bottom line always shows the **current** payload/thread settings, e.g.
 
 - `s` — start / stop the probe
 - `m` — cycle send mode: interval → fixed-rate → ramp
+- `x` — toggle exclusive pings: measures the request/reply profile including
+  the responder-side lock/claim traffic instead of the broadcast path
+  (no-op in `--status` mode; `excl` shows in the header when active)
 - `+` / `-` — adjust the current mode's knob (interval ms / rate msgs/s / ramp step)
 - `p` / `P` — smaller / bigger ping payload (0, 1k, 10k, 100k)
 - `t` / `T` — fewer / more sender threads (1, 2, 4, 8)
@@ -194,8 +197,8 @@ The bottom line always shows the **current** payload/thread settings, e.g.
   name is confirmed in the bottom line
 - `Esc` back, `q` quit
 
-Changing mode, payload or threads restarts a running probe; collected stats
-are kept.
+Changing mode, exclusive, payload or threads restarts a running probe;
+collected stats are kept.
 
 ## `uptime` — Uptime/failover monitor over pong responders
 

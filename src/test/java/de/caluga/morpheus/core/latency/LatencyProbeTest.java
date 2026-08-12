@@ -65,6 +65,28 @@ public class LatencyProbeTest {
     }
 
     @Test
+    void pingIsNotExclusiveByDefault() {
+        Msg m = probe(LatencyProbe.Config.defaults()).sendPing();
+        assertFalse(m.isExclusive(), "default profile must stay on the broadcast path");
+    }
+
+    @Test
+    void exclusiveConfigMarksPingExclusive() {
+        Msg m = probe(LatencyProbe.Config.defaults().withExclusive(true)).sendPing();
+        assertTrue(m.isExclusive(), "exclusive profile must set the exclusive flag on the ping");
+    }
+
+    @Test
+    void statusModeIgnoresExclusive() {
+        var d = LatencyProbe.Config.defaults();
+        var cfg = new LatencyProbe.Config("msg_status_info", true, d.mode(), d.intervalMs(), d.rate(),
+                d.rampStartRate(), d.rampStepRate(), d.rampStepMs(), d.rampAbortLossPct(),
+                d.senderThreads(), 0, d.timeoutMs(), d.bufferCapacity(), 0).withExclusive(true);
+        Msg m = probe(cfg).sendPing();
+        assertFalse(m.isExclusive(), "status pings are broadcasts to ALL and must never be exclusive");
+    }
+
+    @Test
     void answerProducesRttSampleSingleClock() {
         LatencyProbe p = probe(LatencyProbe.Config.defaults());
         Msg ping = p.sendPing();

@@ -367,6 +367,13 @@ counted as a loss before the summary is printed).
 **Options:**
 - `--topic <name>` - Ping topic (default: `morpheus_latency`)
 - `--status` - Ping the Morphium status-info listener instead (real app nodes)
+- `--exclusive` - Send pings as exclusive messages: measures the request/reply
+  profile including the responder-side lock/claim traffic instead of the
+  broadcast path (not combinable with `--status`; with several responders,
+  each ping is answered by exactly one of them). In the TUI the `x` key
+  toggles this. Note: with several responders the *per-responder* `loss%`
+  reflects the claim distribution (each responder "misses" the pings the
+  other one claimed) — only the total loss counts as loss here.
 - `--interval <ms>` - Ping interval in ms, default send mode (default: 1000)
 - `--rate <n>` - Fixed send rate in msgs/s (enables load mode)
 - `--ramp <start:step:stepSecs>` - Ramp mode, e.g. `50:50:10` (start at 50/s,
@@ -391,10 +398,12 @@ counted as a loss before the summary is printed).
 
 `pong` options: `--topic <name>` (must match `latency --topic`), `--name
 <name>` (responder label, default: hostname-pid) — this name appears as the
-responder key in `latency` output instead of the internal sender id — and
+responder key in `latency` output instead of the internal sender id —
 `--payload <bytes>` (default: 0) to pad the answers, so the return leg
 carries the same kind of load as `latency --payload` puts on the outbound
-leg.
+leg, and `--work <ms>` (default: 0) to sleep before answering, simulating a
+real consumer's handler work (the delay lands in the RTT and the `ret≈` leg;
+`recvTs` is taken on arrival, so `out≈` stays honest).
 
 **Multiple responders / multi-node `--status`:** with the default
 `SingleCollectionMessaging`, every answer to a ping is recorded, so several
@@ -431,6 +440,11 @@ also shows `?` in place of a negative `out≈`/`ret≈` value (clock skew);
 
 # Latency against real app nodes (no dedicated pong needed)
 ./run.sh -c myconn latency --headless --status --interval 1000 --duration 10 --json
+
+# Exclusive request/reply profile with simulated handler work (like-for-like
+# with production sync request/reply: lock traffic + 5ms work per message);
+# responder: ./run.sh -c myconn pong --name pong-1 --work 5
+./run.sh -c myconn latency --headless --exclusive --rate 100 --threads 5 --warmup 10 --duration 40 --json
 ```
 
 ### uptime — availability & failover monitoring

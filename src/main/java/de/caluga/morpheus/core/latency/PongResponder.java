@@ -15,17 +15,23 @@ public class PongResponder implements MessageListener<Msg> {
     private final String name;
     private final LongSupplier wallClock;
     private final int payloadBytes;
+    private final long workMs;
     private volatile long received = 0;
     private volatile long answered = 0;
 
     public PongResponder(String name, LongSupplier wallClock) {
-        this(name, wallClock, 0);
+        this(name, wallClock, 0, 0);
     }
 
     public PongResponder(String name, LongSupplier wallClock, int payloadBytes) {
+        this(name, wallClock, payloadBytes, 0);
+    }
+
+    public PongResponder(String name, LongSupplier wallClock, int payloadBytes, long workMs) {
         this.name = name;
         this.wallClock = wallClock;
         this.payloadBytes = payloadBytes;
+        this.workMs = workMs;
     }
 
     public long received() { return received; }
@@ -36,9 +42,21 @@ public class PongResponder implements MessageListener<Msg> {
         try {
             if (msg == null || msg.getInAnswerTo() != null) return null;
             received++;
+            // recvTs is the arrival time, taken BEFORE the simulated work, so the sender's
+            // outbound/return split stays honest: work shows up in the return leg (and the RTT),
+            // exactly as a real handler's processing time would.
+            long recvTs = wallClock.getAsLong();
+            if (workMs > 0) {
+                try {
+                    Thread.sleep(workMs);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();   // shutting down: don't answer
+                    return null;
+                }
+            }
             Msg answer = msg.createAnswerMsg();
             Map<String, Object> map = new HashMap<>();
-            map.put("recvTs", wallClock.getAsLong());
+            map.put("recvTs", recvTs);
             map.put("responder", name);
             if (msg.getMapValue() != null && msg.getMapValue().get("seq") != null) {
                 map.put("seq", msg.getMapValue().get("seq"));

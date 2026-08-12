@@ -26,6 +26,11 @@ public class PongCommand implements Callable<Integer> {
             description = "Answer padding bytes, for symmetric load on the return leg (default: ${DEFAULT-VALUE}).")
     int payload;
 
+    @Option(names = {"--work"}, defaultValue = "0",
+            description = "Simulated handler work in ms before answering, to model a real "
+                    + "request/reply consumer (default: ${DEFAULT-VALUE}).")
+    long workMs;
+
     @Override
     public Integer call() throws Exception {
         MorpheusContext ctx = parent.context();
@@ -36,9 +41,10 @@ public class PongCommand implements Callable<Integer> {
         // a shutdown hook so Morphium/messaging still get torn down cleanly.
         Runtime.getRuntime().addShutdownHook(new Thread(ctx::close, "pong-shutdown"));
         String n = name != null ? name : ManagementFactory.getRuntimeMXBean().getName().replace('@', '-');
-        PongResponder pong = new PongResponder(n, System::currentTimeMillis, payload);
+        PongResponder pong = new PongResponder(n, System::currentTimeMillis, payload, workMs);
         ctx.getMessaging().addListenerForTopic(topic, pong);
-        ctx.pr("[c1]pong[r] '" + n + "' listening on topic [c3]" + topic + "[r] — Ctrl-C to stop");
+        ctx.pr("[c1]pong[r] '" + n + "' listening on topic [c3]" + topic + "[r]"
+                + (workMs > 0 ? " (simulating " + workMs + "ms work)" : "") + " — Ctrl-C to stop");
         long lastCount = 0;
         while (true) {
             Thread.sleep(5000);

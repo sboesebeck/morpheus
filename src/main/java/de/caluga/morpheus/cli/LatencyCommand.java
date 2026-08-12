@@ -32,6 +32,10 @@ public class LatencyCommand implements Callable<Integer> {
     String topic;
     @Option(names = {"--status"}, description = "Ping the Morphium status-info listener instead (real app nodes).")
     boolean status;
+    @Option(names = {"--exclusive"},
+            description = "Send pings as exclusive messages: measures the request/reply profile "
+                    + "including the responder-side lock/claim traffic instead of the broadcast path.")
+    boolean exclusive;
     @Option(names = {"--interval"}, description = "Ping interval in ms (default mode, default: 1000).")
     Long intervalMs;
     @Option(names = {"--rate"}, description = "Fixed send rate in msgs/s (enables load mode).")
@@ -82,10 +86,16 @@ public class LatencyCommand implements Callable<Integer> {
 
     @Override
     public Integer call() throws Exception {
+        if (status && exclusive) {
+            CommandLine cl = spec != null ? spec.commandLine() : new CommandLine(this);
+            throw new ParameterException(cl,
+                    "--exclusive cannot be combined with --status: status pings are broadcasts to ALL nodes.");
+        }
         if (!headless) {
             MorpheusContext ctx = parent.context();
             warnIgnoredHeadlessOptions(ctx);
-            MorpheusTui.launchView(ctx, "latency", (viewName, viewCtx) -> new LatencyScreen(viewCtx, topic, status));
+            MorpheusTui.launchView(ctx, "latency",
+                    (viewName, viewCtx) -> new LatencyScreen(viewCtx, topic, status, exclusive));
             return 0;
         }
         MorpheusContext ctx = parent.context();
@@ -146,7 +156,8 @@ public class LatencyCommand implements Callable<Integer> {
                 intervalMs != null ? intervalMs : d.intervalMs(),
                 rate != null ? rate : d.rate(),
                 rampStart, rampStep, rampStepMs, rampAbortLoss,
-                threads, payload, timeoutMs, buffer, warmupSecs * 1000L);
+                threads, payload, timeoutMs, buffer, warmupSecs * 1000L)
+                .withExclusive(exclusive && !status);
     }
 
     private ParameterException rampParamError() {

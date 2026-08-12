@@ -66,7 +66,7 @@ public class CliCommandSurfaceTest {
         for (String opt : new String[]{"--headless", "--topic", "--status", "--interval", "--rate",
                 "--ramp", "--threads", "--payload", "--timeout", "--duration",
                 "--json", "--csv", "--graphite", "--max-loss", "--ramp-abort-loss", "--buffer",
-                "--samples"}) {
+                "--samples", "--exclusive"}) {
             assertTrue(spec.optionsMap().containsKey(opt), opt + " missing");
         }
     }
@@ -86,6 +86,12 @@ public class CliCommandSurfaceTest {
     void pongPayloadOptionPresent() {
         var spec = cli().getSubcommands().get("pong").getCommandSpec();
         assertTrue(spec.optionsMap().containsKey("--payload"), "--payload missing on pong");
+    }
+
+    @Test
+    void pongWorkOptionPresent() {
+        var spec = cli().getSubcommands().get("pong").getCommandSpec();
+        assertTrue(spec.optionsMap().containsKey("--work"), "--work missing on pong");
     }
 
     @Test

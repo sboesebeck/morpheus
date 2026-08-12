@@ -20,7 +20,22 @@ public class LatencyProbe {
     public record Config(String topic, boolean statusMode, Mode mode, long intervalMs, double rate,
                          double rampStartRate, double rampStepRate, long rampStepMs,
                          double rampAbortLossPct, int senderThreads, int payloadBytes,
-                         long timeoutMs, int bufferCapacity, long warmupMs) {
+                         long timeoutMs, int bufferCapacity, long warmupMs, boolean exclusive) {
+        /** Non-exclusive pings (the pre-exclusive-profile arity, used by most call sites). */
+        public Config(String topic, boolean statusMode, Mode mode, long intervalMs, double rate,
+                      double rampStartRate, double rampStepRate, long rampStepMs,
+                      double rampAbortLossPct, int senderThreads, int payloadBytes,
+                      long timeoutMs, int bufferCapacity, long warmupMs) {
+            this(topic, statusMode, mode, intervalMs, rate, rampStartRate, rampStepRate, rampStepMs,
+                    rampAbortLossPct, senderThreads, payloadBytes, timeoutMs, bufferCapacity, warmupMs, false);
+        }
+
+        public Config withExclusive(boolean v) {
+            return new Config(topic, statusMode, mode, intervalMs, rate, rampStartRate, rampStepRate,
+                    rampStepMs, rampAbortLossPct, senderThreads, payloadBytes, timeoutMs, bufferCapacity,
+                    warmupMs, v);
+        }
+
         public static Config defaults() {
             return new Config("morpheus_latency", false, Mode.INTERVAL, 1000, 10,
                     10, 10, 10_000, 50.0, 1, 0, 5000, 10_000, 0);
@@ -96,6 +111,10 @@ public class LatencyProbe {
                 m = new Msg(cfg.topic(), "ALL", "ALL", cfg.timeoutMs());
             } else {
                 m = new Msg(cfg.topic(), "ping", runId + ":" + s, cfg.timeoutMs());
+                // Exclusive request/reply profile: the responder side then runs the full
+                // lock/claim path, matching how production sync request/reply rides the bus —
+                // measurably slower than the broadcast path, which is the point of measuring it.
+                if (cfg.exclusive()) m.setExclusive(true);
                 Map<String, Object> map = new HashMap<>();
                 map.put("seq", s);
                 map.put("sentTs", sentTs);

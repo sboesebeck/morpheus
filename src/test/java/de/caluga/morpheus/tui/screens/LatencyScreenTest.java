@@ -176,6 +176,28 @@ public class LatencyScreenTest {
     }
 
     @Test
+    void exclusiveToggleFlowsIntoConfig() {
+        LatencyScreen s = new LatencyScreen(snap(0));
+        assertFalse(s.exclusiveMode());
+        assertFalse(s.currentConfig().exclusive());
+        s.onKey(KeyStroke.fromString("x"));
+        assertTrue(s.exclusiveMode());
+        assertTrue(s.currentConfig().exclusive());
+        s.onKey(KeyStroke.fromString("x"));
+        assertFalse(s.exclusiveMode());
+    }
+
+    @Test
+    void exclusiveCtorFlagIsInitialValueButIgnoredInStatusMode() {
+        LatencyScreen s = new LatencyScreen((de.caluga.morpheus.cli.MorpheusContext) null, "t", false, true);
+        assertTrue(s.currentConfig().exclusive());
+        LatencyScreen st = new LatencyScreen((de.caluga.morpheus.cli.MorpheusContext) null, "t", true, true);
+        assertFalse(st.currentConfig().exclusive(), "status pings must never be exclusive");
+        st.onKey(KeyStroke.fromString("x"));             // toggle is a no-op in status mode
+        assertFalse(st.currentConfig().exclusive());
+    }
+
+    @Test
     void sendErrorsShowInHeader() throws Exception {
         LatencyStats st = new LatencyStats(1000);
         st.recordPingSent(1);

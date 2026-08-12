@@ -70,4 +70,24 @@ public class LatencyReportTest {
         assertTrue(ex.getMessage().contains("start:step:stepSecs"),
                 "expected the start:step:stepSecs format hint, got: " + ex.getMessage());
     }
+
+    @Test
+    void buildConfigCarriesExclusiveFlag() {
+        LatencyCommand cmd = new LatencyCommand();
+        cmd.status = false;
+        assertFalse(cmd.buildConfig(null).exclusive(), "default must be non-exclusive");
+        cmd.exclusive = true;
+        assertTrue(cmd.buildConfig(null).exclusive());
+    }
+
+    @Test
+    void exclusiveWithStatusRejected() {
+        var cl = MorpheusCli.buildCommandLine(new RootCommand());
+        var sw = new java.io.StringWriter();
+        cl.setErr(new java.io.PrintWriter(sw));
+        int rc = cl.execute("latency", "--headless", "--status", "--exclusive");
+        assertNotEquals(0, rc, "--exclusive --status must be rejected");
+        assertTrue(sw.toString().contains("--exclusive cannot be combined with --status"),
+                "expected the conflict message, got: " + sw);
+    }
 }

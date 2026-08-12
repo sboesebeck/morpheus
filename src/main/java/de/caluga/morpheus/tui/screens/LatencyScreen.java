@@ -36,6 +36,7 @@ public class LatencyScreen implements Screen {
                                                    // can't land on a newer one after a restart
 
     private LatencyProbe.Mode mode = LatencyProbe.Mode.INTERVAL;
+    private boolean exclusive = false;
     private long intervalMs = 1000;
     private double rate = 10;
     private double rampStep = 50;
@@ -51,10 +52,15 @@ public class LatencyScreen implements Screen {
     }
 
     public LatencyScreen(MorpheusContext ctx, String topic, boolean statusMode) {
+        this(ctx, topic, statusMode, false);
+    }
+
+    public LatencyScreen(MorpheusContext ctx, String topic, boolean statusMode, boolean exclusive) {
         this.ownedCtx = ctx;
         this.fixed = null;
         this.initialTopic = topic;
         this.statusMode = statusMode;
+        this.exclusive = exclusive;
     }
 
     /** Test seam: render a fixed snapshot, no backend. */
@@ -68,6 +74,7 @@ public class LatencyScreen implements Screen {
     boolean histogramVisible() { return histogram; }
     boolean isRunning() { return probe != null && probe.isRunning(); }
     LatencyProbe.Mode mode() { return mode; }
+    boolean exclusiveMode() { return exclusive; }
     int payloadBytes() { return PAYLOADS[payloadIdx]; }
     int senderThreads() { return THREADS[threadIdx]; }
     void setExportDir(java.nio.file.Path dir) { exportDir = dir; }   // test seam
@@ -95,7 +102,8 @@ public class LatencyScreen implements Screen {
         }
         return new LatencyProbe.Config(topic, statusMode, mode, intervalMs, rate,
                 50, rampStep, 10_000, 50.0, senderThreads(), payloadBytes(),
-                d.timeoutMs(), d.bufferCapacity(), d.warmupMs());
+                d.timeoutMs(), d.bufferCapacity(), d.warmupMs())
+                .withExclusive(exclusive && !statusMode);
     }
 
     /** Send strategy: sendAndAwaitAsync's per-message callback. A swap to sendMessage + own topic
@@ -137,6 +145,7 @@ public class LatencyScreen implements Screen {
             case 'h' -> histogram = !histogram;
             case 'e' -> exportCsv();
             case 'm' -> { mode = LatencyProbe.Mode.values()[(mode.ordinal() + 1) % LatencyProbe.Mode.values().length]; restartIfRunning(); }
+            case 'x' -> { if (!statusMode) { exclusive = !exclusive; restartIfRunning(); } }
             case 'P' -> { if (payloadIdx < PAYLOADS.length - 1) { payloadIdx++; restartIfRunning(); } }
             case 'p' -> { if (payloadIdx > 0) { payloadIdx--; restartIfRunning(); } }
             case 'T' -> { if (threadIdx < THREADS.length - 1) { threadIdx++; restartIfRunning(); } }
@@ -224,8 +233,9 @@ public class LatencyScreen implements Screen {
         g.setForegroundColor(TextColor.ANSI.DEFAULT);
         String help = exportNote != null && System.currentTimeMillis() - exportNoteAt < 5000
                 ? exportNote
-                : String.format("s start/stop  m mode  +/- rate  p/P payload:%s  t/T threads:%d  "
-                        + "h histogram  e export csv  q back", fmtBytes(payloadBytes()), senderThreads());
+                : String.format("s start/stop  m mode  x excl:%s  +/- rate  p/P payload:%s  t/T threads:%d  "
+                        + "h histogram  e export csv  q back",
+                        exclusive ? "on" : "off", fmtBytes(payloadBytes()), senderThreads());
         g.putString(2, keyHelpRow, trunc(help, width - 3));
     }
 
@@ -240,8 +250,8 @@ public class LatencyScreen implements Screen {
         String status = probe != null && probe.rampAborted() ? "RAMP-ABORTED" : (isRunning() ? "RUNNING" : "STOPPED");
         double target = probe != null ? probe.targetRate() : 0.0;
         double actual = probe != null ? probe.actualRate() : 0.0;
-        String header = String.format("conn:%s  topic:%s  mode:%s  rate(target/actual):%.1f/%.1f  %s",
-                conn, topic, mode, target, actual, status);
+        String header = String.format("conn:%s  topic:%s  mode:%s%s  rate(target/actual):%.1f/%.1f  %s",
+                conn, topic, mode, exclusive ? " excl" : "", target, actual, status);
         if (snap.sendErrors() > 0) header += "  sendErr:" + snap.sendErrors();
         g.setForegroundColor(TextColor.ANSI.CYAN);
         g.putString(2, 0, trunc(header, width - 3));
