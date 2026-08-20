@@ -6,9 +6,6 @@ import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.ParentCommand;
 
-import java.io.OutputStreamWriter;
-import java.io.PrintWriter;
-import java.net.Socket;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -18,7 +15,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
 
 @Command(name = "ping",
-         description = "One-shot status ping of all messaging nodes (scriptable; supports --graphite).",
+         description = "One-shot status ping of all messaging nodes (scriptable).",
          mixinStandardHelpOptions = true)
 public class PingCommand implements Callable<Integer> {
 
@@ -63,43 +60,11 @@ public class PingCommand implements Callable<Integer> {
             split = ",")
     List<String> keys = new ArrayList<>();
 
-    @Option(names = {"--graphite"},
-            description = "Graphite endpoint in the form host[:port] (default port 8125).")
-    String graphite;
-
-    // Graphite TCP socket state
-    private Socket graphiteSocket;
-    private PrintWriter graphiteOut;
-    private String graphiteHost;
-    private int graphitePort;
-
     @Override
     public Integer call() throws Exception {
         MorpheusContext ctx = parent.context();
         ctx.printBanner();
         ctx.connect();
-
-        // --- graphite setup ---
-        if (graphite != null) {
-            graphiteHost = graphite;
-            graphitePort = 8125;
-            if (graphite.contains(":")) {
-                String[] parts = graphite.split(":", 2);
-                graphiteHost = parts[0];
-                graphitePort = Integer.parseInt(parts[1]);
-            }
-            ctx.pr("Preparing Socket to graphite...");
-            try {
-                graphiteSocket = new Socket(graphiteHost, graphitePort);
-                graphiteOut = new PrintWriter(new OutputStreamWriter(graphiteSocket.getOutputStream()));
-            } catch (Exception e) {
-                ctx.pr("[rd]FAILED[r]");
-                if (ctx.getConfig().isVerbose()) {
-                    e.printStackTrace();
-                }
-                return 1;
-            }
-        }
 
         // --- verbose is the global -v flag ---
         boolean verbose = ctx.getConfig().isVerbose();
@@ -175,18 +140,14 @@ public class PingCommand implements Callable<Integer> {
                 ctx.pr("Answer from: [c3]" + r.getSender() + "[r] on host [good]"
                         + r.getSenderHost() + "[r] after [warning]"
                         + (r.getTimestamp() - sendTS) + "ms[r]");
-                sendToGraphite("answer.sender." + r.getSender(), r.getTimestamp() - sendTS);
-                sendToGraphite("answer.host." + r.getSenderHost(), r.getTimestamp() - sendTS);
 
                 if (r.getMapValue() != null) {
-                    filteredOutput += printMap(ctx, r.getMapValue(), "", keys, filterPath, excludePath, r.getSender());
+                    filteredOutput += printMap(ctx, r.getMapValue(), "", keys, filterPath, excludePath);
                 }
             } else {
                 long after = (r.getTimestamp() - sendTS);
                 ctx.pr(ctx.getColumn(r.getSender(), 25) + " | "
                         + ctx.getColumn(r.getSenderHost(), 25) + " | " + after + "ms");
-                sendToGraphite("answer.sender." + r.getSender(), after);
-                sendToGraphite("answer.host." + r.getSenderHost(), after);
             }
         }
 
@@ -194,32 +155,12 @@ public class PingCommand implements Callable<Integer> {
         ctx.pr("processed messages: " + answers.size() + "  Filtered hosts: " + filteredHosts
                 + "    filtered Output: " + filteredOutput, 2);
 
-        if (graphiteSocket != null) {
-            graphiteOut.flush();
-            graphiteSocket.close();
-        }
-
         return 0;
-    }
-
-    private void sendToGraphite(String key, Object value) {
-        if (graphiteSocket != null) {
-            key = key.replaceAll(":", ".");
-            if (key.startsWith(".")) {
-                key = key.substring(1);
-            }
-            System.out.println("sending to graphite: '" + key + ":" + value + "|g'");
-            try {
-                graphiteOut.println(key + " " + value + " " + (System.currentTimeMillis() / 1000));
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        }
     }
 
     @SuppressWarnings("unchecked")
     private int printMap(MorpheusContext ctx, Map<String, Object> map, String path,
-                         List<String> keys, Pattern pathPattern, Pattern notFilterPath, String sender) {
+                         List<String> keys, Pattern pathPattern, Pattern notFilterPath) {
         int filtered = 0;
 
         for (Map.Entry<String, Object> k : map.entrySet()) {
@@ -257,10 +198,9 @@ public class PingCommand implements Callable<Integer> {
                 for (Object l : (List<?>) k.getValue()) {
                     if (l instanceof Map) {
                         filtered += printMap(ctx, (Map<String, Object>) l, path + "." + k.getKey(),
-                                keys, pathPattern, notFilterPath, sender);
+                                keys, pathPattern, notFilterPath);
                     } else {
                         ctx.pr("[good]" + l.toString() + "[r]");
-                        sendToGraphite(sender + path + "." + k.getKey(), l.toString());
                     }
                 }
             } else if (k.getValue() instanceof Map) {
@@ -274,7 +214,7 @@ public class PingCommand implements Callable<Integer> {
                 }
                 ctx.pr("[good]" + path + "." + k.getKey() + "[r]");
                 filtered += printMap(ctx, (Map<String, Object>) k.getValue(), path + "." + k.getKey(),
-                        keys, pathPattern, notFilterPath, sender);
+                        keys, pathPattern, notFilterPath);
             } else {
                 if (pathPattern != null && !pathPattern.matcher(path + "." + k.getKey()).matches()) {
                     filtered++;
@@ -285,7 +225,6 @@ public class PingCommand implements Callable<Integer> {
                     continue;
                 }
                 ctx.pr("[c3]" + path + "." + k.getKey() + "[r] | " + k.getValue());
-                sendToGraphite(sender + path + "." + k.getKey(), k.getValue());
             }
         }
 

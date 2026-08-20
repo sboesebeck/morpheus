@@ -53,6 +53,7 @@ public class GraphScreen implements Screen {
     }
 
     private final MorpheusContext ownedCtx;   // null in the test seam
+    private MessageFeed feed;
     private final MessageTracker tracker;     // null in the test seam
     private final FlowDeriver deriver;        // null in the test seam
     private final NodeRegistry registry;
@@ -90,10 +91,8 @@ public class GraphScreen implements Screen {
         this.tracker = new MessageTracker(200);
         this.deriver = new FlowDeriver(self, registry);
         if (ctx.getMorphium() != null) {
-            MessageFeed feed = new MessageFeed(ctx.getMorphium(), ctx.getMessaging(), tracker, () -> {}, false);
-            Thread ft = new Thread(() -> { try { feed.watch(); } catch (Throwable ignored) {} }, "graph-feed");
-            ft.setDaemon(true);
-            ft.start();
+            this.feed = new MessageFeed(ctx.getMorphium(), ctx.getMessaging(), tracker, () -> {}, false);
+            this.feed.start();
             Thread st = new Thread(() -> {
                 try {
                     pendingSeed = new StatusPinger(ctx.getMessaging()).ping(5000);
@@ -143,6 +142,7 @@ public class GraphScreen implements Screen {
     @Override
     public void onClose() {
         if (gfx) KittyGraphics.delete(gfxOut);
+        if (feed != null) feed.stop();
         if (ownedCtx != null) ownedCtx.close();
     }
 

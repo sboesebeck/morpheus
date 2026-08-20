@@ -280,7 +280,6 @@ The `status` command has many options:
 - `--exclude-path <pattern>` - Exclude status paths by regex
 - `--level PING|MESSAGING_ONLY|MORPHIUM_ONLY|ALL` - Status detail level
 - `--keys a,b` - Comma-separated list of keys to show
-- `--graphite host[:port]` - Export metrics to Graphite
 
 **Examples:**
 
@@ -292,9 +291,6 @@ The `status` command has many options:
 ./run.sh --verbose status \
   --filter-host 'app-server-[0-9]+' \
   --level ALL
-
-# Export to Graphite
-./run.sh status --graphite localhost:2003
 ```
 
 ### Send Command
@@ -388,8 +384,6 @@ counted as a loss before the summary is printed).
 - `--headless` - Run without the TUI, print a summary at the end
 - `--duration <secs>` - Headless run duration in seconds (default: 60)
 - `--json` / `--csv` - Machine-readable summary instead of the themed table
-- `--graphite <host[:port]>` / `--prefix <name>` - Push per-responder
-  metrics (`avg`, `p50`, `p90`, `p99`, `loss`) to Graphite
 - `--max-loss <pct>` - Exit non-zero when total loss % exceeds this (for CI)
 - `--samples <file>` - Write the raw sample series to a CSV file (one row per
   answered ping: `seq,sentTs,responder,host,rttMs,outboundMs,returnMs`) —
@@ -431,9 +425,6 @@ also shows `?` in place of a negative `out≈`/`ret≈` value (clock skew);
 
 # Load test at 100 msg/s with 4 sender threads, CSV output
 ./run.sh -c myconn latency --headless --rate 100 --threads 4 --duration 30 --csv
-
-# Push percentiles to Graphite
-./run.sh -c myconn latency --headless --interval 1000 --duration 60 --graphite localhost:2003
 
 # CI-friendly: fail (exit 2) if loss exceeds 5%
 ./run.sh -c myconn latency --headless --rate 50 --duration 30 --json --max-loss 5
@@ -555,11 +546,6 @@ Look for:
 4. **Use themes** to differentiate between environments:
    - `--theme production` for prod (red theme)
    - `--theme development` for dev (green theme)
-
-5. **Export Graphite metrics** for monitoring:
-   ```bash
-   ./run.sh status --graphite metrics.example.com:2003
-   ```
 
 ## Next Steps
 

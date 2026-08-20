@@ -31,6 +31,7 @@ public class MessagesScreen implements Screen {
     private final MessageTracker tracker;
     private final ConfigurationManager config;
     private MorpheusContext ownedCtx;
+    private MessageFeed feed;
     private final MessageFilter filter = new MessageFilter();
     private enum Axis { TOPIC, SENDER, HOST }
     private Axis pickerAxis;
@@ -54,11 +55,9 @@ public class MessagesScreen implements Screen {
         // disabled paths): only start the feed when there is a live Morphium.
         if (ctx.getMorphium() != null) {
             this.ownedCtx = ctx;
-            MessageFeed feed = new MessageFeed(ctx.getMorphium(), ctx.getMessaging(),
+            this.feed = new MessageFeed(ctx.getMorphium(), ctx.getMessaging(),
                     tracker, () -> {}, false);
-            Thread t = new Thread(() -> { try { feed.watch(); } catch (Throwable ignored) {} }, "messages-feed");
-            t.setDaemon(true);
-            t.start();
+            this.feed.start();
         }
     }
 
@@ -70,6 +69,7 @@ public class MessagesScreen implements Screen {
 
     @Override
     public void onClose() {
+        if (feed != null) feed.stop();
         if (ownedCtx != null) ownedCtx.close();
     }
 

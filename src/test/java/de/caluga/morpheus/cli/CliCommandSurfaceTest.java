@@ -38,10 +38,10 @@ public class CliCommandSurfaceTest {
     }
 
     @Test
-    void pingKeepsGraphiteOption() {
+    void pingHasNoGraphiteOption() {
         var ping = cli().getSubcommands().get("ping");
-        assertTrue(ping.getCommandSpec().optionsMap().containsKey("--graphite"),
-                "ping must keep the --graphite option");
+        assertFalse(ping.getCommandSpec().optionsMap().containsKey("--graphite"),
+                "ping must not keep the --graphite option (graphite export was deleted)");
     }
 
     @Test
@@ -69,6 +69,8 @@ public class CliCommandSurfaceTest {
                 "--samples", "--exclusive"}) {
             assertTrue(spec.optionsMap().containsKey(opt), opt + " missing");
         }
+        assertFalse(spec.optionsMap().containsKey("--graphite"), "--graphite must be deleted");
+        assertFalse(spec.optionsMap().containsKey("--prefix"), "--prefix must be deleted (graphite-only)");
     }
 
     @Test
@@ -99,7 +101,10 @@ public class CliCommandSurfaceTest {
         // guard: the latency feature must not have modified PingCommand
         var ping = cli().getSubcommands().get("ping");
         assertTrue(ping.getCommand() instanceof PingCommand);
-        assertTrue(ping.getCommandSpec().optionsMap().containsKey("--graphite"));
+        var opts = ping.getCommandSpec().optionsMap();
+        for (String o : new String[]{"--wait", "--level", "--filter-host", "--filter-sender", "--keys"}) {
+            assertTrue(opts.containsKey(o), o + " must be present on ping");
+        }
     }
 
     @Test

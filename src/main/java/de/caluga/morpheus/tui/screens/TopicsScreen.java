@@ -31,6 +31,7 @@ public class TopicsScreen implements Screen {
     private final MessageTracker tracker;
     private final NodeRegistry registry;
     private MorpheusContext ownedCtx;
+    private MessageFeed feed;
     private StatusPinger pinger;                      // null in the test seam
 
     private volatile List<NodeStatus> pendingRoster;  // ping handoff to the UI thread
@@ -60,10 +61,8 @@ public class TopicsScreen implements Screen {
         if (ctx.getMorphium() != null) {
             this.ownedCtx = ctx;
             this.pinger = ctx.getMessaging() != null ? new StatusPinger(ctx.getMessaging()) : null;
-            MessageFeed feed = new MessageFeed(ctx.getMorphium(), ctx.getMessaging(), tracker, () -> {}, false);
-            Thread t = new Thread(() -> { try { feed.watch(); } catch (Throwable ignored) {} }, "topics-feed");
-            t.setDaemon(true);
-            t.start();
+            this.feed = new MessageFeed(ctx.getMorphium(), ctx.getMessaging(), tracker, () -> {}, false);
+            this.feed.start();
             refresh();
         }
     }
@@ -84,6 +83,7 @@ public class TopicsScreen implements Screen {
 
     @Override
     public void onClose() {
+        if (feed != null) feed.stop();
         if (ownedCtx != null) ownedCtx.close();
     }
 

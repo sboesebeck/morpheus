@@ -12,9 +12,6 @@ import picocli.CommandLine.ParameterException;
 import picocli.CommandLine.ParentCommand;
 import picocli.CommandLine.Spec;
 
-import java.io.OutputStreamWriter;
-import java.io.PrintWriter;
-import java.net.Socket;
 import java.util.Locale;
 import java.util.concurrent.Callable;
 
@@ -60,10 +57,6 @@ public class LatencyCommand implements Callable<Integer> {
     boolean json;
     @Option(names = {"--csv"}, description = "Print summary as CSV.")
     boolean csv;
-    @Option(names = {"--graphite"}, description = "Graphite host[:port] to push per-responder metrics to.")
-    String graphite;
-    @Option(names = {"--prefix"}, defaultValue = "morpheus", description = "Graphite metric prefix (default: ${DEFAULT-VALUE}).")
-    String prefix;
     @Option(names = {"--max-loss"}, description = "Exit non-zero when total loss %% exceeds this.")
     Double maxLoss;
     @Option(names = {"--samples"}, description = "Write the raw sample series (one CSV row per answered ping) to this file.")
@@ -81,7 +74,7 @@ public class LatencyCommand implements Callable<Integer> {
      *  ('m', '+/-', 'P', 'T', ...) control these settings instead. */
     private static final String[] HEADLESS_ONLY_OPTIONS = {
         "--interval", "--rate", "--ramp", "--ramp-abort-loss", "--buffer", "--threads", "--payload",
-        "--timeout", "--duration", "--json", "--csv", "--graphite", "--max-loss", "--samples", "--warmup"
+        "--timeout", "--duration", "--json", "--csv", "--max-loss", "--samples", "--warmup"
     };
 
     @Override
@@ -124,7 +117,6 @@ public class LatencyCommand implements Callable<Integer> {
                     java.nio.file.Path.of(samplesFile), snap.samples());
             System.err.println("[latency] wrote " + snap.samples().size() + " samples to " + written);
         }
-        if (graphite != null) pushGraphite(snap);
         return maxLoss != null && snap.lossPct() > maxLoss ? 2 : 0;
     }
 
@@ -177,7 +169,7 @@ public class LatencyCommand implements Callable<Integer> {
         }
         if (any) {
             ctx.pr("[warning]--interval/--rate/--ramp/--ramp-abort-loss/--buffer/--threads/--payload/"
-                    + "--timeout/--duration/--json/--csv/--graphite/--max-loss/--samples/--warmup are ignored without --headless[r]");
+                    + "--timeout/--duration/--json/--csv/--max-loss/--samples/--warmup are ignored without --headless[r]");
         }
     }
 
@@ -226,43 +218,7 @@ public class LatencyCommand implements Callable<Integer> {
                     + ctx.getColumn(String.format(Locale.ROOT, "%.2f", r.p50()), 7) + " | "
                     + ctx.getColumn(String.format(Locale.ROOT, "%.2f", r.p90()), 7) + " | "
                     + ctx.getColumn(String.format(Locale.ROOT, "%.2f", r.p99()), 7) + " | "
-                    + ctx.getColumn(String.format(Locale.ROOT, "%.2f", r.jitterMs()), 6));
-        }
-    }
-
-    private void pushGraphite(LatencyStats.Snapshot s) {
-        // Same socket mechanism as PingCommand.sendToGraphite (host[:port], plaintext protocol).
-        // Metrics per responder (key sanitized: [^A-Za-z0-9_-] -> '_'):
-        //   <prefix>.latency.<key>.avg|p50|p90|p99|loss
-        String graphiteHost = graphite;
-        int graphitePort = 8125;
-        if (graphite.contains(":")) {
-            String[] parts = graphite.split(":", 2);
-            graphiteHost = parts[0];
-            graphitePort = Integer.parseInt(parts[1]);
-        }
-        Socket graphiteSocket = null;
-        PrintWriter graphiteOut = null;
-        try {
-            graphiteSocket = new Socket(graphiteHost, graphitePort);
-            graphiteOut = new PrintWriter(new OutputStreamWriter(graphiteSocket.getOutputStream()));
-            long ts = System.currentTimeMillis() / 1000;
-            for (var r : s.responders()) {
-                String key = r.key().replaceAll("[^A-Za-z0-9_-]", "_");
-                String base = prefix + ".latency." + key + ".";
-                graphiteOut.println(base + "avg " + r.avgMs() + " " + ts);
-                graphiteOut.println(base + "p50 " + r.p50() + " " + ts);
-                graphiteOut.println(base + "p90 " + r.p90() + " " + ts);
-                graphiteOut.println(base + "p99 " + r.p99() + " " + ts);
-                graphiteOut.println(base + "loss " + r.lossPct() + " " + ts);
-            }
-            graphiteOut.flush();
-        } catch (Exception e) {
-            System.err.println("[latency] graphite push failed: " + e.getMessage());
-        } finally {
-            if (graphiteSocket != null) {
-                try { graphiteSocket.close(); } catch (Exception e) { /* ignore */ }
-            }
+                    +             ctx.getColumn(String.format(Locale.ROOT, "%.2f", r.jitterMs()), 6));
         }
     }
 }

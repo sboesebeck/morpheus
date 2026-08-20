@@ -15,16 +15,15 @@ public class NodesScreen implements Screen {
 
     private final MessageTracker tracker;
     private MorpheusContext ownedCtx;
+    private MessageFeed feed;
 
     public NodesScreen(MorpheusContext ctx) {
         this.tracker = new MessageTracker(100);
         // Same guard as MessagesScreen: safe to construct with an unconnected context.
         if (ctx.getMorphium() != null) {
             this.ownedCtx = ctx;
-            MessageFeed feed = new MessageFeed(ctx.getMorphium(), ctx.getMessaging(), tracker, () -> {}, false);
-            Thread t = new Thread(() -> { try { feed.watch(); } catch (Throwable ignored) {} }, "nodes-feed");
-            t.setDaemon(true);
-            t.start();
+            this.feed = new MessageFeed(ctx.getMorphium(), ctx.getMessaging(), tracker, () -> {}, false);
+            this.feed.start();
         }
     }
 
@@ -32,6 +31,7 @@ public class NodesScreen implements Screen {
 
     @Override
     public void onClose() {
+        if (feed != null) feed.stop();
         if (ownedCtx != null) ownedCtx.close();
     }
 

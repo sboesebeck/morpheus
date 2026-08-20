@@ -107,9 +107,6 @@ Global options go **before** the subcommand:
 # Filter by host pattern
 ./run.sh status --filter-host 'app-server.*' --level ALL
 
-# Export to Graphite
-./run.sh status --graphite localhost:2003
-
 # Specific keys only
 ./run.sh --verbose status --keys cpu,memory,connections
 
@@ -154,9 +151,6 @@ q   quit (Esc goes back)
 
 # CI gate: fail if loss exceeds 5%
 ./run.sh latency --headless --rate 50 --duration 30 --max-loss 5 --json
-
-# Push percentiles to Graphite
-./run.sh latency --headless --duration 60 --graphite localhost:2003 --prefix morpheus
 
 # Export the raw sample series (one CSV row per ping) for plotting
 ./run.sh latency --headless --rate 50 --duration 60 --samples run1.csv
