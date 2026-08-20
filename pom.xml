@@ -9,9 +9,15 @@
     <java.version>21</java.version>
     <maven.compiler.source>21</maven.compiler.source>
     <maven.compiler.target>21</maven.compiler.target>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <mongodbDriver.version>4.7.1</mongodbDriver.version>
     <morphium.version>6.3.3</morphium.version>
     <logback.version>1.5.25</logback.version>
+    <spotbugs.version>4.10.4.0</spotbugs.version>
+    <checkstyle.version>3.3.1</checkstyle.version>
+    <checkstyle.checkstyle.version>10.17.0</checkstyle.checkstyle.version>
+    <jacoco.version>0.8.12</jacoco.version>
+    <errorprone.version>2.26.1</errorprone.version>
     <!-- <jline.version>RELEASE</jline.version> -->
   </properties>
   <dependencies>
@@ -117,72 +123,75 @@
       </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-pmd-plugin</artifactId>
-        <version>3.21.2</version>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>3.13.0</version>
+        <configuration>
+          <annotationProcessorPaths>
+            <path>
+              <groupId>com.google.errorprone</groupId>
+              <artifactId>error_prone_core</artifactId>
+              <version>${errorprone.version}</version>
+            </path>
+          </annotationProcessorPaths>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>com.github.spotbugs</groupId>
+        <artifactId>spotbugs-maven-plugin</artifactId>
+        <version>${spotbugs.version}</version>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-checkstyle-plugin</artifactId>
+        <version>${checkstyle.version}</version>
+        <dependencies>
+          <dependency>
+            <groupId>com.puppycrawl.tools</groupId>
+            <artifactId>checkstyle</artifactId>
+            <version>${checkstyle.checkstyle.version}</version>
+          </dependency>
+        </dependencies>
+        <configuration>
+          <configLocation>checkstyle.xml</configLocation>
+          <encoding>UTF-8</encoding>
+          <consoleOutput>true</consoleOutput>
+          <failsOnError>false</failsOnError>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.jacoco</groupId>
+        <artifactId>jacoco-maven-plugin</artifactId>
+        <version>${jacoco.version}</version>
         <executions>
           <execution>
             <goals>
-              <goal>pmd</goal>
-              <goal>cpd-check</goal>
+              <goal>prepare-agent</goal>
+              <goal>report</goal>
             </goals>
           </execution>
         </executions>
-        <configuration>
-          <rulesets>
-            <!-- A rule set, that comes bundled with PMD -->
-            <ruleset>/category/java/bestpractices.xml</ruleset>
-          </rulesets>
-        </configuration>
       </plugin>
-      <!-- <plugin> -->
-      <!--   <groupId>org.apache.maven.plugins</groupId> -->
-      <!--   <artifactId>maven-jar-plugin</artifactId> -->
-      <!--   <configuration> -->
-      <!--     <archive> -->
-      <!--       <manifest> -->
-      <!--         <addClasspath>true</addClasspath> -->
-      <!--         <classpathPrefix>libs/</classpathPrefix> -->
-      <!--         <mainClass> -->
-      <!--               de.caluga.morpheus.Morpheus -->
-      <!--           </mainClass> -->
-      <!--       </manifest> -->
-      <!--     </archive> -->
-      <!--   </configuration> -->
-      <!-- </plugin> -->
     </plugins>
   </build>
   <reporting>
     <plugins>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-pmd-plugin</artifactId>
-        <version>3.21.2</version>
+        <artifactId>maven-checkstyle-plugin</artifactId>
+        <version>${checkstyle.version}</version>
         <configuration>
-          <rulesets>
-            <!-- A rule set, that comes bundled with PMD -->
-            <ruleset>/category/java/bestpractices.xml</ruleset>
-          </rulesets>
+          <configLocation>checkstyle.xml</configLocation>
         </configuration>
-        <reportSets>
-          <reportSet>
-            <!-- by default, id = "default" -->
-            <reports>
-              <!-- select non-aggregate reports -->
-              <report>pmd</report>
-              <report>cpd</report>
-            </reports>
-          </reportSet>
-          <reportSet>
-            <!-- aggregate reportSet, to define in poms having modules -->
-            <id>aggregate</id>
-            <inherited>false</inherited>
-            <!-- don't run aggregate in child modules -->
-            <reports>
-              <report>aggregate-pmd</report>
-              <report>aggregate-cpd</report>
-            </reports>
-          </reportSet>
-        </reportSets>
+      </plugin>
+      <plugin>
+        <groupId>com.github.spotbugs</groupId>
+        <artifactId>spotbugs-maven-plugin</artifactId>
+        <version>${spotbugs.version}</version>
+      </plugin>
+      <plugin>
+        <groupId>org.jacoco</groupId>
+        <artifactId>jacoco-maven-plugin</artifactId>
+        <version>${jacoco.version}</version>
       </plugin>
     </plugins>
   </reporting>
