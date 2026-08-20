@@ -19,9 +19,13 @@ public class GraphFilter {
     }
 
     /** A flow yields a beam when it passes every active axis (AND between axes). */
-    public boolean acceptsFlow(FlowEvent f) {
-        if (!topics.isEmpty() && !topics.contains(f.topic())) return false;
-        if (!nodes.isEmpty() && !nodes.contains(f.from()) && !nodes.contains(f.to())) return false;
+    public boolean acceptsFlow(final FlowEvent f) {
+        if (!topics.isEmpty() && !topics.contains(f.topic())) {
+            return false;
+        }
+        if (!nodes.isEmpty() && !nodes.contains(f.from()) && !nodes.contains(f.to())) {
+            return false;
+        }
         return true;
     }
 
@@ -29,14 +33,20 @@ public class GraphFilter {
      *  active topic, or it is in the active node set. No active filter -> all bright.
      *  Deliberately derived from the static filter + registry (not from in-flight
      *  shots) so nodes don't flicker between frames. */
-    public boolean isHighlighted(String nodeId, NodeRegistry reg) {
-        if (isEmpty()) return true;
+    public boolean isHighlighted(final String nodeId, final NodeRegistry reg) {
+        if (isEmpty()) {
+            return true;
+        }
         if (!topics.isEmpty()) {
-            for (String t : topics) {
-                if (reg.listenersOf(t).contains(nodeId)) return true;
+            for (final String t : topics) {
+                if (reg.listenersOf(t).contains(nodeId)) {
+                    return true;
+                }
             }
         }
-        if (!nodes.isEmpty() && nodes.contains(nodeId)) return true;
+        if (!nodes.isEmpty() && nodes.contains(nodeId)) {
+            return true;
+        }
         return false;
     }
 

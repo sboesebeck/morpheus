@@ -12,6 +12,9 @@ import java.util.Map;
 public class LatencyStats {
 
     public static final double[] BUCKET_BOUNDS = {1, 2, 5, 10, 20, 50, 100, 200, 500, 1000};
+    private static final int PERCENTILE_50 = 50;
+    private static final int PERCENTILE_90 = 90;
+    private static final int PERCENTILE_99 = 99;
 
     private final int capacity;
     private final ArrayDeque<LatencySample> ring = new ArrayDeque<>();
@@ -27,17 +30,26 @@ public class LatencyStats {
         double last, min = Double.MAX_VALUE, max, sum;
     }
 
-    public LatencyStats(int capacity) { this.capacity = Math.max(1, capacity); }
+    public LatencyStats(final int capacity) {
+        this.capacity = Math.max(1, capacity);
+    }
 
-    public synchronized void recordPingSent(long seq) { pingsSent++; lastSeq = Math.max(lastSeq, seq); }
+    public synchronized void recordPingSent(final long seq) {
+        pingsSent++;
+        lastSeq = Math.max(lastSeq, seq);
+    }
 
-    public synchronized void recordSendError() { sendErrors++; }
+    public synchronized void recordSendError() {
+        sendErrors++;
+    }
 
-    public synchronized void recordAnswer(LatencySample s) {
-        if (ring.size() >= capacity) ring.pollFirst();
+    public synchronized void recordAnswer(final LatencySample s) {
+        if (ring.size() >= capacity) {
+            ring.pollFirst();
+        }
         ring.addLast(s);
-        Lifetime lt = responders.computeIfAbsent(s.responderKey(), k -> {
-            Lifetime l = new Lifetime();
+        final Lifetime lt = responders.computeIfAbsent(s.responderKey(), k -> {
+            final Lifetime l = new Lifetime();
             l.firstSeenSeq = s.seq();
             return l;
         });
@@ -51,64 +63,82 @@ public class LatencyStats {
         }
     }
 
-    public synchronized void recordPingCompleted(long seq, boolean answered) {
+    public synchronized void recordPingCompleted(final long seq, final boolean answered) {
         completed++;
         if (!answered) {
             timeouts++;
-            if (timeoutSeqs.size() >= capacity) timeoutSeqs.pollFirst();
+            if (timeoutSeqs.size() >= capacity) {
+                timeoutSeqs.pollFirst();
+            }
             timeoutSeqs.addLast(seq);
         }
     }
 
     public synchronized Snapshot snapshot() {
-        Map<String, List<LatencySample>> window = new HashMap<>();
-        for (LatencySample s : ring) {
-            if (s.warmup()) continue;
+        final Map<String, List<LatencySample>> window = new HashMap<>();
+        for (final LatencySample s : ring) {
+            if (s.warmup()) {
+                continue;
+            }
             window.computeIfAbsent(s.responderKey(), k -> new ArrayList<>()).add(s);
         }
 
-        List<ResponderStats> out = new ArrayList<>();
-        for (var e : responders.entrySet()) {
-            Lifetime lt = e.getValue();
-            List<LatencySample> w = window.getOrDefault(e.getKey(), List.of());
-            double[] rtts = w.stream().mapToDouble(LatencySample::rttMs).sorted().toArray();
+        final List<ResponderStats> out = new ArrayList<>();
+        for (final var e : responders.entrySet()) {
+            final Lifetime lt = e.getValue();
+            final List<LatencySample> w = window.getOrDefault(e.getKey(), List.of());
+            final double[] rtts = w.stream().mapToDouble(LatencySample::rttMs).sorted().toArray();
             double jitter = 0;
-            for (int i = 1; i < w.size(); i++) jitter += Math.abs(w.get(i).rttMs() - w.get(i - 1).rttMs());
+            for (int i = 1; i < w.size(); i++) {
+                jitter += Math.abs(w.get(i).rttMs() - w.get(i - 1).rttMs());
+            }
             jitter = w.size() > 1 ? jitter / (w.size() - 1) : 0;
-            double expected = Math.max(1, lastSeq - lt.firstSeenSeq + 1);
-            double loss = 100.0 * Math.max(0, 1 - (double) lt.count / expected);
+            final double expected = Math.max(1, lastSeq - lt.firstSeenSeq + 1);
+            final double loss = 100.0 * Math.max(0, 1 - (double) lt.count / expected);
             out.add(new ResponderStats(e.getKey(), lt.count, loss, lt.last,
                     lt.latCount == 0 ? 0 : lt.min, lt.latCount == 0 ? 0 : lt.sum / lt.latCount, lt.max,
-                    pct(rtts, 50), pct(rtts, 90), pct(rtts, 99), jitter,
+                    pct(rtts, PERCENTILE_50), pct(rtts, PERCENTILE_90), pct(rtts, PERCENTILE_99), jitter,
                     mean(w, true), mean(w, false)));
         }
 
-        long[] histogram = new long[BUCKET_BOUNDS.length + 1];
-        for (LatencySample s : ring) {
-            if (!s.warmup()) histogram[bucket(s.rttMs())]++;
+        final long[] histogram = new long[BUCKET_BOUNDS.length + 1];
+        for (final LatencySample s : ring) {
+            if (!s.warmup()) {
+                histogram[bucket(s.rttMs())]++;
+            }
         }
 
-        double loss = completed == 0 ? 0 : 100.0 * timeouts / completed;
-        return new Snapshot(pingsSent, completed, timeouts, sendErrors, loss,
+        final double lossPct = completed == 0 ? 0 : 100.0 * timeouts / completed;
+        return new Snapshot(pingsSent, completed, timeouts, sendErrors, lossPct,
                 out, histogram, List.copyOf(ring), List.copyOf(timeoutSeqs));
     }
 
-    private static int bucket(double rtt) {
-        for (int i = 0; i < BUCKET_BOUNDS.length; i++) if (rtt <= BUCKET_BOUNDS[i]) return i;
+    private static int bucket(final double rtt) {
+        for (int i = 0; i < BUCKET_BOUNDS.length; i++) {
+            if (rtt <= BUCKET_BOUNDS[i]) {
+                return i;
+            }
+        }
         return BUCKET_BOUNDS.length;
     }
 
-    private static double pct(double[] sorted, int p) {
-        if (sorted.length == 0) return 0;
-        int idx = (int) Math.ceil(p / 100.0 * sorted.length) - 1;
+    private static double pct(final double[] sorted, final int p) {
+        if (sorted.length == 0) {
+            return 0;
+        }
+        final int idx = (int) Math.ceil(p / 100.0 * sorted.length) - 1;
         return sorted[Math.max(0, Math.min(sorted.length - 1, idx))];
     }
 
-    private static Double mean(List<LatencySample> w, boolean outbound) {
-        double sum = 0; int n = 0;
-        for (LatencySample s : w) {
-            Double v = outbound ? s.outboundMs() : s.returnMs();
-            if (v != null) { sum += v; n++; }
+    private static Double mean(final List<LatencySample> w, final boolean outbound) {
+        double sum = 0;
+        int n = 0;
+        for (final LatencySample s : w) {
+            final Double v = outbound ? s.outboundMs() : s.returnMs();
+            if (v != null) {
+                sum += v;
+                n++;
+            }
         }
         return n == 0 ? null : sum / n;
     }

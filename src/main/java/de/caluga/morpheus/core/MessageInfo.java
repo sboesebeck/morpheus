@@ -30,8 +30,9 @@ public class MessageInfo {
     public String body;
 
     static final int MAX_BODY_CAPTURE = 2048;
+    private static final int MAX_TRUNCATE_LENGTH = 50;
 
-    public MessageInfo(Msg msg, String topic) {
+    public MessageInfo(final Msg msg, final String topic) {
         this.id = msg.getMsgId();
         this.sender = msg.getSender();
         this.senderHost = msg.getSenderHost();
@@ -50,26 +51,47 @@ public class MessageInfo {
     }
 
     /** Joins msg text + value + mapValue into a single searchable string, capped to MAX_BODY_CAPTURE. */
-    static String captureBody(Msg msg) {
-        StringBuilder sb = new StringBuilder();
-        try { if (msg.getMsg() != null) sb.append(msg.getMsg()); } catch (Exception ignored) {}
-        try { if (msg.getValue() != null) { if (sb.length() > 0) sb.append(' '); sb.append(msg.getValue()); } } catch (Exception ignored) {}
-        try { if (msg.getMapValue() != null && !msg.getMapValue().isEmpty()) { if (sb.length() > 0) sb.append(' '); sb.append(msg.getMapValue()); } } catch (Exception ignored) {}
-        String s = sb.toString();
+    static String captureBody(final Msg msg) {
+        final StringBuilder sb = new StringBuilder();
+        try {
+            if (msg.getMsg() != null) {
+                sb.append(msg.getMsg());
+            }
+        } catch (final Exception ignored) {
+        }
+        try {
+            if (msg.getValue() != null) {
+                if (sb.length() > 0) {
+                    sb.append(' ');
+                }
+                sb.append(msg.getValue());
+            }
+        } catch (final Exception ignored) {
+        }
+        try {
+            if (msg.getMapValue() != null && !msg.getMapValue().isEmpty()) {
+                if (sb.length() > 0) {
+                    sb.append(' ');
+                }
+                sb.append(msg.getMapValue());
+            }
+        } catch (final Exception ignored) {
+        }
+        final String s = sb.toString();
         return s.length() > MAX_BODY_CAPTURE ? s.substring(0, MAX_BODY_CAPTURE) : s;
     }
 
-    static boolean detectV5(Msg msg) {
+    static boolean detectV5(final Msg msg) {
         try {
             return msg.getTopic() == null || msg.getTopic().isEmpty();
-        } catch (Exception e) {
+        } catch (final Exception e) {
             return true;
         }
     }
 
-    public void update(Msg msg) {
+    public void update(final Msg msg) {
         if (msg.getProcessedBy() != null) {
-            int newCount = msg.getProcessedBy().size();
+            final int newCount = msg.getProcessedBy().size();
             if (newCount > this.processedByCount) {
                 this.processedByCount = newCount;
                 this.updateCount++;
@@ -77,14 +99,22 @@ public class MessageInfo {
         }
     }
 
-    private int calculateSize(Msg msg) {
+    private int calculateSize(final Msg msg) {
         int s = 0;
-        if (msg.getMsg() != null) s += msg.getMsg().length();
-        if (msg.getMapValue() != null) s += msg.getMapValue().size() * 50;
-        if (msg.getSender() != null) s += msg.getSender().length();
+        if (msg.getMsg() != null) {
+            s += msg.getMsg().length();
+        }
+        if (msg.getMapValue() != null) {
+            s += msg.getMapValue().size() * MAX_TRUNCATE_LENGTH;
+        }
+        if (msg.getSender() != null) {
+            s += msg.getSender().length();
+        }
         try {
-            if (msg.getTopic() != null) s += msg.getTopic().length();
-        } catch (Exception e) {
+            if (msg.getTopic() != null) {
+                s += msg.getTopic().length();
+            }
+        } catch (final Exception e) {
             // V5 message without topic
         }
         return s;

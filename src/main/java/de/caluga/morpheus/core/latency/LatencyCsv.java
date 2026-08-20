@@ -12,11 +12,11 @@ import java.util.Locale;
  *  responder) lives in LatencyCommand; this is the time series for plotting/analysis. */
 public final class LatencyCsv {
 
-    private LatencyCsv() { }
+    private LatencyCsv() {}
 
-    public static String samplesCsv(List<LatencySample> samples) {
-        StringBuilder b = new StringBuilder("seq,sentTs,responder,host,rttMs,outboundMs,returnMs,warmup\n");
-        for (LatencySample s : samples) {
+    public static String samplesCsv(final List<LatencySample> samples) {
+        final StringBuilder b = new StringBuilder("seq,sentTs,responder,host,rttMs,outboundMs,returnMs,warmup\n");
+        for (final LatencySample s : samples) {
             b.append(s.seq()).append(',')
              .append(s.sentTs()).append(',')
              .append(csvField(s.sender())).append(',')
@@ -29,17 +29,19 @@ public final class LatencyCsv {
         return b.toString();
     }
 
-    public static Path writeSamples(Path file, List<LatencySample> samples) throws IOException {
+    public static Path writeSamples(final Path file, final List<LatencySample> samples) throws IOException {
         Files.writeString(file, samplesCsv(samples), StandardCharsets.UTF_8);
         return file.toAbsolutePath();
     }
 
-    private static String num(Double d) {
+    private static String num(final Double d) {
         return d == null ? "" : String.format(Locale.ROOT, "%.3f", d);
     }
 
-    private static String csvField(String s) {
-        if (s == null) return "";
+    private static String csvField(final String s) {
+        if (s == null) {
+            return "";
+        }
         if (s.contains(",") || s.contains("\"") || s.contains("\n")) {
             return '"' + s.replace("\"", "\"\"") + '"';
         }

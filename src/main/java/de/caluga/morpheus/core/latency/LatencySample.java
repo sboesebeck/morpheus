@@ -7,8 +7,9 @@ public record LatencySample(long seq, String sender, String senderHost,
                             double rttMs, Double outboundMs, Double returnMs, long sentTs,
                             boolean warmup) {
 
-    public LatencySample(long seq, String sender, String senderHost,
-                         double rttMs, Double outboundMs, Double returnMs, long sentTs) {
+    public LatencySample(final long seq, final String sender, final String senderHost,
+                         final double rttMs, final Double outboundMs, final Double returnMs,
+                         final long sentTs) {
         this(seq, sender, senderHost, rttMs, outboundMs, returnMs, sentTs, false);
     }
 

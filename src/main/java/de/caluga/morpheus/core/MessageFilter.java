@@ -28,20 +28,36 @@ public final class MessageFilter {
                 && exclusive == TriState.NONE && deleted == TriState.NONE;
     }
 
-    public boolean accepts(MessageInfo m) {
-        if (!topics.isEmpty()  && !topics.contains(m.topic)) return false;
-        if (!senders.isEmpty() && !senders.contains(m.sender)) return false;
-        if (!hosts.isEmpty()   && !hosts.contains(m.senderHost)) return false;
-        if (!matchTri(answered,  m.rtt != null)) return false;
-        if (!matchTri(timedOut,  m.isTimedOut)) return false;
-        if (!matchTri(exclusive, m.isExclusive)) return false;
-        if (!matchTri(deleted,   m.isDeleted)) return false;
-        Pattern p = compiled();
-        if (p != null && (m.body == null || !p.matcher(m.body).find())) return false;
+    public boolean accepts(final MessageInfo m) {
+        if (!topics.isEmpty()  && !topics.contains(m.topic)) {
+            return false;
+        }
+        if (!senders.isEmpty() && !senders.contains(m.sender)) {
+            return false;
+        }
+        if (!hosts.isEmpty()   && !hosts.contains(m.senderHost)) {
+            return false;
+        }
+        if (!matchTri(answered,  m.rtt != null)) {
+            return false;
+        }
+        if (!matchTri(timedOut,  m.isTimedOut)) {
+            return false;
+        }
+        if (!matchTri(exclusive, m.isExclusive)) {
+            return false;
+        }
+        if (!matchTri(deleted,   m.isDeleted)) {
+            return false;
+        }
+        final Pattern p = compiled();
+        if (p != null && (m.body == null || !p.matcher(m.body).find())) {
+            return false;
+        }
         return true;
     }
 
-    private static boolean matchTri(TriState t, boolean value) {
+    private static boolean matchTri(final TriState t, final boolean value) {
         return switch (t) {
             case NONE -> true;
             case ONLY -> value;
@@ -51,10 +67,12 @@ public final class MessageFilter {
 
     /** Compiles bodyRegex case-insensitively; returns null when empty or invalid. */
     private Pattern compiled() {
-        if (bodyRegex == null || bodyRegex.isEmpty()) return null;
+        if (bodyRegex == null || bodyRegex.isEmpty()) {
+            return null;
+        }
         try {
             return Pattern.compile(bodyRegex, Pattern.CASE_INSENSITIVE);
-        } catch (PatternSyntaxException e) {
+        } catch (final PatternSyntaxException e) {
             return null;
         }
     }
@@ -63,7 +81,7 @@ public final class MessageFilter {
         return bodyRegex == null || bodyRegex.isEmpty() || compiled() != null;
     }
 
-    public void cycle(String axis) {
+    public void cycle(final String axis) {
         switch (axis) {
             case "answered"  -> answered  = next(answered);
             case "timedOut"  -> timedOut  = next(timedOut);
@@ -73,7 +91,7 @@ public final class MessageFilter {
         }
     }
 
-    private static TriState next(TriState t) {
+    private static TriState next(final TriState t) {
         return switch (t) {
             case NONE -> TriState.ONLY;
             case ONLY -> TriState.EXCLUDE;
@@ -82,8 +100,13 @@ public final class MessageFilter {
     }
 
     public void clear() {
-        topics.clear(); senders.clear(); hosts.clear();
+        topics.clear();
+        senders.clear();
+        hosts.clear();
         bodyRegex = null;
-        answered = timedOut = exclusive = deleted = TriState.NONE;
+        answered = TriState.NONE;
+        timedOut = TriState.NONE;
+        exclusive = TriState.NONE;
+        deleted = TriState.NONE;
     }
 }

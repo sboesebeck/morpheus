@@ -23,13 +23,27 @@ public class MessageStats {
     private final long startTime = System.currentTimeMillis();
 
     private record RttAcc(AtomicLong sum, AtomicLong count) {
-        void add(long v) { sum.addAndGet(v); count.incrementAndGet(); }
-        long avg() { long c = count.get(); return c == 0 ? 0 : sum.get() / c; }
+        void add(final long v) {
+            sum.addAndGet(v);
+            count.incrementAndGet();
+        }
+
+        long avg() {
+            final long c = count.get();
+            return c == 0 ? 0 : sum.get() / c;
+        }
     }
 
     private record PairAcc(String from, String to, AtomicLong count, AtomicLong rttSum) {
-        void add(long rtt) { count.incrementAndGet(); rttSum.addAndGet(rtt); }
-        long avg() { long c = count.get(); return c == 0 ? 0 : rttSum.get() / c; }
+        void add(final long rtt) {
+            count.incrementAndGet();
+            rttSum.addAndGet(rtt);
+        }
+
+        long avg() {
+            final long c = count.get();
+            return c == 0 ? 0 : rttSum.get() / c;
+        }
     }
 
     private final ConcurrentHashMap<String, PairAcc> senderPairs = new ConcurrentHashMap<>();
@@ -46,7 +60,7 @@ public class MessageStats {
         totalMessages.incrementAndGet();
     }
 
-    public void recordMessage(String sender, String host) {
+    public void recordMessage(final String sender, final String host) {
         totalMessages.incrementAndGet();
         if (sender != null && !sender.isEmpty()) {
             senderCounts.computeIfAbsent(sender, k -> new AtomicInteger()).incrementAndGet();
@@ -56,67 +70,99 @@ public class MessageStats {
         }
     }
 
-    public void recordAnswer() { totalAnswers.incrementAndGet(); }
-    public void recordUpdate() { totalUpdates.incrementAndGet(); }
-    public void recordTimeouts(int n) { totalTimeouts.addAndGet(n); }
+    public void recordAnswer() {
+        totalAnswers.incrementAndGet();
+    }
 
-    public void recordRtt(String topic, long rttMs) {
-        if (topic == null || topic.isEmpty()) return;
+    public void recordUpdate() {
+        totalUpdates.incrementAndGet();
+    }
+
+    public void recordTimeouts(final int n) {
+        totalTimeouts.addAndGet(n);
+    }
+
+    public void recordRtt(final String topic, final long rttMs) {
+        if (topic == null || topic.isEmpty()) {
+            return;
+        }
         topicRtt.computeIfAbsent(topic, k -> new RttAcc(new AtomicLong(), new AtomicLong())).add(rttMs);
     }
 
-    public long getTotalMessages() { return totalMessages.get(); }
-    public long getTotalAnswers() { return totalAnswers.get(); }
-    public long getTotalUpdates() { return totalUpdates.get(); }
-    public long getTotalTimeouts() { return totalTimeouts.get(); }
-    public long getStartTime() { return startTime; }
+    public long getTotalMessages() {
+        return totalMessages.get();
+    }
 
-    public int getSenderCount(String sender) {
-        AtomicInteger c = senderCounts.get(sender);
+    public long getTotalAnswers() {
+        return totalAnswers.get();
+    }
+
+    public long getTotalUpdates() {
+        return totalUpdates.get();
+    }
+
+    public long getTotalTimeouts() {
+        return totalTimeouts.get();
+    }
+
+    public long getStartTime() {
+        return startTime;
+    }
+
+    public int getSenderCount(final String sender) {
+        final AtomicInteger c = senderCounts.get(sender);
         return c == null ? 0 : c.get();
     }
 
-    public int getHostCount(String host) {
-        AtomicInteger c = hostCounts.get(host);
+    public int getHostCount(final String host) {
+        final AtomicInteger c = hostCounts.get(host);
         return c == null ? 0 : c.get();
     }
 
-    public long getAvgRtt(String topic) {
-        RttAcc acc = topicRtt.get(topic);
+    public long getAvgRtt(final String topic) {
+        final RttAcc acc = topicRtt.get(topic);
         return acc == null ? 0 : acc.avg();
     }
 
-    public long getRttCount(String topic) {
-        RttAcc acc = topicRtt.get(topic);
+    public long getRttCount(final String topic) {
+        final RttAcc acc = topicRtt.get(topic);
         return acc == null ? 0 : acc.count().get();
     }
 
-    public void recordTopicMessage(String topic) {
-        if (topic == null || topic.isEmpty()) return;
+    public void recordTopicMessage(final String topic) {
+        if (topic == null || topic.isEmpty()) {
+            return;
+        }
         topicMessages.computeIfAbsent(topic, k -> new AtomicLong()).incrementAndGet();
     }
 
-    public void recordTopicTimeout(String topic) {
-        if (topic == null || topic.isEmpty()) return;
+    public void recordTopicTimeout(final String topic) {
+        if (topic == null || topic.isEmpty()) {
+            return;
+        }
         topicTimeouts.computeIfAbsent(topic, k -> new AtomicLong()).incrementAndGet();
     }
 
     /** Reverses a previously-counted timeout when a late answer finally arrives. */
-    public void unrecordTimeout(String topic) {
+    public void unrecordTimeout(final String topic) {
         totalTimeouts.updateAndGet(v -> v > 0 ? v - 1 : 0);
-        if (topic == null || topic.isEmpty()) return;
-        AtomicLong tc = topicTimeouts.get(topic);
-        if (tc != null) tc.updateAndGet(v -> v > 0 ? v - 1 : 0);
+        if (topic == null || topic.isEmpty()) {
+            return;
+        }
+        final AtomicLong tc = topicTimeouts.get(topic);
+        if (tc != null) {
+            tc.updateAndGet(v -> v > 0 ? v - 1 : 0);
+        }
     }
 
-    public List<TopicAggregate> getTopicStats(int limit) {
-        java.util.Set<String> topics = new java.util.HashSet<>();
+    public List<TopicAggregate> getTopicStats(final int limit) {
+        final java.util.Set<String> topics = new java.util.HashSet<>();
         topics.addAll(topicMessages.keySet());
         topics.addAll(topicRtt.keySet());
-        List<TopicAggregate> all = new ArrayList<>();
-        for (String t : topics) {
-            AtomicLong mc = topicMessages.get(t);
-            AtomicLong tc = topicTimeouts.get(t);
+        final List<TopicAggregate> all = new ArrayList<>();
+        for (final String t : topics) {
+            final AtomicLong mc = topicMessages.get(t);
+            final AtomicLong tc = topicTimeouts.get(t);
             all.add(new TopicAggregate(t,
                     mc == null ? 0 : mc.get(),
                     getRttCount(t),
@@ -127,39 +173,52 @@ public class MessageStats {
         return List.copyOf(all.subList(0, Math.min(limit, all.size())));
     }
 
-    public List<TopicRtt> getSlowestTopics(int limit) {
-        List<TopicRtt> all = new ArrayList<>();
+    public List<TopicRtt> getSlowestTopics(final int limit) {
+        final List<TopicRtt> all = new ArrayList<>();
         topicRtt.forEach((topic, acc) -> all.add(new TopicRtt(topic, acc.avg(), acc.count().get())));
         all.sort((a, b) -> Long.compare(b.avgRtt(), a.avgRtt()));
         return List.copyOf(all.subList(0, Math.min(limit, all.size())));
     }
 
-    public List<NamedCount> getTopHosts(int limit) { return top(hostCounts, limit); }
-    public List<NamedCount> getTopSenders(int limit) { return top(senderCounts, limit); }
+    public List<NamedCount> getTopHosts(final int limit) {
+        return top(hostCounts, limit);
+    }
 
-    private List<NamedCount> top(ConcurrentHashMap<String, AtomicInteger> map, int limit) {
-        List<NamedCount> all = new ArrayList<>();
+    public List<NamedCount> getTopSenders(final int limit) {
+        return top(senderCounts, limit);
+    }
+
+    private List<NamedCount> top(final ConcurrentHashMap<String, AtomicInteger> map, final int limit) {
+        final List<NamedCount> all = new ArrayList<>();
         map.forEach((name, c) -> all.add(new NamedCount(name, c.get())));
         all.sort((a, b) -> Integer.compare(b.count(), a.count()));
         return List.copyOf(all.subList(0, Math.min(limit, all.size())));
     }
 
-    public void recordPair(String fromSender, String toSender, String fromHost, String toHost, long rttMs) {
+    public void recordPair(final String fromSender, final String toSender,
+                           final String fromHost, final String toHost, final long rttMs) {
         recordInto(senderPairs, fromSender, toSender, rttMs);
         recordInto(hostPairs, fromHost, toHost, rttMs);
     }
 
-    private void recordInto(ConcurrentHashMap<String, PairAcc> map, String from, String to, long rttMs) {
-        if (from == null) from = "";
-        if (to == null) to = "";
-        String key = from + "→" + to;
-        final String f = from, t = to;
-        map.computeIfAbsent(key, k -> new PairAcc(f, t, new AtomicLong(), new AtomicLong())).add(rttMs);
+    private void recordInto(final ConcurrentHashMap<String, PairAcc> map,
+                            final String from, final String to, final long rttMs) {
+        String f = from;
+        String t = to;
+        if (f == null) {
+            f = "";
+        }
+        if (t == null) {
+            t = "";
+        }
+        final String key = f + "→" + t;
+        final String ff = f, tt = t;
+        map.computeIfAbsent(key, k -> new PairAcc(ff, tt, new AtomicLong(), new AtomicLong())).add(rttMs);
     }
 
-    public List<PairCount> getTopPairs(boolean byHost, int limit) {
-        ConcurrentHashMap<String, PairAcc> map = byHost ? hostPairs : senderPairs;
-        List<PairCount> all = new ArrayList<>();
+    public List<PairCount> getTopPairs(final boolean byHost, final int limit) {
+        final ConcurrentHashMap<String, PairAcc> map = byHost ? hostPairs : senderPairs;
+        final List<PairCount> all = new ArrayList<>();
         map.forEach((k, acc) -> all.add(new PairCount(acc.from(), acc.to(), acc.count().get(), acc.avg())));
         all.sort((a, b) -> Long.compare(b.count(), a.count()));
         return List.copyOf(all.subList(0, Math.min(limit, all.size())));

@@ -33,23 +33,29 @@ public class FlowDeriver {
     private final NodeRegistry registry;
     private final Map<MorphiumId, Seen> seen = new HashMap<>();
 
-    public FlowDeriver(String selfId, NodeRegistry registry) {
+    public FlowDeriver(final String selfId, final NodeRegistry registry) {
         this.selfId = selfId == null ? "" : selfId;
         this.registry = registry;
     }
 
-    public List<FlowEvent> derive(List<MessageInfo> snapshot, long now) {
-        List<FlowEvent> out = new ArrayList<>();
-        Set<MorphiumId> present = new HashSet<>();
-        for (MessageInfo m : snapshot) {
-            if (m.id == null) continue;
-            if (m.sender != null && m.sender.equals(selfId)) continue;   // never track our own traffic
+    public List<FlowEvent> derive(final List<MessageInfo> snapshot, final long now) {
+        final List<FlowEvent> out = new ArrayList<>();
+        final Set<MorphiumId> present = new HashSet<>();
+        for (final MessageInfo m : snapshot) {
+            if (m.id == null) {
+                continue;
+            }
+            if (m.sender != null && m.sender.equals(selfId)) {
+                continue;   // never track our own traffic
+            }
             present.add(m.id);
             Seen s = seen.get(m.id);
             if (s == null) {
                 s = new Seen();
                 seen.put(m.id, s);
-                if (!m.isAnswer) onNewBroadcast(m, now, out);
+                if (!m.isAnswer) {
+                    onNewBroadcast(m, now, out);
+                }
             }
             if (!s.answerEmitted && m.answeredBy != null && !m.answeredBy.isEmpty()) {
                 s.answerEmitted = true;
@@ -68,14 +74,16 @@ public class FlowDeriver {
     }
 
     /** Request/reply messages expect an answer: directed (recipient set) or exclusive (queue). */
-    private boolean isRequestType(MessageInfo m) {
+    private boolean isRequestType(final MessageInfo m) {
         return (m.recipient != null && !m.recipient.isEmpty()) || m.isExclusive;
     }
 
     /** Only broadcasts (non-exclusive, no recipient) produce a shot on insert. */
-    private void onNewBroadcast(MessageInfo m, long now, List<FlowEvent> out) {
-        if (m.isExclusive || (m.recipient != null && !m.recipient.isEmpty())) return;
-        for (String l : registry.listenersOf(m.topic)) {
+    private void onNewBroadcast(final MessageInfo m, final long now, final List<FlowEvent> out) {
+        if (m.isExclusive || (m.recipient != null && !m.recipient.isEmpty())) {
+            return;
+        }
+        for (final String l : registry.listenersOf(m.topic)) {
             if (!l.equals(m.sender)) {
                 emit(out, now, m.sender, m.senderHost, l, null,
                         l, null, m.topic, FlowEvent.Kind.BROADCAST, null);
@@ -84,12 +92,12 @@ public class FlowDeriver {
     }
 
     /** An unanswered request/reply: red toward its recipient, or fanned to the topic's listeners. */
-    private void onTimeout(MessageInfo m, long now, List<FlowEvent> out) {
+    private void onTimeout(final MessageInfo m, final long now, final List<FlowEvent> out) {
         if (m.recipient != null && !m.recipient.isEmpty()) {
             emit(out, now, m.sender, m.senderHost, m.recipient, null,
                     m.recipient, null, m.topic, FlowEvent.Kind.TIMEOUT, null);
         } else {
-            for (String l : registry.listenersOf(m.topic)) {
+            for (final String l : registry.listenersOf(m.topic)) {
                 if (!l.equals(m.sender)) {
                     emit(out, now, m.sender, m.senderHost, l, null,
                             l, null, m.topic, FlowEvent.Kind.TIMEOUT, null);
@@ -99,16 +107,24 @@ public class FlowDeriver {
     }
 
     /** Records one edge: send on `from`, recv on `to`, subscription on `listenerId`; drops self/loop. */
-    private void emit(List<FlowEvent> out, long now,
-                      String from, String fromHost, String to, String toHost,
-                      String listenerId, String listenerHost, String topic,
-                      FlowEvent.Kind kind, Long rtt) {
-        if (from == null || to == null) return;
-        if (from.equals(selfId) || to.equals(selfId)) return;
-        if (from.equals(to)) return;
+    private void emit(final List<FlowEvent> out, final long now,
+                      final String from, final String fromHost, final String to, final String toHost,
+                      final String listenerId, final String listenerHost, final String topic,
+                      final FlowEvent.Kind kind, final Long rtt) {
+        if (from == null || to == null) {
+            return;
+        }
+        if (from.equals(selfId) || to.equals(selfId)) {
+            return;
+        }
+        if (from.equals(to)) {
+            return;
+        }
         registry.observeSend(from, fromHost, now);
         registry.observeRecv(to, toHost, now);
-        if (listenerId != null) registry.markListener(listenerId, listenerHost, topic, now);
+        if (listenerId != null) {
+            registry.markListener(listenerId, listenerHost, topic, now);
+        }
         out.add(new FlowEvent(from, to, topic, kind, rtt));
     }
 }

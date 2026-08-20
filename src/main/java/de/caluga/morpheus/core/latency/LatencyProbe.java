@@ -17,28 +17,53 @@ public class LatencyProbe {
 
     public enum Mode { INTERVAL, FIXED_RATE, RAMP }
 
+    private static final int DEFAULT_PAYLOAD_BYTES = 0;
+    private static final long DEFAULT_INTERVAL_MS = 1000;
+    private static final double DEFAULT_RATE = 10;
+    private static final double DEFAULT_RAMP_START_RATE = 10;
+    private static final double DEFAULT_RAMP_STEP_RATE = 10;
+    private static final long DEFAULT_RAMP_STEP_MS = 10_000;
+    private static final double DEFAULT_RAMP_ABORT_LOSS_PCT = 50.0;
+    private static final int DEFAULT_SENDER_THREADS = 1;
+    private static final long DEFAULT_TIMEOUT_MS = 5000;
+    private static final int DEFAULT_BUFFER_CAPACITY = 10_000;
+    private static final long DEFAULT_WARMUP_MS = 0;
+    private static final long MIN_VALUE = Long.MIN_VALUE;
+    private static final int SEND_NANOS_CAPACITY = 10_000;
+    private static final long NANOS_PER_MS = 1_000_000L;
+    private static final int JOIN_TIMEOUT_MS = 200;
+    private static final double NANOS_PER_SEC = 1e9;
+    private static final double MIN_RATE = 0.001;
+    private static final long SWEEPER_SLEEP_MS = 500;
+
     public record Config(String topic, boolean statusMode, Mode mode, long intervalMs, double rate,
                          double rampStartRate, double rampStepRate, long rampStepMs,
                          double rampAbortLossPct, int senderThreads, int payloadBytes,
                          long timeoutMs, int bufferCapacity, long warmupMs, boolean exclusive) {
         /** Non-exclusive pings (the pre-exclusive-profile arity, used by most call sites). */
-        public Config(String topic, boolean statusMode, Mode mode, long intervalMs, double rate,
-                      double rampStartRate, double rampStepRate, long rampStepMs,
-                      double rampAbortLossPct, int senderThreads, int payloadBytes,
-                      long timeoutMs, int bufferCapacity, long warmupMs) {
-            this(topic, statusMode, mode, intervalMs, rate, rampStartRate, rampStepRate, rampStepMs,
-                    rampAbortLossPct, senderThreads, payloadBytes, timeoutMs, bufferCapacity, warmupMs, false);
+        public Config(final String topic, final boolean statusMode, final Mode mode,
+                      final long intervalMs, final double rate,
+                      final double rampStartRate, final double rampStepRate,
+                      final long rampStepMs, final double rampAbortLossPct,
+                      final int senderThreads, final int payloadBytes,
+                      final long timeoutMs, final int bufferCapacity,
+                      final long warmupMs) {
+            this(topic, statusMode, mode, intervalMs, rate, rampStartRate, rampStepRate,
+                    rampStepMs, rampAbortLossPct, senderThreads, payloadBytes,
+                    timeoutMs, bufferCapacity, warmupMs, false);
         }
 
-        public Config withExclusive(boolean v) {
+        public Config withExclusive(final boolean v) {
             return new Config(topic, statusMode, mode, intervalMs, rate, rampStartRate, rampStepRate,
                     rampStepMs, rampAbortLossPct, senderThreads, payloadBytes, timeoutMs, bufferCapacity,
                     warmupMs, v);
         }
 
         public static Config defaults() {
-            return new Config("morpheus_latency", false, Mode.INTERVAL, 1000, 10,
-                    10, 10, 10_000, 50.0, 1, 0, 5000, 10_000, 0);
+            return new Config("morpheus_latency", false, Mode.INTERVAL, DEFAULT_INTERVAL_MS, DEFAULT_RATE,
+                    DEFAULT_RAMP_START_RATE, DEFAULT_RAMP_STEP_RATE, DEFAULT_RAMP_STEP_MS,
+                    DEFAULT_RAMP_ABORT_LOSS_PCT, DEFAULT_SENDER_THREADS, DEFAULT_PAYLOAD_BYTES,
+                    DEFAULT_TIMEOUT_MS, DEFAULT_BUFFER_CAPACITY, DEFAULT_WARMUP_MS);
         }
     }
 
@@ -46,8 +71,11 @@ public class LatencyProbe {
         final long seq, sentNanos, sentTs;
         volatile boolean answered;
         final java.util.Set<String> answeredBy = new java.util.HashSet<>();
-        Pending(long seq, long sentNanos, long sentTs) {
-            this.seq = seq; this.sentNanos = sentNanos; this.sentTs = sentTs;
+
+        Pending(final long seq, final long sentNanos, final long sentTs) {
+            this.seq = seq;
+            this.sentNanos = sentNanos;
+            this.sentTs = sentTs;
         }
     }
 
@@ -74,8 +102,8 @@ public class LatencyProbe {
     private long rampStepStartNanos = Long.MIN_VALUE;
     private long stepStartTimeouts, stepStartCompleted;
 
-    public LatencyProbe(Config cfg, LatencyStats stats, Consumer<Msg> sender,
-                        LongSupplier nanoClock, LongSupplier wallClock) {
+    public LatencyProbe(final Config cfg, final LatencyStats stats, final Consumer<Msg> sender,
+                        final LongSupplier nanoClock, final LongSupplier wallClock) {
         this.cfg = cfg;
         this.stats = stats;
         this.sender = sender;
@@ -84,29 +112,44 @@ public class LatencyProbe {
         this.currentRampRate = cfg.rampStartRate();
         this.rampStepStartNanos = nanoClock.getAsLong();
         this.pending = new LinkedHashMap<>() {
-            @Override protected boolean removeEldestEntry(Map.Entry<MorphiumId, Pending> e) {
-                if (size() <= cfg.bufferCapacity()) return false;
+            @Override
+            protected boolean removeEldestEntry(final Map.Entry<MorphiumId, Pending> e) {
+                if (size() <= cfg.bufferCapacity()) {
+                    return false;
+                }
                 stats.recordPingCompleted(e.getValue().seq, e.getValue().answered);
-                PingOutcomeListener l = outcomeListener;
-                if (l != null) l.onPingComplete(e.getValue().seq, e.getValue().sentTs,
-                        java.util.Set.copyOf(e.getValue().answeredBy));
+                final PingOutcomeListener l = outcomeListener;
+                if (l != null) {
+                    l.onPingComplete(e.getValue().seq, e.getValue().sentTs,
+                            java.util.Set.copyOf(e.getValue().answeredBy));
+                }
                 return true;
             }
         };
     }
 
-    public LatencyStats stats() { return stats; }
-    public Config config() { return cfg; }
+    public LatencyStats stats() {
+        return stats;
+    }
 
-    public void setOutcomeListener(PingOutcomeListener l) { this.outcomeListener = l; }
+    public Config config() {
+        return cfg;
+    }
+
+    public void setOutcomeListener(final PingOutcomeListener l) {
+        this.outcomeListener = l;
+    }
 
     public Msg sendPing() {
-        Msg m;
-        long s, sentTs;
+        final Msg m;
+        final long s;
+        final long sentTs;
         synchronized (this) {
             s = ++seq;
             sentTs = wallClock.getAsLong();
-            if (runStartTs == Long.MIN_VALUE) runStartTs = sentTs;
+            if (runStartTs == MIN_VALUE) {
+                runStartTs = sentTs;
+            }
             if (cfg.statusMode()) {
                 m = new Msg(cfg.topic(), "ALL", "ALL", cfg.timeoutMs());
             } else {
@@ -114,52 +157,66 @@ public class LatencyProbe {
                 // Exclusive request/reply profile: the responder side then runs the full
                 // lock/claim path, matching how production sync request/reply rides the bus —
                 // measurably slower than the broadcast path, which is the point of measuring it.
-                if (cfg.exclusive()) m.setExclusive(true);
-                Map<String, Object> map = new HashMap<>();
+                if (cfg.exclusive()) {
+                    m.setExclusive(true);
+                }
+                final Map<String, Object> map = new HashMap<>();
                 map.put("seq", s);
                 map.put("sentTs", sentTs);
-                if (cfg.payloadBytes() > 0) map.put("pad", "x".repeat(cfg.payloadBytes()));
+                if (cfg.payloadBytes() > 0) {
+                    map.put("pad", "x".repeat(cfg.payloadBytes()));
+                }
                 m.setMapValue(map);
             }
             m.setMsgId(new MorphiumId());
             stats.recordPingSent(s);
-            if (sendNanos.size() >= 10_000) sendNanos.pollFirst();
+            if (sendNanos.size() >= SEND_NANOS_CAPACITY) {
+                sendNanos.pollFirst();
+            }
             sendNanos.addLast(nanoClock.getAsLong());
         }
         // Clock starts here, before the (possibly slow) send call, and the Pending entry is inserted
         // before sender.accept runs so an instantly-arriving answer (msgId is already assigned) finds
         // it via the synchronized handleAnswer. This intentionally does NOT hold the probe monitor
         // across the send itself, so concurrent sender threads don't serialize on network/publish cost.
-        long sendStartNanos = nanoClock.getAsLong();
+        final long sendStartNanos = nanoClock.getAsLong();
         synchronized (this) {
             pending.put(m.getMsgId(), new Pending(s, sendStartNanos, sentTs));
         }
         try {
             sender.accept(m);
-        } catch (RuntimeException e) {
-            synchronized (this) { pending.remove(m.getMsgId()); }
+        } catch (final RuntimeException e) {
+            synchronized (this) {
+                pending.remove(m.getMsgId());
+            }
             stats.recordSendError();
-            PingOutcomeListener l = outcomeListener;
-            if (l != null) l.onSendError(sentTs);
+            final PingOutcomeListener l = outcomeListener;
+            if (l != null) {
+                l.onSendError(sentTs);
+            }
             return null;
         }
         return m;
     }
 
-    public synchronized void handleAnswer(Msg answer) {
-        if (answer == null || answer.getInAnswerTo() == null) return;
-        Pending p = pending.get(answer.getInAnswerTo());
-        if (p == null) return;
+    public synchronized void handleAnswer(final Msg answer) {
+        if (answer == null || answer.getInAnswerTo() == null) {
+            return;
+        }
+        final Pending p = pending.get(answer.getInAnswerTo());
+        if (p == null) {
+            return;
+        }
         p.answered = true;
-        double rttMs = (nanoClock.getAsLong() - p.sentNanos) / 1e6;
-        Long recvTs = extractRecvTs(answer);
+        final double rttMs = (nanoClock.getAsLong() - p.sentNanos) / 1e6;
+        final Long recvTs = extractRecvTs(answer);
         Double outbound = null, ret = null;
         if (recvTs != null) {
             outbound = (double) (recvTs - p.sentTs);
             ret = (p.sentTs + rttMs) - recvTs;
         }
-        boolean warmup = cfg.warmupMs() > 0 && p.sentTs - runStartTs < cfg.warmupMs();
-        LatencySample sample = new LatencySample(p.seq, responderName(answer), answer.getSenderHost(),
+        final boolean warmup = cfg.warmupMs() > 0 && p.sentTs - runStartTs < cfg.warmupMs();
+        final LatencySample sample = new LatencySample(p.seq, responderName(answer), answer.getSenderHost(),
                 rttMs, outbound, ret, p.sentTs, warmup);
         p.answeredBy.add(sample.responderKey());
         stats.recordAnswer(sample);
@@ -167,52 +224,62 @@ public class LatencyProbe {
 
     /** Prefers the friendly name the pong responder puts in the answer's mapValue
      *  (via {@code pong --name}) over Morphium's internal sender UUID. */
-    private static String responderName(Msg answer) {
-        Map<String, Object> map = answer.getMapValue();
-        if (map != null && map.get("responder") instanceof String s && !s.isBlank()) return s;
+    private static String responderName(final Msg answer) {
+        final Map<String, Object> map = answer.getMapValue();
+        if (map != null && map.get("responder") instanceof String s && !s.isBlank()) {
+            return s;
+        }
         return answer.getSender();
     }
 
     public synchronized int sweep() {
-        long now = nanoClock.getAsLong();
+        final long now = nanoClock.getAsLong();
         int timedOut = 0;
-        Iterator<Map.Entry<MorphiumId, Pending>> it = pending.entrySet().iterator();
+        final Iterator<Map.Entry<MorphiumId, Pending>> it = pending.entrySet().iterator();
         while (it.hasNext()) {
-            Pending p = it.next().getValue();
-            if (now - p.sentNanos > cfg.timeoutMs() * 1_000_000L) {
+            final Pending p = it.next().getValue();
+            if (now - p.sentNanos > cfg.timeoutMs() * NANOS_PER_MS) {
                 stats.recordPingCompleted(p.seq, p.answered);
-                PingOutcomeListener l = outcomeListener;
-                if (l != null) l.onPingComplete(p.seq, p.sentTs, java.util.Set.copyOf(p.answeredBy));
-                if (!p.answered) timedOut++;
+                final PingOutcomeListener l = outcomeListener;
+                if (l != null) {
+                    l.onPingComplete(p.seq, p.sentTs, java.util.Set.copyOf(p.answeredBy));
+                }
+                if (!p.answered) {
+                    timedOut++;
+                }
                 it.remove();
             }
         }
         return timedOut;
     }
 
-    private static Long extractRecvTs(Msg answer) {
-        Map<String, Object> map = answer.getMapValue();
-        if (map != null && map.get("recvTs") instanceof Number n) return n.longValue();
+    private static Long extractRecvTs(final Msg answer) {
+        final Map<String, Object> map = answer.getMapValue();
+        if (map != null && map.get("recvTs") instanceof Number n) {
+            return n.longValue();
+        }
         return answer.getTimestamp() > 0 ? answer.getTimestamp() : null;
     }
 
     public synchronized void start() {
-        if (running) return;
+        if (running) {
+            return;
+        }
         running = true;
         rampAborted = false;
         currentRampRate = cfg.rampStartRate();
         rampStepStartNanos = nanoClock.getAsLong();
-        var snap = stats.snapshot();
+        final var snap = stats.snapshot();
         stepStartTimeouts = snap.timeouts();
         stepStartCompleted = snap.completed();
         for (int i = 0; i < Math.max(1, cfg.senderThreads()); i++) {
             final int threadIdx = i;
-            Thread t = new Thread(() -> senderLoop(threadIdx), "latency-sender-" + i);
+            final Thread t = new Thread(() -> senderLoop(threadIdx), "latency-sender-" + i);
             t.setDaemon(true);
             threads.add(t);
             t.start();
         }
-        Thread sweeper = new Thread(this::sweeperLoop, "latency-sweeper");
+        final Thread sweeper = new Thread(this::sweeperLoop, "latency-sweeper");
         sweeper.setDaemon(true);
         threads.add(sweeper);
         sweeper.start();
@@ -220,17 +287,32 @@ public class LatencyProbe {
 
     public void stop() {
         running = false;
-        java.util.List<Thread> ts;
-        synchronized (this) { ts = new java.util.ArrayList<>(threads); threads.clear(); }
-        for (Thread t : ts) {
+        final java.util.List<Thread> ts;
+        synchronized (this) {
+            ts = new java.util.ArrayList<>(threads);
+            threads.clear();
+        }
+        for (final Thread t : ts) {
             t.interrupt();
-            try { t.join(200); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+            try {
+                t.join(JOIN_TIMEOUT_MS);
+            } catch (final InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
         }
     }
 
-    public boolean isRunning() { return running; }
-    public boolean rampAborted() { return rampAborted; }
-    public synchronized java.util.List<Long> rampStepSeqs() { return java.util.List.copyOf(rampStepSeqs); }
+    public boolean isRunning() {
+        return running;
+    }
+
+    public boolean rampAborted() {
+        return rampAborted;
+    }
+
+    public synchronized java.util.List<Long> rampStepSeqs() {
+        return java.util.List.copyOf(rampStepSeqs);
+    }
 
     public double targetRate() {
         return switch (cfg.mode()) {
@@ -241,8 +323,10 @@ public class LatencyProbe {
     }
 
     public synchronized double actualRate() {
-        long cutoff = nanoClock.getAsLong() - 10_000_000_000L;
-        while (!sendNanos.isEmpty() && sendNanos.peekFirst() < cutoff) sendNanos.pollFirst();
+        final long cutoff = nanoClock.getAsLong() - 10_000_000_000L;
+        while (!sendNanos.isEmpty() && sendNanos.peekFirst() < cutoff) {
+            sendNanos.pollFirst();
+        }
         return sendNanos.size() / 10.0;
     }
 
@@ -250,18 +334,18 @@ public class LatencyProbe {
      *  configured rate is met regardless of how long the (blocking) send call takes. The old
      *  sleep-after-send pacing added the full send duration to every cycle, silently
      *  undershooting the target rate and hiding latency via coordinated omission. */
-    private void senderLoop(int threadIdx) {
-        int nThreads = Math.max(1, cfg.senderThreads());
+    private void senderLoop(final int threadIdx) {
+        final int nThreads = Math.max(1, cfg.senderThreads());
         long period = periodNanos(nThreads);
         // stagger the threads across one period so their sends interleave instead of bursting
         long next = nanoClock.getAsLong() + period * threadIdx / nThreads;
         while (running) {
-            long now = nanoClock.getAsLong();
+            final long now = nanoClock.getAsLong();
             if (now < next) {
-                long wait = next - now;
+                final long wait = next - now;
                 try {
-                    Thread.sleep(wait / 1_000_000L, (int) (wait % 1_000_000L));
-                } catch (InterruptedException e) {
+                    Thread.sleep(wait / NANOS_PER_MS, (int) (wait % NANOS_PER_MS));
+                } catch (final InterruptedException e) {
                     return;
                 }
                 continue;   // re-check running and the clock after every sleep
@@ -271,12 +355,14 @@ public class LatencyProbe {
             next += period;
             // Fell behind by more than a full period (send outlasted the schedule): rebase
             // instead of firing a catch-up burst that would distort the latency measurement.
-            if (next < nanoClock.getAsLong() - period) next = nanoClock.getAsLong();
+            if (next < nanoClock.getAsLong() - period) {
+                next = nanoClock.getAsLong();
+            }
         }
     }
 
-    private long periodNanos(int nThreads) {
-        return (long) (nThreads * 1e9 / Math.max(0.001, targetRate()));
+    private long periodNanos(final int nThreads) {
+        return (long) (nThreads * NANOS_PER_SEC / Math.max(MIN_RATE, targetRate()));
     }
 
     private void sweeperLoop() {
@@ -284,25 +370,38 @@ public class LatencyProbe {
             sweep();
             // Set running=false directly rather than calling stop(): stop() joins every tracked
             // thread including this one, and a thread cannot join itself.
-            if (cfg.mode() == Mode.RAMP && !rampTick()) { running = false; return; }
-            try { Thread.sleep(500); } catch (InterruptedException e) { return; }
+            if (cfg.mode() == Mode.RAMP && !rampTick()) {
+                running = false;
+                return;
+            }
+            try {
+                Thread.sleep(SWEEPER_SLEEP_MS);
+            } catch (final InterruptedException e) {
+                return;
+            }
         }
     }
 
     /** Advances ramp state; returns false when the loss threshold aborted the run. */
     synchronized boolean rampTick() {
-        if (cfg.mode() != Mode.RAMP) return true;
-        if (nanoClock.getAsLong() - rampStepStartNanos < cfg.rampStepMs() * 1_000_000L) return true;
-        var snap = stats.snapshot();
-        long stepCompleted = snap.completed() - stepStartCompleted;
-        long stepTimeouts = snap.timeouts() - stepStartTimeouts;
-        double stepLoss = 100.0 * stepTimeouts / Math.max(1, stepCompleted);
+        if (cfg.mode() != Mode.RAMP) {
+            return true;
+        }
+        if (nanoClock.getAsLong() - rampStepStartNanos < cfg.rampStepMs() * NANOS_PER_MS) {
+            return true;
+        }
+        final var snap = stats.snapshot();
+        final long stepCompleted = snap.completed() - stepStartCompleted;
+        final long stepTimeouts = snap.timeouts() - stepStartTimeouts;
+        final double stepLoss = 100.0 * stepTimeouts / Math.max(1, stepCompleted);
         if (stepLoss > cfg.rampAbortLossPct()) {
             rampAborted = true;
             return false;
         }
         currentRampRate += cfg.rampStepRate();
-        if (rampStepSeqs.size() < 100) rampStepSeqs.add(seq);
+        if (rampStepSeqs.size() < 100) {
+            rampStepSeqs.add(seq);
+        }
         rampStepStartNanos = nanoClock.getAsLong();
         stepStartCompleted = snap.completed();
         stepStartTimeouts = snap.timeouts();

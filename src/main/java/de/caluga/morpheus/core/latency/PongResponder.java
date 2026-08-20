@@ -19,53 +19,63 @@ public class PongResponder implements MessageListener<Msg> {
     private volatile long received = 0;
     private volatile long answered = 0;
 
-    public PongResponder(String name, LongSupplier wallClock) {
+    public PongResponder(final String name, final LongSupplier wallClock) {
         this(name, wallClock, 0, 0);
     }
 
-    public PongResponder(String name, LongSupplier wallClock, int payloadBytes) {
+    public PongResponder(final String name, final LongSupplier wallClock, final int payloadBytes) {
         this(name, wallClock, payloadBytes, 0);
     }
 
-    public PongResponder(String name, LongSupplier wallClock, int payloadBytes, long workMs) {
+    public PongResponder(final String name, final LongSupplier wallClock,
+                         final int payloadBytes, final long workMs) {
         this.name = name;
         this.wallClock = wallClock;
         this.payloadBytes = payloadBytes;
         this.workMs = workMs;
     }
 
-    public long received() { return received; }
-    public long answered() { return answered; }
+    public long received() {
+        return received;
+    }
+
+    public long answered() {
+        return answered;
+    }
 
     @Override
-    public Msg onMessage(MorphiumMessaging messaging, Msg msg) {
+    public Msg onMessage(final MorphiumMessaging messaging, final Msg msg) {
         try {
-            if (msg == null || msg.getInAnswerTo() != null) return null;
+            if (msg == null || msg.getInAnswerTo() != null) {
+                return null;
+            }
             received++;
             // recvTs is the arrival time, taken BEFORE the simulated work, so the sender's
             // outbound/return split stays honest: work shows up in the return leg (and the RTT),
             // exactly as a real handler's processing time would.
-            long recvTs = wallClock.getAsLong();
+            final long recvTs = wallClock.getAsLong();
             if (workMs > 0) {
                 try {
                     Thread.sleep(workMs);
-                } catch (InterruptedException e) {
+                } catch (final InterruptedException e) {
                     Thread.currentThread().interrupt();   // shutting down: don't answer
                     return null;
                 }
             }
-            Msg answer = msg.createAnswerMsg();
-            Map<String, Object> map = new HashMap<>();
+            final Msg answer = msg.createAnswerMsg();
+            final Map<String, Object> map = new HashMap<>();
             map.put("recvTs", recvTs);
             map.put("responder", name);
             if (msg.getMapValue() != null && msg.getMapValue().get("seq") != null) {
                 map.put("seq", msg.getMapValue().get("seq"));
             }
-            if (payloadBytes > 0) map.put("pad", "x".repeat(payloadBytes));
+            if (payloadBytes > 0) {
+                map.put("pad", "x".repeat(payloadBytes));
+            }
             answer.setMapValue(map);
             answered++;
             return answer;
-        } catch (RuntimeException e) {
+        } catch (final RuntimeException e) {
             return null;
         }
     }

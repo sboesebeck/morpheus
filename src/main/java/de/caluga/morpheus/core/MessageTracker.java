@@ -22,7 +22,7 @@ public class MessageTracker {
     private final Map<MorphiumId, MessageInfo> buffer =
         new LinkedHashMap<>(16, 0.75f, false) {
             @Override
-            protected boolean removeEldestEntry(Map.Entry<MorphiumId, MessageInfo> eldest) {
+            protected boolean removeEldestEntry(final Map.Entry<MorphiumId, MessageInfo> eldest) {
                 // maxMessages is volatile; this callback only runs under synchronized(buffer) via put()
                 if (size() > maxMessages) {
                     requestTimestamps.remove(eldest.getKey());
@@ -36,16 +36,16 @@ public class MessageTracker {
     private final ConcurrentHashMap<MorphiumId, Long> requestTimestamps = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<MorphiumId, String> requestTopics = new ConcurrentHashMap<>();
 
-    public MessageTracker(int maxMessages) {
+    public MessageTracker(final int maxMessages) {
         this.maxMessages = maxMessages;
     }
 
-    public void setMaxMessages(int maxMessages) {
+    public void setMaxMessages(final int maxMessages) {
         this.maxMessages = maxMessages;
         synchronized (buffer) {
-            var it = buffer.entrySet().iterator();
+            final var it = buffer.entrySet().iterator();
             while (buffer.size() > maxMessages && it.hasNext()) {
-                var eldest = it.next();
+                final var eldest = it.next();
                 requestTimestamps.remove(eldest.getKey());
                 requestTopics.remove(eldest.getKey());
                 it.remove();
@@ -53,12 +53,16 @@ public class MessageTracker {
         }
     }
 
-    public int getMaxMessages() { return maxMessages; }
+    public int getMaxMessages() {
+        return maxMessages;
+    }
 
-    public MessageStats getStats() { return stats; }
+    public MessageStats getStats() {
+        return stats;
+    }
 
     /** A new message document appeared. topic is extracted by the feed (V6 'topic' / V5 'name'). */
-    public void onInsert(Msg msg, String topic) {
+    public void onInsert(final Msg msg, final String topic) {
         if (msg.isAnswer() && msg.getInAnswerTo() != null) {
             stats.recordMessage();
             stats.recordAnswer();
@@ -72,7 +76,7 @@ public class MessageTracker {
 
         stats.recordMessage(msg.getSender(), msg.getSenderHost());
         stats.recordTopicMessage(topic);
-        MessageInfo info = new MessageInfo(msg, topic);
+        final MessageInfo info = new MessageInfo(msg, topic);
         requestTimestamps.put(msg.getMsgId(), msg.getTimestamp());
         if (topic != null && !topic.isEmpty()) {
             requestTopics.put(msg.getMsgId(), topic);
@@ -82,21 +86,21 @@ public class MessageTracker {
         }
     }
 
-    private void correlateAnswer(Msg answer) {
-        MorphiumId originalId = answer.getInAnswerTo();
-        Long originalTime = requestTimestamps.remove(originalId);
-        String originalTopic = requestTopics.remove(originalId);
+    private void correlateAnswer(final Msg answer) {
+        final MorphiumId originalId = answer.getInAnswerTo();
+        final Long originalTime = requestTimestamps.remove(originalId);
+        final String originalTopic = requestTopics.remove(originalId);
         if (originalTime == null) {
             return;
         }
-        long rtt = answer.getTimestamp() - originalTime;
+        final long rtt = answer.getTimestamp() - originalTime;
         if (rtt < 0) {
             return;
         }
         String origSender = null, origHost = null;
         boolean wasTimedOut = false;
         synchronized (buffer) {
-            MessageInfo original = buffer.get(originalId);
+            final MessageInfo original = buffer.get(originalId);
             if (original != null) {
                 wasTimedOut = original.isTimedOut;
                 original.rtt = rtt;
@@ -118,9 +122,9 @@ public class MessageTracker {
     }
 
     /** An existing message document changed (e.g. processed_by grew). */
-    public void onUpdate(Msg msg) {
+    public void onUpdate(final Msg msg) {
         synchronized (buffer) {
-            MessageInfo existing = buffer.get(msg.getMsgId());
+            final MessageInfo existing = buffer.get(msg.getMsgId());
             if (existing != null) {
                 existing.update(msg);
                 stats.recordUpdate();
@@ -129,9 +133,9 @@ public class MessageTracker {
     }
 
     /** A message document was deleted. */
-    public void onDelete(MorphiumId id) {
+    public void onDelete(final MorphiumId id) {
         synchronized (buffer) {
-            MessageInfo existing = buffer.get(id);
+            final MessageInfo existing = buffer.get(id);
             if (existing != null) {
                 existing.isDeleted = true;
                 existing.updateCount++;
@@ -140,9 +144,9 @@ public class MessageTracker {
     }
 
     /** Sets/clears lock info on a buffered message; no-op if the message is not buffered. */
-    public void setLockStatus(MorphiumId id, String lockedBy, Long lockedUntil) {
+    public void setLockStatus(final MorphiumId id, final String lockedBy, final Long lockedUntil) {
         synchronized (buffer) {
-            MessageInfo existing = buffer.get(id);
+            final MessageInfo existing = buffer.get(id);
             if (existing != null) {
                 existing.lockedBy = lockedBy;
                 existing.lockedUntil = lockedUntil;
@@ -151,10 +155,10 @@ public class MessageTracker {
     }
 
     /** Flags unanswered requests older than threshold. Returns number of NEW timeouts. */
-    public int markTimeouts(long now, long thresholdMs) {
+    public int markTimeouts(final long now, final long thresholdMs) {
         int newTimeouts = 0;
         synchronized (buffer) {
-            for (MessageInfo info : buffer.values()) {
+            for (final MessageInfo info : buffer.values()) {
                 if (!info.isAnswer && info.rtt == null && !info.isTimedOut
                         && now - info.timestamp > thresholdMs) {
                     info.isTimedOut = true;
@@ -172,7 +176,7 @@ public class MessageTracker {
     /** Snapshot copy, newest first (display order). */
     public List<MessageInfo> getMessagesNewestFirst() {
         synchronized (buffer) {
-            List<MessageInfo> list = new ArrayList<>(buffer.values());
+            final List<MessageInfo> list = new ArrayList<>(buffer.values());
             Collections.reverse(list);
             return list;
         }
