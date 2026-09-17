@@ -93,6 +93,158 @@ message while the bounded buffer continues collecting in the background.
 The view commands take the global options `-c/--connection`, `--messaging`,
 `--theme`, `-v/--verbose`. Every command has `--help`.
 
+## Examples
+
+A quick look at each command. Hosts, node names, and topics below are
+placeholders — swap in your own.
+
+### `messages`
+
+```
+$ ./run.sh messages -c prod
+┌ messages ───────────────────────────────────────────────── prod ─┐
+│ up 02:14:07   142 msg/s   12,480 msgs   9,911 answers   3 timeout │
+│  #  Time  Sender     Host        Topic           Size Proc An RTT │
+│  1   0s   worker-3   host-3.lan  order.created    412 done  Y  8ms│
+│  2   1s   worker-1   host-1.lan  invoice.render   188 done  Y 14ms│
+│  3   2s   scheduler  host-2.lan  mail.send         96 done  N   – │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### `topics`
+
+```
+$ ./run.sh topics -c prod
+┌ topics ────────────────────────────────────┐
+│ Topic            Nachr.  Antw.  Ø-RTT  Timeout│
+│ order.created      842    840    9ms      2   │
+│ invoice.render     311    311   14ms      0   │
+│ mail.send          120    118   22ms      1   │
+└────────────────────────────────────────────┘
+```
+
+### `nodes`
+
+```
+$ ./run.sh nodes -c prod
+┌ nodes ────────────────────────────────────────┐
+│ Sender → Antwortender      Anzahl   Ø-RTT      │
+│ worker-1 → scheduler          412    9ms       │
+│ worker-3 → scheduler          398   11ms       │
+│ worker-2 → db-writer           77   18ms       │
+└─────────────────────────────────────────────────┘
+```
+
+### `status`
+
+```
+$ ./run.sh status -c prod
+┌ status ─ ping timeout 5s ──────────────────────────────────────────────┐
+│ Sender@Host          RTT  Mem(u/max)   Hit%  Conn(u/p)  Err Msg-sent Thr│
+│ worker-1@host-1.lan   6ms 512M/2048M  98.2%    2/10       0   18,420  24│
+│ worker-2@host-2.lan   9ms 480M/2048M  97.8%    1/10       0   17,004  22│
+│ worker-3@host-3.lan    –      –          –       –        –        –   –│
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+### `graph`
+
+```
+                         Message Flow
+                ╭───────────────────────────────╮
+                │        ·hermes·                │
+                │      ╱        ·•╲               │   •  = a message in flight
+                │  ·worker3·      ·worker1·       │       (coloured by topic)
+                │     │     ◦sched◦    │          │   ◦  = a busy hub, pulled
+                │  ·worker2·      ·worker4·       │       toward the centre
+                │         ╲      ╱                │
+                │          ·db-writer·            │
+                ╰───────────────────────────────╯
+   Topics:  ● order.created   ● invoice.render   ● mail.send   ● (timeout)
+   [p] pause   [h] hosts   [g] grafik   [esc] zurück   [q] quit
+```
+
+### `latency`
+
+```
+$ ./run.sh latency -c prod
+┌ latency ─ payload:10k threads:4 mode:rate 100/s ──────────────────────┐
+│ RTT(ms)                                                                │
+│ 40 ┤            ╭╮                                                    │
+│ 20 ┤╭╮╭─╮╭──────╯╰╮╭───────╮       ×                                  │
+│  0 ┼╯╰╯ ╰╯        ╰╯       ╰──────────────────                        │
+│      Responder      cnt loss%  avg  p50  p90  p99  jit                │
+│      pong-1          842   0.2   14   12   22   38    3               │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+### `pong`
+
+```
+$ ./run.sh pong --name pong-1
+pong 'pong-1' listening on topic morpheus_latency — Ctrl-C to stop
+answered: 1204  (+241 in 5s, 48.2/s)
+answered: 1449  (+245 in 5s, 49.0/s)
+```
+
+### `ping`
+
+```
+$ ./run.sh ping --level PING
+Sender     | Host        | After ms
+worker-1   | host-1.lan  | 6ms
+worker-2   | host-2.lan  | 9ms
+
+$ ./run.sh ping --json --level PING --wait 5
+{"sentAt":1758100000000,"waitSec":5,"level":"PING","expectAnswers":10000,"answerCount":2,
+ "answers":[{"sender":"worker-1","host":"host-1.lan","rttMs":6,"payload":null},
+            {"sender":"worker-2","host":"host-2.lan","rttMs":9,"payload":null}]}
+```
+
+`--json` is meant for automated evaluation, e.g. feeding a monitoring
+backend: exit code `2` if zero answers came back, `0` otherwise.
+
+### `send`
+
+```
+$ ./run.sh send --topic order.created --msg "hello" --num-answers 1 --wait 5
+sending message....(waiting 5s for answers)
+got messages:1
+Sender     | Host
+worker-1   | host-1.lan
+```
+
+### `watch`
+
+```
+$ ./run.sh watch -c prod
+Incoming event...INSERT
+     ns : msgdb.msg
+     doc: {sender: worker-1, name: order.created, ...}
+Incoming event...UPDATE
+     ns : msgdb.msg
+     doc: {sender: worker-1, name: order.created, processed_by: [scheduler], ...}
+```
+
+### `config`
+
+```
+$ ./run.sh config connection list
+Available Connections:
+
+  staging
+    Host(s): host-1.lan:27017
+    Database: msgdb
+    Messaging: single
+    SSL: no
+
+  prod
+    Host(s): host-2.lan:27017,host-3.lan:27017
+    Database: msgdb
+    Messaging: multi
+    SSL: yes
+```
+
 ## Configuration
 
 Connections, the default connection, SOCKS proxy settings, and themes are stored
